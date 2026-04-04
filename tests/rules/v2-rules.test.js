@@ -388,8 +388,8 @@ describe('cwe-metadata', () => {
 // ── Rule Registry ────────────────────────────────────────────────────────────
 
 describe('v2-rule-registry', () => {
-  it('has 77 rules', () => {
-    assert.equal(ALL_RULES.length, 77, `Expected 77 rules, got ${ALL_RULES.length}`);
+  it('has 79 rules', () => {
+    assert.equal(ALL_RULES.length, 79, `Expected 79 rules, got ${ALL_RULES.length}`);
   });
 
   it('all new rules have fix prompts', async () => {
@@ -405,6 +405,7 @@ describe('v2-rule-registry', () => {
       'race-condition', 'nosql-injection', 'xml-xxe', 'ldap-injection', 'header-injection',
       'subdomain-takeover', 'clickjacking', 'dangerously-set-inner-html', 'eval-usage', 'regex-dos', 'hardcoded-ip',
       'high-entropy-strings', 'git-history-secrets',
+      'docker-root-user', 'exposed-database-port',
     ];
     for (const id of newRuleIds) {
       assert.ok(FIX_PROMPTS[id], `Missing fix prompt for ${id}`);

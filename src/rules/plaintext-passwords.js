@@ -50,6 +50,59 @@ function hasPlaintextPasswordWrite(funcBody) {
   return findings;
 }
 
+/** Does this function hash passwords with a weak algorithm (MD5/SHA1)? */
+function hasWeakHashForPassword(funcBody) {
+  // Only flag if the function deals with passwords
+  const hasPasswordRef = containsNode(funcBody, (n) =>
+    n.type === 'Identifier' && /^(?:password|passwd|hashedPassword|passwordHash)$/i.test(n.name)
+  );
+  if (!hasPasswordRef) return [];
+
+  const findings = [];
+
+  // Detect crypto.createHash('md5'|'sha1')
+  containsNode(funcBody, (node) => {
+    if (node.type !== 'CallExpression') return false;
+    const callee = node.callee;
+    // crypto.createHash(...)
+    if (callee?.type === 'MemberExpression' &&
+        callee.property?.type === 'Identifier' && callee.property.name === 'createHash') {
+      const arg = node.arguments[0];
+      if (arg?.type === 'Literal' && /^(?:md5|sha1|sha-1)$/i.test(arg.value)) {
+        findings.push(node);
+      }
+    }
+    // bare createHash(...)
+    if (callee?.type === 'Identifier' && callee.name === 'createHash') {
+      const arg = node.arguments[0];
+      if (arg?.type === 'Literal' && /^(?:md5|sha1|sha-1)$/i.test(arg.value)) {
+        findings.push(node);
+      }
+    }
+    return false;
+  });
+
+  // Detect md5(password) or sha1(password) — from require('md5') / require('sha1')
+  containsNode(funcBody, (node) => {
+    if (node.type !== 'CallExpression') return false;
+    const callee = node.callee;
+    if (callee?.type === 'Identifier' && /^(?:md5|sha1)$/i.test(callee.name)) {
+      // Check if any argument references a password
+      for (const arg of node.arguments) {
+        if (containsNode(arg, (n) =>
+          n.type === 'Identifier' && /^(?:password|passwd)$/i.test(n.name)
+        )) {
+          findings.push(node);
+          break;
+        }
+      }
+    }
+    return false;
+  });
+
+  return findings;
+}
+
 /** Does this function compare passwords with === ? */
 function hasPlaintextPasswordCompare(funcBody) {
   const findings = [];
@@ -79,6 +132,9 @@ const PLAINTEXT_REGEX = [
   { regex: /\.create\s*\(\s*\{[^}]*password\s*:\s*(?:req\.body|body|request\.body|data)\.password/gi, label: 'Password stored without hashing' },
   { regex: /\.create\s*\(\s*\{[^}]*password\s*:\s*password\b/gi, label: 'Password variable stored directly' },
   { regex: /(?:password|passwd)\s*===?\s*(?:req\.body|body|user|stored|db|record)\.\w*(?:password|passwd)/gi, label: 'Password compared with === instead of bcrypt.compare' },
+  { regex: /createHash\s*\(\s*['"](?:md5|sha1|sha-1)['"]\s*\).*(?:password|passwd)/gi, label: 'Password hashed with weak algorithm (MD5/SHA1)' },
+  { regex: /(?:password|passwd).*createHash\s*\(\s*['"](?:md5|sha1|sha-1)['"]\s*\)/gi, label: 'Password hashed with weak algorithm (MD5/SHA1)' },
+  { regex: /(?:require\s*\(\s*['"](?:md5|sha1)['"]\s*\)|import\s+(?:md5|sha1)\b).*(?:password|passwd)/gi, label: 'Weak hash package used for passwords' },
 ];
 const HASH_REGEX = [/bcrypt/i, /argon2/i, /scrypt/i, /pbkdf2/i, /hashPassword/i, /saltRounds/i];
 
@@ -90,7 +146,7 @@ export const plaintextPasswords = {
   id: 'plaintext-passwords',
   name: 'Plaintext Passwords',
   severity: 'critical',
-  description: 'Detects code that stores or compares passwords without hashing.',
+  description: 'Detects code that stores or compares passwords without hashing, or uses weak algorithms (MD5/SHA1).',
 
   check(file) {
     if (!AUTH_FILES.test(file.relativePath)) return [];
@@ -115,6 +171,13 @@ export const plaintextPasswords = {
               message: `Function "${func.name}" compares passwords with === instead of bcrypt.compare — implies plaintext storage.`,
               file: file.relativePath, line, evidence: file.lines[line - 1]?.trim().slice(0, 120),
               fix: 'Use bcrypt.compare(inputPassword, storedHash) instead of ===.' });
+          }
+          for (const node of hasWeakHashForPassword(func.body)) {
+            const line = getLine(node);
+            findings.push({ ruleId: 'plaintext-passwords', ruleName: 'Plaintext Passwords', severity: 'critical',
+              message: `Function "${func.name}" hashes a password with a weak algorithm (MD5/SHA1). Use bcrypt or argon2 instead.`,
+              file: file.relativePath, line, evidence: file.lines[line - 1]?.trim().slice(0, 120),
+              fix: 'Replace crypto.createHash("md5") with bcrypt.hash(password, 12). MD5 and SHA1 are not suitable for password hashing — they are fast hashes designed for integrity checks.' });
           }
         }
         return findings;
