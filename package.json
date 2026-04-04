@@ -1,6 +1,6 @@
 {
   "name": "vibe-audit",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Security audit CLI for AI-generated codebases. Find the time bombs before they blow.",
   "type": "module",
   "engines": {
@@ -23,6 +23,8 @@
     "test": "node --test tests/**/*.test.js tests/**/**/*.test.js",
     "lint": "eslint src/ bin/ tests/",
     "audit:self": "node bin/vibe-audit.js .",
+    "ui": "node src/web/server.js",
+    "ui:dev": "node --watch src/web/server.js",
     "prepublishOnly": "npm test && npm run lint"
   },
   "keywords": [

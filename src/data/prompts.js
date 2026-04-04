@@ -86,7 +86,7 @@ export const FIX_PROMPTS = {
   },
 
   'plaintext-passwords': {
-    prompt: `SECURITY FIX: Passwords are stored without hashing. Find all code that saves passwords to the database. Add bcrypt: (1) Install: npm install bcrypt. (2) On registration: const hash = await bcrypt.hash(password, 12); save hash instead of password. (3) On login: const valid = await bcrypt.compare(inputPassword, storedHash); use this instead of === comparison. Never store plaintext passwords. Never compare with ===.`,
+    prompt: `SECURITY FIX: Passwords are stored without hashing or use a weak hash algorithm. Find all code that saves passwords to the database. Add bcrypt: (1) Install: npm install bcrypt. (2) On registration: const hash = await bcrypt.hash(password, 12); save hash instead of password. (3) On login: const valid = await bcrypt.compare(inputPassword, storedHash); use this instead of === comparison. Never store plaintext passwords. Never compare with ===. Also check for weak hashing: crypto.createHash('md5') or crypto.createHash('sha1') are NOT suitable for passwords — they are fast hashes designed for integrity checks, not password storage. Replace with bcrypt.hash(password, 12).`,
     platformNotes: `Lovable/Base44: Use platform's built-in auth which handles hashing. Replit: Install bcrypt normally. Firebase Studio: Firebase Auth handles password hashing automatically — use it instead of custom auth.`,
   },
 
@@ -353,7 +353,7 @@ export const FIX_PROMPTS = {
   // ─── SESSION & AUTH HARDENING (v2) ────────────────────────────────────────
 
   'session-fixation': {
-    prompt: `SECURITY FIX: My login handler sets session data without regenerating the session ID. This allows session fixation attacks. After successful authentication: req.session.regenerate((err) => { req.session.userId = user.id; req.session.save(); }). This creates a new session ID, invalidating any pre-set session.`,
+    prompt: `SECURITY FIX: My login handler sets session data without regenerating the session ID, or my logout handler doesn't destroy the server-side session. For login: After successful authentication, call req.session.regenerate((err) => { req.session.userId = user.id; req.session.save(); }). This creates a new session ID, invalidating any pre-set session. For logout: Always call req.session.destroy() or req.logout() before clearing cookies. Do NOT just clearCookie() and redirect — the session is still valid server-side. For JWT auth, add the token to a server-side blacklist/revocation list on logout.`,
     platformNotes: `Express/Node.js with express-session. Next-auth and Clerk handle this automatically.`,
   },
 
@@ -444,6 +444,18 @@ export const FIX_PROMPTS = {
   'git-history-secrets': {
     prompt: `SECURITY FIX: Secrets were found in git history. Even deleted files remain in git history forever. (1) ROTATE the compromised secret immediately — generate a new one. (2) Remove from history: use git-filter-repo or BFG Repo-Cleaner. (3) Force push the cleaned history. (4) If it was ever on a public repo, assume it has been compromised.`,
     platformNotes: `All platforms. Rotating the secret is more important than cleaning history — do that first.`,
+  },
+
+  // ─── INFRASTRUCTURE (v3) ──────────────────────────────────────────────────
+
+  'docker-root-user': {
+    prompt: `SECURITY FIX: My Dockerfile runs the container as root. This means if an attacker exploits a vulnerability in my app, they have full root access to the container and potentially the host. Fix: (1) Create a non-root user: RUN addgroup -S appgroup && adduser -S appuser -G appgroup. (2) Copy files with correct ownership: COPY --chown=appuser:appgroup . . (3) Switch to that user before CMD: USER appuser. (4) Make sure the app doesn't need root — if it does, fix the app, not the Dockerfile.`,
+    platformNotes: `Docker/Kubernetes deployments. Lovable/Vercel/Netlify: Not applicable — these platforms manage containers for you.`,
+  },
+
+  'exposed-database-port': {
+    prompt: `SECURITY FIX: My docker-compose.yml exposes database ports to the host machine. Anyone on the network can connect to my database directly. Fix: (1) Remove the "ports:" section from your database service. (2) Use "expose:" instead if other containers need to connect. (3) Your app connects to the database via the Docker network using the service name (e.g., postgres:5432), not localhost. (4) If you need database access for development, use "docker exec" to connect through the container.`,
+    platformNotes: `Docker Compose deployments. For production, never expose database ports. Use a VPN or SSH tunnel for remote database access.`,
   },
 };
 

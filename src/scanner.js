@@ -126,7 +126,7 @@ export async function* discoverFiles(root, extraIgnore = []) {
         continue;
       }
 
-      const relativePath = relative(root, fullPath);
+      const relativePath = relative(root, fullPath).replace(/\\/g, '/');
       const lines = content.split('\n');
 
       yield { path: fullPath, relativePath, content, lines };

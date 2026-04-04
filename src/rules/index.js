@@ -91,6 +91,9 @@ import { hardcodedIp } from './hardcoded-ip.js';
 // Extended secrets detection (v2)
 import { highEntropyStrings } from './high-entropy-strings.js';
 import { gitHistorySecrets } from './git-history-secrets.js';
+// Infrastructure (v3)
+import { dockerRootUser } from './docker-root-user.js';
+import { exposedDatabasePort } from './exposed-database-port.js';
 
 /** @type {import('./types.js').Rule[]} */
 export const ALL_RULES = [
@@ -182,6 +185,9 @@ export const ALL_RULES = [
   // Extended secrets (v2)
   highEntropyStrings,
   gitHistorySecrets,
+  // Infrastructure (v3)
+  dockerRootUser,
+  exposedDatabasePort,
 ];
 
 /**

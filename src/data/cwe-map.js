@@ -112,6 +112,10 @@ export const CWE_MAP = {
   'regex-dos':                    { cweId: 'CWE-1333', cvssScore: 5.3, owaspCategory: 'A04:2021' },
   'hardcoded-ip':                 { cweId: 'CWE-547', cvssScore: 2.0, owaspCategory: 'A05:2021' },
 
+  // ── Infrastructure (v3) ─────────────────────────────────────────────────────
+  'docker-root-user':             { cweId: 'CWE-250', cvssScore: 6.5, owaspCategory: 'A05:2021' },
+  'exposed-database-port':        { cweId: 'CWE-284', cvssScore: 5.3, owaspCategory: 'A05:2021' },
+
   // ── SCA ────────────────────────────────────────────────────────────────────
   'vulnerable-dependency':        { cweId: 'CWE-1035', cvssScore: 7.5, owaspCategory: 'A06:2021' },
 };
