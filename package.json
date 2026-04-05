@@ -1,5 +1,5 @@
 {
-  "name": "vibe-audit",
+  "name": "vibeaudit",
   "version": "1.1.0",
   "description": "Security audit CLI for AI-generated codebases. Find the time bombs before they blow.",
   "type": "module",
@@ -7,7 +7,7 @@
     "node": ">=18.3.0"
   },
   "bin": {
-    "vibe-audit": "./bin/vibe-audit.js"
+    "vibeaudit": "./bin/vibe-audit.js"
   },
   "main": "./src/index.js",
   "exports": {
