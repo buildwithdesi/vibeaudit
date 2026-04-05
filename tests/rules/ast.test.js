@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseSource, findFunctions, containsNode, isParseable } from '../../src/ast.js';
+import { parseSource, findFunctions, isParseable } from '../../src/ast.js';
 import { idorVulnerability } from '../../src/rules/idor-vulnerability.js';
 import { massAssignment } from '../../src/rules/mass-assignment.js';
 import { missingAuth } from '../../src/rules/missing-auth.js';

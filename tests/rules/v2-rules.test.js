@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { ALL_RULES, resolveRules } from '../../src/rules/index.js';
+import { ALL_RULES } from '../../src/rules/index.js';
 import { CWE_MAP } from '../../src/data/cwe-map.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

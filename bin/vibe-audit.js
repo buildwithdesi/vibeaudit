@@ -24,7 +24,7 @@ import { audit } from '../src/index.js';
 import { generateFixes } from '../src/fix.js';
 import { ALL_RULES } from '../src/rules/index.js';
 import { CWE_MAP } from '../src/data/cwe-map.js';
-import { bold, cyan, dim, green, red, yellow, gray } from '../src/colors.js';
+import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
 import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
 
 const { values, positionals } = parseArgs({

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm test:*)",
+      "Bash(node --test tests/rules/infra.test.js)",
+      "Bash(npm whoami:*)"
+    ]
+  }
+}

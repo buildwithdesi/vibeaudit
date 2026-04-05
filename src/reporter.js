@@ -1,4 +1,4 @@
-import { bold, red, yellow, cyan, green, gray, dim, bgRed, bgYellow, bgGreen } from './colors.js';
+import { bold, red, yellow, cyan, green, gray, dim } from './colors.js';
 import { getFixPrompt } from './data/prompts.js';
 import { generateHTML } from './reporters/html.js';
 import { writeFile } from 'node:fs/promises';
@@ -309,7 +309,7 @@ async function reportHTMLFile(findings, meta) {
     console.log('');
     console.log(dim('  Open in your browser to view the interactive dashboard.'));
     console.log('');
-  } catch (err) {
+  } catch {
     // Fall back to stdout if we can't write the file
     console.log(html);
   }

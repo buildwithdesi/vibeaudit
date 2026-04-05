@@ -34,7 +34,7 @@ describe('false-positive-regression', () => {
   it('clean-ecommerce.js triggers zero findings', async () => {
     const rules = resolveRules();
     const fixturesDir = resolve(__dirname, '..', 'fixtures');
-    let findings = [];
+    const findings = [];
 
     for await (const file of discoverFiles(fixturesDir)) {
       if (!file.relativePath.includes('clean-ecommerce')) continue;
@@ -100,7 +100,7 @@ describe('false-positive-regression', () => {
     const file = makeFile('src/utils.js', 'container.innerHTML = "";');
     // This might still trigger because the regex doesn't exclude empty strings well
     // but it's a low-confidence finding at worst
-    const findings = noInputValidation.check(file);
+    noInputValidation.check(file);
     // We accept this may or may not fire — it's an edge case
   });
 
@@ -233,7 +233,7 @@ describe('realistic-fixture-integration', () => {
   it('catches Stripe key in realistic e-commerce', async () => {
     const rules = resolveRules(['exposed-secrets']);
     const fixturesDir = resolve(__dirname, '..', 'fixtures');
-    let findings = [];
+    const findings = [];
 
     for await (const file of discoverFiles(fixturesDir)) {
       if (!file.relativePath.includes('realistic-ecommerce')) continue;
@@ -247,7 +247,7 @@ describe('realistic-fixture-integration', () => {
   it('catches IDOR in realistic e-commerce', async () => {
     const rules = resolveRules(['idor-vulnerability']);
     const fixturesDir = resolve(__dirname, '..', 'fixtures');
-    let findings = [];
+    const findings = [];
 
     for await (const file of discoverFiles(fixturesDir)) {
       if (!file.relativePath.includes('realistic-ecommerce')) continue;
@@ -260,7 +260,7 @@ describe('realistic-fixture-integration', () => {
   it('catches unverified webhook', async () => {
     const rules = resolveRules(['unverified-webhook']);
     const fixturesDir = resolve(__dirname, '..', 'fixtures');
-    let findings = [];
+    const findings = [];
 
     for await (const file of discoverFiles(fixturesDir)) {
       if (!file.relativePath.includes('webhooks/stripe')) continue;
@@ -273,7 +273,7 @@ describe('realistic-fixture-integration', () => {
   it('catches client-side auth in Dashboard component', async () => {
     const rules = resolveRules(['client-only-auth']);
     const fixturesDir = resolve(__dirname, '..', 'fixtures');
-    let findings = [];
+    const findings = [];
 
     for await (const file of discoverFiles(fixturesDir)) {
       if (!file.relativePath.includes('Dashboard.jsx')) continue;
@@ -286,7 +286,7 @@ describe('realistic-fixture-integration', () => {
   it('catches missing .env in .gitignore', async () => {
     const rules = resolveRules(['missing-gitignore']);
     const fixturesDir = resolve(__dirname, '..', 'fixtures');
-    let findings = [];
+    const findings = [];
 
     for await (const file of discoverFiles(fixturesDir)) {
       if (file.relativePath !== '.gitignore') continue;
@@ -300,7 +300,7 @@ describe('realistic-fixture-integration', () => {
   it('catches source maps in next.config', async () => {
     const rules = resolveRules(['source-maps-exposed']);
     const fixturesDir = resolve(__dirname, '..', 'fixtures');
-    let findings = [];
+    const findings = [];
 
     for await (const file of discoverFiles(fixturesDir)) {
       if (!file.relativePath.includes('next.config')) continue;
