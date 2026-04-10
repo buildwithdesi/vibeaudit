@@ -1,0 +1,149 @@
+# ⚗️ Vibe Audit — Morning Batch Scan
+# Replaces the old DigitalOcean scheduled bot.
+# Scans all repos in your org every weekday morning and posts results as a GitHub issue.
+
+name: Morning Security Scan
+
+on:
+  schedule:
+    # 8:00 AM UTC, Monday–Friday (adjust to your timezone)
+    - cron: '0 8 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      org:
+        description: 'GitHub org to scan (overrides default)'
+        required: false
+      user:
+        description: 'GitHub user to scan (overrides default)'
+        required: false
+      repos:
+        description: 'Comma-separated repos to scan (overrides default)'
+        required: false
+      format:
+        description: 'Output format'
+        required: false
+        default: 'markdown'
+        type: choice
+        options:
+          - markdown
+          - json
+          - terminal
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  batch-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run batch scan
+        id: scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.SCAN_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          # Determine scan target from workflow inputs or defaults.
+          SCAN_ARGS=""
+
+          if [ -n "${{ github.event.inputs.org }}" ]; then
+            SCAN_ARGS="--org ${{ github.event.inputs.org }}"
+          elif [ -n "${{ github.event.inputs.user }}" ]; then
+            SCAN_ARGS="--user ${{ github.event.inputs.user }}"
+          elif [ -n "${{ github.event.inputs.repos }}" ]; then
+            SCAN_ARGS="--repos ${{ github.event.inputs.repos }}"
+          elif [ -f "repos.json" ]; then
+            SCAN_ARGS="--repos-file repos.json"
+          else
+            # Default: scan the org that owns this repo.
+            SCAN_ARGS="--org ${{ github.repository_owner }}"
+          fi
+
+          echo "Scanning with: $SCAN_ARGS"
+
+          # Run the batch scan — markdown report + JSON artifact.
+          node bin/vibe-audit-batch.js $SCAN_ARGS \
+            --format markdown \
+            --output scan-report.md \
+            --concurrency 5 || true
+
+          node bin/vibe-audit-batch.js $SCAN_ARGS \
+            --format json \
+            --output scan-report.json \
+            --concurrency 5 || true
+
+          # Extract summary for the issue title.
+          if [ -f scan-report.json ]; then
+            GRADE=$(node -e "const r=JSON.parse(require('fs').readFileSync('scan-report.json','utf8')); console.log(r.summary.grade)")
+            CRITICALS=$(node -e "const r=JSON.parse(require('fs').readFileSync('scan-report.json','utf8')); console.log(r.summary.totalCritical)")
+            REPOS=$(node -e "const r=JSON.parse(require('fs').readFileSync('scan-report.json','utf8')); console.log(r.summary.reposScanned)")
+            echo "grade=$GRADE" >> "$GITHUB_OUTPUT"
+            echo "criticals=$CRITICALS" >> "$GITHUB_OUTPUT"
+            echo "repos=$REPOS" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create/update GitHub issue
+        if: always() && hashFiles('scan-report.md') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          GRADE="${{ steps.scan.outputs.grade || 'N/A' }}"
+          CRITICALS="${{ steps.scan.outputs.criticals || '?' }}"
+          REPOS="${{ steps.scan.outputs.repos || '?' }}"
+          TITLE="⚗️ Morning Scan $DATE — Grade $GRADE ($REPOS repos, $CRITICALS critical)"
+
+          BODY=$(cat scan-report.md)
+
+          # Close previous morning scan issues (keep last 5).
+          gh issue list \
+            --label "morning-scan" \
+            --state open \
+            --limit 100 \
+            --json number \
+            --jq '.[5:][].number' | while read -r num; do
+            gh issue close "$num" --comment "Superseded by newer scan." 2>/dev/null || true
+          done
+
+          # Create new issue.
+          gh issue create \
+            --title "$TITLE" \
+            --body "$BODY" \
+            --label "morning-scan,security"
+
+      - name: Upload JSON artifact
+        if: always() && hashFiles('scan-report.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-report-${{ github.run_id }}
+          path: |
+            scan-report.json
+            scan-report.md
+          retention-days: 90
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## ⚗️ Vibe Audit Batch Scan" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f scan-report.md ]; then
+            cat scan-report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Scan did not produce a report." >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -1,0 +1,15 @@
+{
+  "$schema": "./repos.schema.json",
+
+  "org": "my-company",
+
+  "repos": [
+    "other-org/shared-api",
+    "other-org/mobile-app"
+  ],
+
+  "exclude": [
+    "my-company/deprecated-monolith",
+    "my-company/docs-only"
+  ]
+}
