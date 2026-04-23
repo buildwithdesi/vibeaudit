@@ -1,0 +1,12 @@
+{
+  "$schema": "./repos.schema.json",
+  "description": "Repositories to scan in the morning batch audit. Add owner/repo entries below.",
+  "defaults": {
+    "strict": false,
+    "skipSca": true,
+    "format": "json"
+  },
+  "repos": [
+    "jackdog668/vibeaudit"
+  ]
+}

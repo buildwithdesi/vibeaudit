@@ -1,0 +1,50 @@
+name: "Morning Vibe Audit"
+
+on:
+  schedule:
+    # 7 AM UTC every weekday (Mon-Fri). Adjust for your timezone.
+    - cron: "0 7 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      concurrency:
+        description: "Max parallel scans"
+        default: "5"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  batch-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Run batch scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.AUDIT_GITHUB_TOKEN }}
+          FORCE_COLOR: "1"
+        run: |
+          node bin/batch-scan.js \
+            --concurrency ${{ inputs.concurrency || '5' }} \
+            --delay 500 \
+            --format both \
+            --out reports \
+            --github-summary
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-audit-reports-${{ github.run_number }}
+          path: reports/
+          retention-days: 30
