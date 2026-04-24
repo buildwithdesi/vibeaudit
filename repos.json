@@ -1,0 +1,11 @@
+{
+  "$schema": "./repos.schema.json",
+  "description": "Repos scanned by vibe-audit-batch. Replace these with your own.",
+  "defaults": {
+    "branch": "main",
+    "strict": false
+  },
+  "repos": [
+    "jackdog668/vibeaudit"
+  ]
+}

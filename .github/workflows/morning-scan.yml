@@ -1,0 +1,70 @@
+name: "⚗️ Morning Vibe Audit"
+
+on:
+  schedule:
+    # 7:00 AM UTC every weekday (Mon-Fri)
+    - cron: "0 7 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      concurrency:
+        description: "Max parallel scans"
+        default: "5"
+        type: string
+      format:
+        description: "Report format"
+        default: "markdown"
+        type: choice
+        options:
+          - markdown
+          - json
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  batch-scan:
+    name: Scan repos
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run batch scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.VIBE_AUDIT_TOKEN }}
+          VIBE_AUDIT_ISSUE_REPO: ${{ github.repository }}
+          FORCE_COLOR: "0"
+        run: |
+          node bin/vibe-audit-batch.js repos.json \
+            --concurrency ${{ inputs.concurrency || '5' }} \
+            --format ${{ inputs.format || 'markdown' }} \
+            --github-issue \
+            --github-issue-repo ${{ github.repository }} \
+            --output batch-report.md
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-audit-report-${{ github.run_number }}
+          path: batch-report.md
+          retention-days: 90
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f batch-report.md ]; then
+            echo "## ⚗️ Batch Scan Complete" >> $GITHUB_STEP_SUMMARY
+            cat batch-report.md >> $GITHUB_STEP_SUMMARY
+          fi
