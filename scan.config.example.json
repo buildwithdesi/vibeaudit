@@ -1,0 +1,28 @@
+{
+  "repos": [
+    "your-org/repo-1",
+    "your-org/repo-2",
+    "your-org/repo-3",
+    "your-org/frontend-app",
+    "your-org/backend-api",
+    "your-org/mobile-app",
+    "your-org/admin-dashboard",
+    "your-org/auth-service",
+    "your-org/payments-service",
+    "your-org/landing-page"
+  ],
+
+  "org": "",
+
+  "concurrency": 5,
+
+  "format": "terminal",
+
+  "slack": "",
+
+  "branch": "",
+
+  "rules": [],
+  "exclude": [],
+  "strict": false
+}

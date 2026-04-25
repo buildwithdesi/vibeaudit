@@ -7,7 +7,8 @@
     "node": ">=18.3.0"
   },
   "bin": {
-    "vibeaudit": "./bin/vibe-audit.js"
+    "vibeaudit": "./bin/vibe-audit.js",
+    "vibeaudit-scan": "./bin/vibe-audit-scan.js"
   },
   "main": "./src/index.js",
   "exports": {
@@ -16,6 +17,7 @@
   "files": [
     "bin/",
     "src/",
+    "scan.config.example.json",
     "LICENSE",
     "README.md"
   ],
