@@ -18,7 +18,7 @@
  */
 
 import { resolve } from 'node:path';
-import { stat } from 'node:fs/promises';
+import { stat, readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { audit } from '../src/index.js';
 import { generateFixes } from '../src/fix.js';
@@ -26,6 +26,8 @@ import { ALL_RULES } from '../src/rules/index.js';
 import { CWE_MAP } from '../src/data/cwe-map.js';
 import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
 import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
+import { batchAudit, discoverOrgRepos } from '../src/batch.js';
+import { batchTerminal, batchJSON, batchMarkdown } from '../src/reporters/batch.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -38,6 +40,10 @@ const { values, positionals } = parseArgs({
     'fix-file': { type: 'boolean' },
     'skip-sca': { type: 'boolean' },
     deep: { type: 'boolean' },
+    batch: { type: 'string', short: 'b' },
+    org: { type: 'string' },
+    concurrency: { type: 'string' },
+    output: { type: 'string', short: 'o' },
     'list-rules': { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
     version: { type: 'boolean', short: 'v' },
@@ -62,6 +68,10 @@ ${bold('OPTIONS')}
   ${cyan('--fix-file')}                              Only save fix file (no terminal prompts)
   ${cyan('--skip-sca')}                              Skip dependency vulnerability scanning
   ${cyan('--deep')}                                  Enable deep scanning (git history secrets)
+  ${cyan('-b, --batch')} <file>                      Scan repos listed in a JSON file
+  ${cyan('--org')} <name>                            Scan all repos in a GitHub org/user
+  ${cyan('--concurrency')} <n>                       Max parallel scans for batch mode ${dim('(default: 5)')}
+  ${cyan('-o, --output')} <file>                     Write batch report to file
   ${cyan('--list-rules')}                            Show all available rules
   ${cyan('-h, --help')}                              Show this help
   ${cyan('-v, --version')}                           Show version
@@ -85,6 +95,12 @@ ${bold('EXAMPLES')}
 
   ${dim('# Only check for secrets and auth')}
   npx vibe-audit --rules exposed-secrets,missing-auth
+
+  ${dim('# Scan all repos in a GitHub org')}
+  npx vibe-audit --org my-company --format markdown
+
+  ${dim('# Batch scan from a repo list')}
+  npx vibe-audit --batch repos.json --output report.md
 
 ${bold('CONFIG')}
   Add ${cyan('.vibe-audit.json')} to your project root to set defaults.
@@ -132,6 +148,74 @@ if (values['list-rules']) {
   }
 
   process.exit(0);
+}
+
+// ─── Batch / Org Mode ────────────────────────────────────────────────────────
+
+if (values.batch || values.org) {
+  let repos;
+
+  if (values.org) {
+    console.log(cyan(`\n  ⚗️  Discovering repos for: ${values.org}\n`));
+    repos = await discoverOrgRepos(values.org);
+    console.log(dim(`  Found ${repos.length} repos\n`));
+  } else {
+    const raw = await readFile(resolve(values.batch), 'utf8');
+    const parsed = JSON.parse(raw);
+    repos = Array.isArray(parsed) ? parsed : parsed.repos;
+    if (!Array.isArray(repos)) {
+      console.error(red('\n  Error: Batch file must be a JSON array or { "repos": [...] }\n'));
+      process.exit(2);
+    }
+  }
+
+  if (repos.length === 0) {
+    console.error(red('\n  Error: No repos to scan\n'));
+    process.exit(2);
+  }
+
+  const concurrency = values.concurrency ? parseInt(values.concurrency, 10) : 5;
+  const format = values.format || 'terminal';
+
+  let scannedCount = 0;
+  const onProgress = (_done, total, repo, result) => {
+    scannedCount++;
+    const icon = result.error ? red('✗') : result.critical > 0 ? red('●') : result.warning > 0 ? yellow('▲') : green('✓');
+    if (format === 'terminal') {
+      console.log(dim(`  [${scannedCount}/${total}]`) + ` ${icon} ${repo}` + (result.error ? red(` — ${result.error}`) : ''));
+    }
+  };
+
+  const { results, summary } = await batchAudit(repos, {
+    concurrency,
+    rules: values.rules?.split(',').filter(Boolean),
+    exclude: values.exclude?.split(',').filter(Boolean),
+    strict: values.strict,
+    onProgress,
+  });
+
+  let output;
+  switch (format) {
+    case 'json':
+      output = batchJSON(results, summary);
+      break;
+    case 'markdown':
+      output = batchMarkdown(results, summary);
+      break;
+    default:
+      output = batchTerminal(results, summary);
+      break;
+  }
+
+  if (values.output) {
+    await writeFile(resolve(values.output), output);
+    console.log(cyan(`\n  Report written to ${values.output}\n`));
+  } else {
+    console.log(output);
+  }
+
+  const exitCode = summary.totalCritical > 0 ? 1 : values.strict && summary.totalWarning > 0 ? 1 : 0;
+  process.exit(exitCode);
 }
 
 // ─── Run Audit ────────────────────────────────────────────────────────────────

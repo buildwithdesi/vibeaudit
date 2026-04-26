@@ -1,0 +1,9 @@
+{
+  "repos": [
+    "your-org/api-service",
+    "your-org/web-app",
+    "your-org/mobile-backend",
+    "your-org/admin-dashboard",
+    "https://github.com/your-org/auth-service"
+  ]
+}

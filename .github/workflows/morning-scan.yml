@@ -1,0 +1,93 @@
+name: "Morning Vibe Audit — Multi-Repo Scan"
+
+on:
+  schedule:
+    # Weekdays at 8:00 AM UTC — adjust to your timezone
+    - cron: "0 8 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      org:
+        description: "GitHub org/user to scan (overrides repos.json)"
+        required: false
+        type: string
+      format:
+        description: "Output format"
+        required: false
+        default: "markdown"
+        type: choice
+        options:
+          - terminal
+          - markdown
+          - json
+      concurrency:
+        description: "Max parallel scans"
+        required: false
+        default: "5"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Batch Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run batch scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.VIBE_AUDIT_TOKEN }}
+          FORCE_COLOR: "0"
+        run: |
+          FORMAT="${{ inputs.format || 'markdown' }}"
+          CONCURRENCY="${{ inputs.concurrency || '5' }}"
+
+          if [ -n "${{ inputs.org }}" ]; then
+            node bin/vibe-audit.js --org "${{ inputs.org }}" \
+              --format "$FORMAT" \
+              --concurrency "$CONCURRENCY" \
+              --output report.md || true
+          else
+            node bin/vibe-audit.js --batch repos.json \
+              --format "$FORMAT" \
+              --concurrency "$CONCURRENCY" \
+              --output report.md || true
+          fi
+
+      - name: Post to GitHub Actions summary
+        if: always()
+        run: |
+          if [ -f report.md ]; then
+            cat report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "⚠️ No report generated" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-audit-report-${{ github.run_number }}
+          path: report.md
+          retention-days: 30
+
+      # Optional: Post to Slack via webhook
+      # Uncomment and set SLACK_WEBHOOK_URL secret to enable
+      #
+      # - name: Notify Slack
+      #   if: always()
+      #   env:
+      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      #   run: |
+      #     if [ -z "$SLACK_WEBHOOK_URL" ]; then exit 0; fi
+      #     SUMMARY=$(head -20 report.md)
+      #     curl -s -X POST "$SLACK_WEBHOOK_URL" \
+      #       -H 'Content-Type: application/json' \
+      #       -d "{\"text\": \"⚗️ Morning Vibe Audit\\n\\n\`\`\`${SUMMARY}\`\`\`\"}"
