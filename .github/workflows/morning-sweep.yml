@@ -1,0 +1,91 @@
+name: Morning Vibe Audit Sweep
+
+on:
+  schedule:
+    # 8 AM UTC every weekday (Mon–Fri)
+    - cron: '0 8 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      concurrency:
+        description: 'Number of concurrent repo scans'
+        default: '10'
+        type: string
+      format:
+        description: 'Output format (terminal, json, markdown)'
+        default: 'markdown'
+        type: choice
+        options:
+          - terminal
+          - json
+          - markdown
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - name: Run sweep
+        id: sweep
+        env:
+          GITHUB_TOKEN: ${{ secrets.SWEEP_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          CONCURRENCY="${{ inputs.concurrency || '10' }}"
+          node bin/vibe-audit.js \
+            --sweep repos.json \
+            --concurrency "$CONCURRENCY" \
+            --format markdown > sweep-report.md 2>&1 || true
+
+          echo "report<<REPORT_EOF" >> "$GITHUB_OUTPUT"
+          head -c 60000 sweep-report.md >> "$GITHUB_OUTPUT"
+          echo "" >> "$GITHUB_OUTPUT"
+          echo "REPORT_EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Post sweep report as GitHub Issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DATE=$(date -u +"%Y-%m-%d")
+          TITLE="⚗️ Daily Vibe Audit Sweep — $DATE"
+
+          # Close previous sweep issues
+          gh issue list \
+            --label "vibe-audit-sweep" \
+            --state open \
+            --json number -q '.[].number' | while read -r num; do
+            gh issue close "$num" --comment "Superseded by new sweep for $DATE"
+          done
+
+          gh issue create \
+            --title "$TITLE" \
+            --label "vibe-audit-sweep,security" \
+            --body-file sweep-report.md
+
+      - name: Upload JSON artifact
+        if: always()
+        run: |
+          node bin/vibe-audit.js \
+            --sweep repos.json \
+            --concurrency "${{ inputs.concurrency || '10' }}" \
+            --format json > sweep-report.json 2>&1 || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sweep-report-${{ github.run_id }}
+          path: |
+            sweep-report.md
+            sweep-report.json
+          retention-days: 90

@@ -1,0 +1,9 @@
+{
+  "repos": [
+    "your-org/frontend-app",
+    "your-org/api-server",
+    "your-org/mobile-app",
+    "your-org/admin-dashboard",
+    { "repo": "your-org/legacy-api", "branch": "develop" }
+  ]
+}

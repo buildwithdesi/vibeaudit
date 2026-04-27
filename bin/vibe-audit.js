@@ -24,8 +24,10 @@ import { audit } from '../src/index.js';
 import { generateFixes } from '../src/fix.js';
 import { ALL_RULES } from '../src/rules/index.js';
 import { CWE_MAP } from '../src/data/cwe-map.js';
-import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
+import { bold, cyan, dim, green, red, yellow, gray } from '../src/colors.js';
 import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
+import { sweep, loadRepoList } from '../src/sweep.js';
+import { reportSweep } from '../src/reporters/sweep.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -38,6 +40,8 @@ const { values, positionals } = parseArgs({
     'fix-file': { type: 'boolean' },
     'skip-sca': { type: 'boolean' },
     deep: { type: 'boolean' },
+    sweep: { type: 'string' },
+    concurrency: { type: 'string', short: 'c' },
     'list-rules': { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
     version: { type: 'boolean', short: 'v' },
@@ -62,6 +66,8 @@ ${bold('OPTIONS')}
   ${cyan('--fix-file')}                              Only save fix file (no terminal prompts)
   ${cyan('--skip-sca')}                              Skip dependency vulnerability scanning
   ${cyan('--deep')}                                  Enable deep scanning (git history secrets)
+  ${cyan('--sweep')} <repos.json>                    Scan multiple repos from a JSON file
+  ${cyan('-c, --concurrency')} <n>                   Concurrent repo scans during sweep ${dim('(default: 5)')}
   ${cyan('--list-rules')}                            Show all available rules
   ${cyan('-h, --help')}                              Show this help
   ${cyan('-v, --version')}                           Show version
@@ -79,6 +85,10 @@ ${bold('EXAMPLES')}
 
   ${dim('# Get fix prompts for your AI tool')}
   npx vibe-audit --fix
+
+  ${dim('# Sweep 70+ repos from a file')}
+  npx vibe-audit --sweep repos.json
+  npx vibe-audit --sweep repos.json --format markdown --concurrency 10
 
   ${dim('# JSON output for CI pipelines')}
   npx vibe-audit --format json --strict
@@ -132,6 +142,47 @@ if (values['list-rules']) {
   }
 
   process.exit(0);
+}
+
+// ─── Sweep Mode ──────────────────────────────────────────────────────────────
+
+if (values.sweep) {
+  try {
+    const repos = await loadRepoList(values.sweep);
+    const concurrency = values.concurrency ? parseInt(values.concurrency, 10) : 5;
+    const format = values.format || 'terminal';
+
+    if (format === 'terminal') {
+      console.error(cyan(`\n  ⚗️  Sweep: scanning ${repos.length} repos (concurrency: ${concurrency})\n`));
+    }
+
+    let done = 0;
+    const result = await sweep(repos, {
+      concurrency,
+      rules: values.rules?.split(',').filter(Boolean),
+      exclude: values.exclude?.split(',').filter(Boolean),
+      strict: values.strict,
+      onResult(r) {
+        done++;
+        if (format === 'terminal') {
+          const icon = r.error ? red('✗') : r.grade === 'A' ? green('✓') : r.grade === 'F' ? red('✗') : yellow('~');
+          const progress = dim(`[${done}/${repos.length}]`);
+          console.error(`  ${progress} ${icon} ${r.name} ${r.error ? red(r.error) : dim(`${r.critical}C ${r.warning}W ${r.info}I`)}`);
+        }
+      },
+    });
+
+    if (format === 'terminal') console.log('');
+    reportSweep(result, format);
+
+    const hasCritical = result.summary.totalCritical > 0;
+    const hasWarning = result.summary.totalWarning > 0;
+    const exitCode = hasCritical ? 1 : values.strict && hasWarning ? 1 : 0;
+    process.exit(exitCode);
+  } catch (err) {
+    console.error(red(`\n  Error: ${err.message}\n`));
+    process.exit(2);
+  }
 }
 
 // ─── Run Audit ────────────────────────────────────────────────────────────────

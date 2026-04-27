@@ -91,13 +91,15 @@ export async function audit(targetDir, cliOptions = {}) {
   const severityOrder = { critical: 0, warning: 1, info: 2 };
   findings.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
 
-  // Report.
-  await report(findings, format, {
-    filesScanned,
-    rulesRun: rules.length,
-    durationMs,
-    targetDir,
-  });
+  // Report (skip in silent mode, e.g. during multi-repo sweep).
+  if (!cliOptions._silent) {
+    await report(findings, format, {
+      filesScanned,
+      rulesRun: rules.length,
+      durationMs,
+      targetDir,
+    });
+  }
 
   // Exit code: 1 if criticals found, 1 if warnings + strict mode, 0 otherwise.
   const hasCritical = findings.some((f) => f.severity === 'critical');
