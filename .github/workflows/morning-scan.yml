@@ -1,0 +1,115 @@
+name: "Morning Vibe Audit — Multi-Repo Scan"
+
+on:
+  schedule:
+    # 7 AM UTC every weekday (Mon–Fri)
+    - cron: "0 7 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Org name, username, or 'repos' to use repos.txt"
+        required: false
+        default: ""
+      concurrency:
+        description: "Parallel scan concurrency"
+        required: false
+        default: "5"
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - run: npm ci
+
+      # Determine scan target: workflow_dispatch input > VIBE_AUDIT_ORG env > repo owner
+      - name: Run batch scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VIBE_AUDIT_ORG: ${{ vars.VIBE_AUDIT_ORG || '' }}
+          VIBE_AUDIT_USER: ${{ vars.VIBE_AUDIT_USER || '' }}
+        run: |
+          TARGET="${{ github.event.inputs.target }}"
+          CONCURRENCY="${{ github.event.inputs.concurrency || '5' }}"
+
+          if [ -n "$TARGET" ]; then
+            # Manual dispatch with explicit target
+            if [ -f "$TARGET" ]; then
+              node bin/vibe-audit.js --repos "$TARGET" --concurrency "$CONCURRENCY" --format json > scan-results.json
+            else
+              node bin/vibe-audit.js --org "$TARGET" --concurrency "$CONCURRENCY" --format json > scan-results.json
+            fi
+          elif [ -n "$VIBE_AUDIT_ORG" ]; then
+            node bin/vibe-audit.js --org "$VIBE_AUDIT_ORG" --concurrency "$CONCURRENCY" --format json > scan-results.json
+          elif [ -n "$VIBE_AUDIT_USER" ]; then
+            node bin/vibe-audit.js --user "$VIBE_AUDIT_USER" --concurrency "$CONCURRENCY" --format json > scan-results.json
+          else
+            # Default: scan the owner of this repo
+            OWNER="${{ github.repository_owner }}"
+            node bin/vibe-audit.js --user "$OWNER" --concurrency "$CONCURRENCY" --format json > scan-results.json
+          fi
+
+      - name: Generate markdown report
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VIBE_AUDIT_ORG: ${{ vars.VIBE_AUDIT_ORG || '' }}
+          VIBE_AUDIT_USER: ${{ vars.VIBE_AUDIT_USER || '' }}
+        run: |
+          TARGET="${{ github.event.inputs.target }}"
+          CONCURRENCY="${{ github.event.inputs.concurrency || '5' }}"
+
+          if [ -n "$TARGET" ]; then
+            if [ -f "$TARGET" ]; then
+              node bin/vibe-audit.js --repos "$TARGET" --concurrency "$CONCURRENCY" --format markdown > scan-report.md
+            else
+              node bin/vibe-audit.js --org "$TARGET" --concurrency "$CONCURRENCY" --format markdown > scan-report.md
+            fi
+          elif [ -n "$VIBE_AUDIT_ORG" ]; then
+            node bin/vibe-audit.js --org "$VIBE_AUDIT_ORG" --concurrency "$CONCURRENCY" --format markdown > scan-report.md
+          elif [ -n "$VIBE_AUDIT_USER" ]; then
+            node bin/vibe-audit.js --user "$VIBE_AUDIT_USER" --concurrency "$CONCURRENCY" --format markdown > scan-report.md
+          else
+            OWNER="${{ github.repository_owner }}"
+            node bin/vibe-audit.js --user "$OWNER" --concurrency "$CONCURRENCY" --format markdown > scan-report.md
+          fi
+
+      - name: Upload scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-audit-batch-${{ github.run_number }}
+          path: |
+            scan-results.json
+            scan-report.md
+          retention-days: 90
+
+      - name: Post summary to job
+        if: always()
+        run: |
+          echo "## ⚗️ Vibe Audit — Morning Scan" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f scan-report.md ]; then
+            cat scan-report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Scan did not produce a report. Check logs for errors." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Fail on criticals
+        run: |
+          if [ -f scan-results.json ]; then
+            CRITS=$(node -e "const d=require('./scan-results.json'); console.log(d.summary.totalCritical)")
+            if [ "$CRITS" -gt 0 ]; then
+              echo "::error::Found $CRITS critical findings across repos"
+              exit 1
+            fi
+          fi
