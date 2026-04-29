@@ -26,6 +26,8 @@ import { ALL_RULES } from '../src/rules/index.js';
 import { CWE_MAP } from '../src/data/cwe-map.js';
 import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
 import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
+import { listOrgRepos, scanMultiRepo } from '../src/multi-repo.js';
+import { reportMultiRepo } from '../src/reporters/summary.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -38,6 +40,10 @@ const { values, positionals } = parseArgs({
     'fix-file': { type: 'boolean' },
     'skip-sca': { type: 'boolean' },
     deep: { type: 'boolean' },
+    org: { type: 'string' },
+    repos: { type: 'string' },
+    topic: { type: 'string' },
+    concurrency: { type: 'string' },
     'list-rules': { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
     version: { type: 'boolean', short: 'v' },
@@ -62,6 +68,10 @@ ${bold('OPTIONS')}
   ${cyan('--fix-file')}                              Only save fix file (no terminal prompts)
   ${cyan('--skip-sca')}                              Skip dependency vulnerability scanning
   ${cyan('--deep')}                                  Enable deep scanning (git history secrets)
+  ${cyan('--org')} <name>                             Scan all repos in a GitHub org/user
+  ${cyan('--repos')} <file.json>                      Scan repos listed in a JSON file
+  ${cyan('--topic')} <topic>                          Filter --org repos by GitHub topic
+  ${cyan('--concurrency')} <n>                        Parallel repo scans ${dim('(default: 5)')}
   ${cyan('--list-rules')}                            Show all available rules
   ${cyan('-h, --help')}                              Show this help
   ${cyan('-v, --version')}                           Show version
@@ -79,6 +89,13 @@ ${bold('EXAMPLES')}
 
   ${dim('# Get fix prompts for your AI tool')}
   npx vibe-audit --fix
+
+  ${dim('# Scan all repos in a GitHub org (morning scan)')}
+  npx vibe-audit --org my-company --format markdown
+  npx vibe-audit --org my-company --topic production --concurrency 10
+
+  ${dim('# Scan repos from a JSON file')}
+  npx vibe-audit --repos repos.json --format json
 
   ${dim('# JSON output for CI pipelines')}
   npx vibe-audit --format json --strict
@@ -134,7 +151,58 @@ if (values['list-rules']) {
   process.exit(0);
 }
 
-// ─── Run Audit ────────────────────────────────────────────────────────────────
+// ─── Multi-Repo Mode ─────────────────────────────────────────────────────────
+
+if (values.org || values.repos) {
+  const format = values.format || 'terminal';
+  const concurrency = parseInt(values.concurrency, 10) || 5;
+
+  try {
+    let targets;
+
+    if (values.org) {
+      console.error(cyan(`\n  ⚗️  Fetching repos for: ${values.org}\n`));
+      targets = await listOrgRepos(values.org, { topic: values.topic });
+      console.error(dim(`  Found ${targets.length} repos${values.topic ? ` (topic: ${values.topic})` : ''}\n`));
+    } else {
+      const { readFile } = await import('node:fs/promises');
+      const raw = await readFile(resolve(values.repos), 'utf-8');
+      const parsed = JSON.parse(raw);
+      targets = parsed.map(entry => {
+        if (typeof entry === 'string') {
+          const [owner, repo] = entry.split('/');
+          return { owner, repo };
+        }
+        return entry;
+      });
+      console.error(dim(`  Loaded ${targets.length} repos from ${values.repos}\n`));
+    }
+
+    if (targets.length === 0) {
+      console.error(yellow('\n  No repos found to scan.\n'));
+      process.exit(0);
+    }
+
+    const result = await scanMultiRepo(targets, {
+      concurrency,
+      onProgress(done, total, r) {
+        const icon = r.error ? red('✗') : r.grade === 'A' || r.grade === 'B' ? green('✓') : r.grade === 'F' ? red('!') : yellow('△');
+        console.error(dim(`  [${done}/${total}]`) + ` ${icon} ${r.label} — ${r.grade === '?' ? red('error') : `Grade ${r.grade}`} (${r.total} findings, ${(r.durationMs / 1000).toFixed(1)}s)`);
+      },
+    });
+
+    console.error('');
+    reportMultiRepo(result, format);
+
+    const exitCode = result.totalCriticals > 0 ? 1 : 0;
+    process.exit(exitCode);
+  } catch (err) {
+    console.error(red(`\n  Error: ${err.message}\n`));
+    process.exit(2);
+  }
+}
+
+// ─── Run Audit (single repo) ─────────────────────────────────────────────────
 
 const rawTarget = positionals[0] || '.';
 
