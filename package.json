@@ -7,7 +7,8 @@
     "node": ">=18.3.0"
   },
   "bin": {
-    "vibeaudit": "./bin/vibe-audit.js"
+    "vibeaudit": "./bin/vibe-audit.js",
+    "vibeaudit-batch": "./bin/vibe-audit-batch.js"
   },
   "main": "./src/index.js",
   "exports": {
@@ -23,6 +24,7 @@
     "test": "node --test tests/**/*.test.js tests/**/**/*.test.js",
     "lint": "eslint src/ bin/ tests/",
     "audit:self": "node bin/vibe-audit.js .",
+    "audit:batch": "node bin/vibe-audit-batch.js",
     "ui": "node src/web/server.js",
     "ui:dev": "node --watch src/web/server.js",
     "prepublishOnly": "npm test && npm run lint"

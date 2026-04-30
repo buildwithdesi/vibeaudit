@@ -1,0 +1,93 @@
+name: Vibe Audit — Batch Scan
+
+on:
+  schedule:
+    # Every weekday at 8 AM UTC (adjust to your morning)
+    - cron: '0 8 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      org:
+        description: 'GitHub org to scan (overrides repos.json)'
+        required: false
+      concurrency:
+        description: 'Parallel scans'
+        required: false
+        default: '5'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  batch-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - name: Run batch scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.AUDIT_GITHUB_TOKEN }}
+        run: |
+          ARGS=""
+
+          if [ -n "${{ github.event.inputs.org }}" ]; then
+            ARGS="--org ${{ github.event.inputs.org }}"
+          elif [ -f "repos.json" ]; then
+            ARGS="--repos repos.json"
+          else
+            echo "Error: No --org input and no repos.json found"
+            exit 1
+          fi
+
+          CONCURRENCY="${{ github.event.inputs.concurrency || '5' }}"
+
+          node bin/vibe-audit-batch.js $ARGS \
+            --concurrency "$CONCURRENCY" \
+            --format json \
+            --output batch-report.json
+
+          node bin/vibe-audit-batch.js $ARGS \
+            --concurrency "$CONCURRENCY" \
+            --format markdown \
+            --output batch-report.md
+
+      - name: Upload report artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-audit-batch-report
+          path: |
+            batch-report.json
+            batch-report.md
+
+      - name: Create summary issue on critical findings
+        env:
+          GH_TOKEN: ${{ secrets.AUDIT_GITHUB_TOKEN }}
+        run: |
+          CRITICAL=$(node -e "
+            const r = JSON.parse(require('fs').readFileSync('batch-report.json','utf8'));
+            console.log(r.summary.totalCritical);
+          ")
+
+          if [ "$CRITICAL" -gt 0 ]; then
+            DATE=$(date -u +"%Y-%m-%d")
+            TITLE="⚗️ Batch Audit: $CRITICAL critical findings ($DATE)"
+            BODY=$(cat batch-report.md)
+            gh issue create --repo "${{ github.repository }}" \
+              --title "$TITLE" \
+              --body "$BODY" \
+              --label "security,vibe-audit"
+          fi
+
+      - name: Job summary
+        run: |
+          echo "## ⚗️ Vibe Audit Batch Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          cat batch-report.md >> $GITHUB_STEP_SUMMARY

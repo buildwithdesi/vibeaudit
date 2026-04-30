@@ -1,0 +1,6 @@
+[
+  "jackdog668/vibeaudit",
+  "your-org/api-service",
+  "your-org/web-frontend",
+  { "repo": "your-org/payments", "rules": ["exposed-secrets", "insecure-jwt", "missing-auth"] }
+]
