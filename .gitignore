@@ -7,3 +7,5 @@ Thumbs.db
 .env.*
 !.env.example
 VIBE-AUDIT-FIXES.md
+vibe-audit-report.html
+vibe-audit-multi-repo.html
