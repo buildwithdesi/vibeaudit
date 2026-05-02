@@ -1,0 +1,149 @@
+name: "Morning Vibe Audit — Multi-Repo Scan"
+
+on:
+  schedule:
+    # 8:00 AM UTC every weekday (Mon–Fri)
+    - cron: "0 8 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      org:
+        description: "GitHub org or user to scan (overrides ORG secret)"
+        required: false
+        type: string
+      format:
+        description: "Output format"
+        required: false
+        default: "json"
+        type: choice
+        options:
+          - json
+          - markdown
+          - terminal
+      concurrency:
+        description: "Parallel repo scans"
+        required: false
+        default: "5"
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  batch-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout vibeaudit
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run batch scan
+        id: scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.SCAN_TOKEN || secrets.GITHUB_TOKEN }}
+          SCAN_ORG: ${{ inputs.org || secrets.SCAN_ORG }}
+          SCAN_FORMAT: ${{ inputs.format || 'json' }}
+          SCAN_CONCURRENCY: ${{ inputs.concurrency || '5' }}
+        run: |
+          ORG="${SCAN_ORG}"
+          if [ -z "$ORG" ]; then
+            echo "::error::No org specified. Set SCAN_ORG secret or provide org input."
+            exit 1
+          fi
+
+          echo "Scanning all repos in: $ORG"
+
+          # Run scan, capture output
+          node bin/vibe-audit.js \
+            --org "$ORG" \
+            --format "$SCAN_FORMAT" \
+            --concurrency "$SCAN_CONCURRENCY" \
+            > scan-results.json 2>scan-progress.log || true
+
+          cat scan-progress.log
+
+          # Extract summary for step output
+          if [ "$SCAN_FORMAT" = "json" ]; then
+            TOTAL_REPOS=$(jq '.summary.repos' scan-results.json)
+            TOTAL_CRITICAL=$(jq '.summary.totalCritical' scan-results.json)
+            TOTAL_WARNING=$(jq '.summary.totalWarning' scan-results.json)
+            TOTAL_FINDINGS=$(jq '.summary.totalFindings' scan-results.json)
+
+            echo "total_repos=$TOTAL_REPOS" >> "$GITHUB_OUTPUT"
+            echo "total_critical=$TOTAL_CRITICAL" >> "$GITHUB_OUTPUT"
+            echo "total_warning=$TOTAL_WARNING" >> "$GITHUB_OUTPUT"
+            echo "total_findings=$TOTAL_FINDINGS" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-audit-batch-${{ github.run_number }}
+          path: |
+            scan-results.json
+            scan-progress.log
+          retention-days: 90
+
+      - name: Create/update GitHub issue with results
+        if: steps.scan.outputs.total_critical > 0
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCAN_ORG: ${{ inputs.org || secrets.SCAN_ORG }}
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          CRITICAL=${{ steps.scan.outputs.total_critical }}
+          WARNING=${{ steps.scan.outputs.total_warning }}
+          REPOS=${{ steps.scan.outputs.total_repos }}
+          FINDINGS=${{ steps.scan.outputs.total_findings }}
+
+          # Build the issue body from scan results
+          CRITICAL_REPOS=$(jq -r '.repos[] | select(.critical > 0) | "- **\(.repo)** — \(.critical) critical, \(.warning) warnings"' scan-results.json)
+
+          BODY="## ⚗️ Vibe Audit Morning Scan — ${DATE}
+
+          **${REPOS} repos scanned** · ${FINDINGS} total findings
+
+          | Severity | Count |
+          |----------|-------|
+          | 🔴 Critical | ${CRITICAL} |
+          | 🟡 Warning | ${WARNING} |
+
+          ### Repos with Critical Issues
+
+          ${CRITICAL_REPOS}
+
+          ---
+          [View full results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          "
+
+          # Check for existing open issue
+          EXISTING=$(gh issue list --repo "${{ github.repository }}" --label "vibe-audit" --state open --limit 1 --json number -q '.[0].number' 2>/dev/null || echo "")
+
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "${{ github.repository }}" --body "$BODY"
+          else
+            gh issue create \
+              --repo "${{ github.repository }}" \
+              --title "⚗️ Vibe Audit: ${CRITICAL} critical issues across ${SCAN_ORG} repos" \
+              --body "$BODY" \
+              --label "vibe-audit,security"
+          fi
+
+      - name: Summary
+        run: |
+          echo "## ⚗️ Vibe Audit Batch Scan" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Repos:** ${{ steps.scan.outputs.total_repos }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Critical:** ${{ steps.scan.outputs.total_critical }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Warnings:** ${{ steps.scan.outputs.total_warning }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total findings:** ${{ steps.scan.outputs.total_findings }}" >> $GITHUB_STEP_SUMMARY

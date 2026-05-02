@@ -18,14 +18,16 @@
  */
 
 import { resolve } from 'node:path';
-import { stat } from 'node:fs/promises';
+import { stat, readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { audit } from '../src/index.js';
 import { generateFixes } from '../src/fix.js';
 import { ALL_RULES } from '../src/rules/index.js';
 import { CWE_MAP } from '../src/data/cwe-map.js';
-import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
+import { bold, cyan, dim, red, yellow, gray, green } from '../src/colors.js';
 import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
+import { batchScan, fetchOrgRepos, parseReposList } from '../src/batch.js';
+import { reportBatchTerminal, reportBatchJSON, reportBatchMarkdown } from '../src/reporters/batch-summary.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -39,6 +41,9 @@ const { values, positionals } = parseArgs({
     'skip-sca': { type: 'boolean' },
     deep: { type: 'boolean' },
     'list-rules': { type: 'boolean' },
+    org: { type: 'string' },
+    'repos-file': { type: 'string' },
+    concurrency: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
     version: { type: 'boolean', short: 'v' },
   },
@@ -66,6 +71,11 @@ ${bold('OPTIONS')}
   ${cyan('-h, --help')}                              Show this help
   ${cyan('-v, --version')}                           Show version
 
+${bold('BATCH MODE')} ${dim('(scan multiple repos at once)')}
+  ${cyan('--org')} <org-or-user>                      Scan all repos in a GitHub org/user
+  ${cyan('--repos-file')} <path>                      Scan repos listed in a file (one per line)
+  ${cyan('--concurrency')} <n>                        Parallel repo scans ${dim('(default: 5)')}
+
 ${bold('EXAMPLES')}
   ${dim('# Audit current directory')}
   npx vibe-audit
@@ -76,6 +86,12 @@ ${bold('EXAMPLES')}
   ${dim('# Audit a GitHub repo directly')}
   npx vibe-audit https://github.com/user/repo
   npx vibe-audit user/repo
+
+  ${dim('# Scan all repos in an org')}
+  npx vibe-audit --org my-company --format json
+
+  ${dim('# Scan repos from a file')}
+  npx vibe-audit --repos-file repos.txt
 
   ${dim('# Get fix prompts for your AI tool')}
   npx vibe-audit --fix
@@ -132,6 +148,64 @@ if (values['list-rules']) {
   }
 
   process.exit(0);
+}
+
+// ─── Batch Mode ──────────────────────────────────────────────────────────────
+
+if (values.org || values['repos-file']) {
+  const format = values.format || 'terminal';
+  const concurrency = parseInt(values.concurrency, 10) || 5;
+
+  let repos;
+
+  if (values.org) {
+    console.log(cyan(`\n  ⚗️  Fetching repos for: ${values.org}\n`));
+    repos = await fetchOrgRepos(values.org);
+    console.log(dim(`  Found ${repos.length} repos\n`));
+  } else {
+    const content = await readFile(resolve(values['repos-file']), 'utf-8');
+    repos = parseReposList(content);
+    console.log(cyan(`\n  ⚗️  Batch scan: ${repos.length} repos from ${values['repos-file']}\n`));
+  }
+
+  if (repos.length === 0) {
+    console.error(red('\n  No repos found to scan.\n'));
+    process.exit(2);
+  }
+
+  const batchStart = performance.now();
+  const results = await batchScan(repos, {
+    concurrency,
+    rules: values.rules?.split(',').filter(Boolean),
+    exclude: values.exclude?.split(',').filter(Boolean),
+    deep: values.deep,
+    onProgress(result, done, total) {
+      const icon = result.error ? red('✗') : result.grade === 'A' || result.grade === 'B' ? green('✓') : result.grade === 'F' ? red('✓') : yellow('✓');
+      process.stderr.write(`  ${icon} [${done}/${total}] ${result.repo} — grade ${result.grade} (${result.total} findings, ${(result.durationMs / 1000).toFixed(1)}s)\n`);
+    },
+  });
+  const batchDuration = Math.round(performance.now() - batchStart);
+
+  console.log('');
+
+  const meta = { durationMs: batchDuration };
+
+  switch (format) {
+    case 'json':
+      console.log(JSON.stringify(reportBatchJSON(results, meta), null, 2));
+      break;
+    case 'markdown':
+      console.log(reportBatchMarkdown(results, meta));
+      break;
+    default:
+      reportBatchTerminal(results, meta);
+      break;
+  }
+
+  const hasCritical = results.some((r) => r.critical > 0);
+  const hasWarning = results.some((r) => r.warning > 0);
+  const exitCode = hasCritical ? 1 : values.strict && hasWarning ? 1 : 0;
+  process.exit(exitCode);
 }
 
 // ─── Run Audit ────────────────────────────────────────────────────────────────
