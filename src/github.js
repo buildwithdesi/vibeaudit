@@ -131,6 +131,61 @@ export async function* fetchRepoFiles(owner, repo, { branch = 'HEAD' } = {}) {
 }
 
 /**
+ * List all repositories for a GitHub org or user.
+ * Handles pagination automatically.
+ *
+ * @param {string} owner - GitHub org or username
+ * @param {{ type?: 'org' | 'user', perPage?: number }} options
+ * @returns {Promise<Array<{ owner: string, repo: string, fullName: string, private: boolean, defaultBranch: string, language: string | null, archived: boolean }>>}
+ */
+export async function listRepos(owner, { type = 'org', perPage = 100 } = {}) {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  const headers = {
+    Accept: 'application/vnd.github.v3+json',
+    'User-Agent': 'vibe-audit',
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const repos = [];
+  let page = 1;
+
+  while (true) {
+    const endpoint = type === 'org' ? 'orgs' : 'users';
+    const url = `https://api.github.com/${endpoint}/${owner}/repos?per_page=${perPage}&page=${page}&sort=updated`;
+    const res = await fetch(url, { headers });
+
+    if (!res.ok) {
+      if (res.status === 404 && type === 'org') {
+        return listRepos(owner, { type: 'user', perPage });
+      }
+      const body = await res.text();
+      throw new Error(`GitHub API error listing repos (${res.status}): ${body}`);
+    }
+
+    const data = await res.json();
+    if (data.length === 0) break;
+
+    for (const r of data) {
+      if (r.archived) continue;
+      repos.push({
+        owner: r.owner.login,
+        repo: r.name,
+        fullName: r.full_name,
+        private: r.private,
+        defaultBranch: r.default_branch,
+        language: r.language,
+        archived: r.archived,
+      });
+    }
+
+    if (data.length < perPage) break;
+    page++;
+  }
+
+  return repos;
+}
+
+/**
  * Shallow-clone a GitHub repo into a temporary directory.
  * Use this as a fallback when API access isn't available.
  *
