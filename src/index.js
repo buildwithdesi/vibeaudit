@@ -91,13 +91,15 @@ export async function audit(targetDir, cliOptions = {}) {
   const severityOrder = { critical: 0, warning: 1, info: 2 };
   findings.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
 
-  // Report.
-  await report(findings, format, {
-    filesScanned,
-    rulesRun: rules.length,
-    durationMs,
-    targetDir,
-  });
+  // Report (skip when running as part of a batch scan).
+  if (!cliOptions.quiet) {
+    await report(findings, format, {
+      filesScanned,
+      rulesRun: rules.length,
+      durationMs,
+      targetDir,
+    });
+  }
 
   // Exit code: 1 if criticals found, 1 if warnings + strict mode, 0 otherwise.
   const hasCritical = findings.some((f) => f.severity === 'critical');

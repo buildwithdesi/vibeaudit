@@ -26,6 +26,8 @@ import { ALL_RULES } from '../src/rules/index.js';
 import { CWE_MAP } from '../src/data/cwe-map.js';
 import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
 import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
+import { listOrgRepos, listUserRepos, scanRepos } from '../src/org-scan.js';
+import { reportOrgTerminal, reportOrgJSON, reportOrgMarkdown } from '../src/reporters/org-summary.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -38,6 +40,9 @@ const { values, positionals } = parseArgs({
     'fix-file': { type: 'boolean' },
     'skip-sca': { type: 'boolean' },
     deep: { type: 'boolean' },
+    org: { type: 'string' },
+    user: { type: 'string' },
+    concurrency: { type: 'string' },
     'list-rules': { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
     version: { type: 'boolean', short: 'v' },
@@ -62,6 +67,9 @@ ${bold('OPTIONS')}
   ${cyan('--fix-file')}                              Only save fix file (no terminal prompts)
   ${cyan('--skip-sca')}                              Skip dependency vulnerability scanning
   ${cyan('--deep')}                                  Enable deep scanning (git history secrets)
+  ${cyan('--org')} <name>                             Scan all repos in a GitHub org
+  ${cyan('--user')} <name>                            Scan all repos for a GitHub user
+  ${cyan('--concurrency')} <n>                        Parallel repo scans ${dim('(default: 5, org/user mode)')}
   ${cyan('--list-rules')}                            Show all available rules
   ${cyan('-h, --help')}                              Show this help
   ${cyan('-v, --version')}                           Show version
@@ -85,6 +93,10 @@ ${bold('EXAMPLES')}
 
   ${dim('# Only check for secrets and auth')}
   npx vibe-audit --rules exposed-secrets,missing-auth
+
+  ${dim('# Scan all repos in a GitHub org (morning audit)')}
+  npx vibe-audit --org my-company --format json
+  npx vibe-audit --user my-username --concurrency 10
 
 ${bold('CONFIG')}
   Add ${cyan('.vibe-audit.json')} to your project root to set defaults.
@@ -134,7 +146,76 @@ if (values['list-rules']) {
   process.exit(0);
 }
 
-// ─── Run Audit ────────────────────────────────────────────────────────────────
+// ─── Org / User Scan ─────────────────────────────────────────────────────────
+
+if (values.org || values.user) {
+  const orgName = values.org || values.user;
+  const concurrency = parseInt(values.concurrency, 10) || 5;
+  const format = values.format || 'terminal';
+  const rules = values.rules?.split(',').filter(Boolean);
+  const exclude = values.exclude?.split(',').filter(Boolean);
+
+  try {
+    const fetchRepos = values.org ? listOrgRepos : listUserRepos;
+
+    if (format === 'terminal') {
+      console.log(cyan(`\n  ⚗️  Fetching repos for ${values.org ? 'org' : 'user'}: ${orgName}...\n`));
+    }
+
+    const repos = await fetchRepos(orgName);
+
+    if (repos.length === 0) {
+      console.error(red(`\n  No scannable repos found for ${orgName}\n`));
+      process.exit(2);
+    }
+
+    if (format === 'terminal') {
+      console.log(dim(`  Found ${repos.length} repos (excluding forks & archived). Scanning with concurrency ${concurrency}...\n`));
+    }
+
+    const repoList = repos.map((r) => ({
+      owner: r.owner?.login || orgName,
+      name: r.name,
+      default_branch: r.default_branch,
+    }));
+
+    const start = performance.now();
+
+    const onRepoComplete = format === 'terminal'
+      ? (result, done, total) => {
+          const icon = result.error ? red('✗') : result.criticals > 0 ? red('●') : result.warnings > 0 ? yellow('▲') : green('✓');
+          const counts = result.error
+            ? red('error')
+            : `${result.criticals}C ${result.warnings}W ${result.infos}I`;
+          console.log(`  ${dim(`[${done}/${total}]`)} ${icon} ${result.owner}/${result.repo} ${dim('—')} ${counts} ${dim(`${result.durationMs}ms`)}`);
+        }
+      : undefined;
+
+    const results = await scanRepos(repoList, { concurrency, rules, exclude, onRepoComplete });
+    const durationMs = Math.round(performance.now() - start);
+
+    if (format === 'terminal') {
+      console.log('');
+      reportOrgTerminal(results, { orgName, durationMs });
+    } else if (format === 'json') {
+      reportOrgJSON(results, { orgName, durationMs });
+    } else if (format === 'markdown') {
+      reportOrgMarkdown(results, { orgName, durationMs });
+    } else {
+      reportOrgTerminal(results, { orgName, durationMs });
+    }
+
+    const hasCritical = results.some((r) => r.criticals > 0);
+    const hasWarning = results.some((r) => r.warnings > 0);
+    const exitCode = hasCritical ? 1 : values.strict && hasWarning ? 1 : 0;
+    process.exit(exitCode);
+  } catch (err) {
+    console.error(red(`\n  Error: ${err.message}\n`));
+    process.exit(2);
+  }
+}
+
+// ─── Run Audit (single repo) ────────────────────────────────────────────────
 
 const rawTarget = positionals[0] || '.';
 
