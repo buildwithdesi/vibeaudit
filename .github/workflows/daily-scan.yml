@@ -1,0 +1,83 @@
+name: Daily Vibe Audit Scan
+
+on:
+  schedule:
+    # Every morning at 7:00 AM UTC (adjustable)
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      format:
+        description: 'Output format (summary, json, markdown)'
+        required: false
+        default: 'markdown'
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run batch scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node bin/batch-scan.js \
+            --format ${{ inputs.format || 'markdown' }} \
+            --concurrency 4 \
+            --output scan-report.md
+
+      - name: Create GitHub Issue with results
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DATE=$(date -u +"%Y-%m-%d")
+          CRITICAL_COUNT=$(node -e "
+            const fs = require('fs');
+            try {
+              const r = fs.readFileSync('scan-report.md','utf8');
+              const m = r.match(/(\d+) critical/);
+              console.log(m ? m[1] : '0');
+            } catch { console.log('?'); }
+          ")
+
+          TITLE="⚗️ Daily Vibe Audit — ${DATE}"
+          if [ "$CRITICAL_COUNT" != "0" ] && [ "$CRITICAL_COUNT" != "?" ]; then
+            TITLE="🔴 Daily Vibe Audit — ${DATE} — ${CRITICAL_COUNT} critical"
+          fi
+
+          gh issue create \
+            --title "$TITLE" \
+            --body-file scan-report.md \
+            --label "security,vibe-audit"
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-audit-report-${{ github.run_id }}
+          path: scan-report.md
+          retention-days: 30
+
+      - name: Fail on criticals
+        run: |
+          node bin/batch-scan.js --format json --fail-on-critical > /dev/null 2>&1 || {
+            echo "::error::Critical security findings detected across repos"
+            exit 1
+          }

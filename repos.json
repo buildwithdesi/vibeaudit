@@ -1,0 +1,7 @@
+{
+  "$schema": "./repos.schema.json",
+  "description": "Repositories to scan in the daily morning audit. Add owner/repo entries.",
+  "repos": [
+    "jackdog668/vibeaudit"
+  ]
+}
