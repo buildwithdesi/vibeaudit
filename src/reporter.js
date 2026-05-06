@@ -16,6 +16,7 @@ import { join } from 'node:path';
  * @param {{ filesScanned: number, rulesRun: number, durationMs: number, targetDir?: string }} meta
  */
 export function report(findings, format, meta) {
+  if (format === 'json-quiet') return;
   switch (format) {
     case 'json':
       return reportJSON(findings, meta);

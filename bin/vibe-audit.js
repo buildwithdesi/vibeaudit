@@ -26,6 +26,9 @@ import { ALL_RULES } from '../src/rules/index.js';
 import { CWE_MAP } from '../src/data/cwe-map.js';
 import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
 import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
+import { listRepos, parseReposFile, scanRepos } from '../src/multi-repo.js';
+import { reportMultiRepoTerminal, reportMultiRepoJSON } from '../src/reporters/multi-repo-terminal.js';
+import { generateMultiRepoHTML } from '../src/reporters/multi-repo-html.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -39,6 +42,13 @@ const { values, positionals } = parseArgs({
     'skip-sca': { type: 'boolean' },
     deep: { type: 'boolean' },
     'list-rules': { type: 'boolean' },
+    org: { type: 'string' },
+    user: { type: 'string' },
+    'repos-file': { type: 'string' },
+    concurrency: { type: 'string' },
+    'skip-archived': { type: 'boolean' },
+    'skip-forks': { type: 'boolean' },
+    'output-file': { type: 'string', short: 'o' },
     help: { type: 'boolean', short: 'h' },
     version: { type: 'boolean', short: 'v' },
   },
@@ -66,6 +76,15 @@ ${bold('OPTIONS')}
   ${cyan('-h, --help')}                              Show this help
   ${cyan('-v, --version')}                           Show version
 
+${bold('MULTI-REPO (replace your morning cron / DigitalOcean bot)')}
+  ${cyan('--org')} <github-org>                  Scan all repos in a GitHub org
+  ${cyan('--user')} <github-user>                Scan all repos for a GitHub user
+  ${cyan('--repos-file')} <path>                 Scan repos listed in a file (one owner/repo per line)
+  ${cyan('--concurrency')} <n>                   Parallel repo scans ${dim('(default: 5)')}
+  ${cyan('--skip-archived')}                     Skip archived repos
+  ${cyan('--skip-forks')}                        Skip forked repos
+  ${cyan('-o, --output-file')} <path>            Write report to file instead of stdout
+
 ${bold('EXAMPLES')}
   ${dim('# Audit current directory')}
   npx vibe-audit
@@ -76,6 +95,13 @@ ${bold('EXAMPLES')}
   ${dim('# Audit a GitHub repo directly')}
   npx vibe-audit https://github.com/user/repo
   npx vibe-audit user/repo
+
+  ${dim('# Morning scan across an entire org (replaces DigitalOcean bot)')}
+  npx vibe-audit --org my-company --format html -o report.html
+  npx vibe-audit --org my-company --skip-forks --skip-archived
+
+  ${dim('# Scan repos from a file')}
+  npx vibe-audit --repos-file repos.txt --concurrency 10
 
   ${dim('# Get fix prompts for your AI tool')}
   npx vibe-audit --fix
@@ -134,7 +160,104 @@ if (values['list-rules']) {
   process.exit(0);
 }
 
-// ─── Run Audit ────────────────────────────────────────────────────────────────
+// ─── Multi-Repo Mode ─────────────────────────────────────────────────────────
+
+const isMultiRepo = values.org || values.user || values['repos-file'];
+
+if (isMultiRepo) {
+  try {
+    let repos;
+
+    if (values['repos-file']) {
+      const { readFile: readFileFs } = await import('node:fs/promises');
+      const content = await readFileFs(values['repos-file'], 'utf-8');
+      repos = parseReposFile(content);
+    } else {
+      const kind = values.org ? 'orgs' : 'users';
+      const name = values.org || values.user;
+      console.log(cyan(`\n  ⚗️  Fetching repos for ${kind === 'orgs' ? 'org' : 'user'}: ${name}\n`));
+      repos = await listRepos(kind, name, {
+        skipArchived: values['skip-archived'],
+        skipForks: values['skip-forks'],
+      });
+    }
+
+    if (repos.length === 0) {
+      console.error(red('\n  Error: No repos found.\n'));
+      process.exit(2);
+    }
+
+    console.log(dim(`  Found ${repos.length} repos. Starting scan...\n`));
+
+    const concurrency = parseInt(values.concurrency, 10) || 5;
+    const format = values.format || 'terminal';
+
+    const results = await scanRepos(repos, {
+      concurrency,
+      rules: values.rules?.split(',').filter(Boolean),
+      exclude: values.exclude?.split(',').filter(Boolean),
+      onProgress({ repo, index, total, status, grade }) {
+        if (format !== 'json') {
+          const pct = Math.round((index / total) * 100);
+          const statusStr = status === 'done' ? green(`✓ ${grade}`)
+            : status === 'error' ? red('✗')
+            : cyan('⟳');
+          process.stderr.write(`\r  ${dim(`[${index}/${total}]`)} ${statusStr} ${repo.padEnd(45)} ${dim(`${pct}%`)}`);
+          if (index === total) process.stderr.write('\n\n');
+        }
+      },
+    });
+
+    const outputFile = values['output-file'];
+
+    if (format === 'html') {
+      const html = generateMultiRepoHTML(results);
+      if (outputFile) {
+        const { writeFile: writeFileFs } = await import('node:fs/promises');
+        await writeFileFs(outputFile, html);
+        console.log(bold(`\n  ⚗️  Multi-repo HTML report written to: ${cyan(outputFile)}\n`));
+      } else {
+        const { writeFile: writeFileFs } = await import('node:fs/promises');
+        const defaultPath = 'vibe-audit-multi-report.html';
+        await writeFileFs(defaultPath, html);
+        reportMultiRepoTerminal(results);
+        console.log(dim(`  HTML dashboard also saved to ${cyan(defaultPath)}`));
+        console.log('');
+      }
+    } else if (format === 'json') {
+      if (outputFile) {
+        const { writeFile: writeFileFs } = await import('node:fs/promises');
+        const agg = (await import('../src/multi-repo.js')).aggregateResults(results);
+        const output = JSON.stringify({
+          timestamp: new Date().toISOString(),
+          summary: agg,
+          repos: results.map(r => ({
+            owner: r.owner, repo: r.repo, grade: r.grade,
+            criticals: r.criticals, warnings: r.warnings, infos: r.infos,
+            totalFindings: r.findings.length, durationMs: r.durationMs,
+            error: r.error || null, findings: r.findings,
+          })),
+        }, null, 2);
+        await writeFileFs(outputFile, output);
+        console.log(bold(`\n  ⚗️  Multi-repo JSON report written to: ${cyan(outputFile)}\n`));
+      } else {
+        reportMultiRepoJSON(results);
+      }
+    } else {
+      reportMultiRepoTerminal(results);
+    }
+
+    const hasCritical = results.some(r => r.criticals > 0);
+    const hasWarning = results.some(r => r.warnings > 0);
+    const exitCode = hasCritical ? 1 : values.strict && hasWarning ? 1 : 0;
+    process.exit(exitCode);
+  } catch (err) {
+    console.error(red(`\n  Error: ${err.message}\n`));
+    process.exit(2);
+  }
+}
+
+// ─── Single-Repo Audit ──────────────────────────────────────────────────────
 
 const rawTarget = positionals[0] || '.';
 
