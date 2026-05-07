@@ -1,0 +1,83 @@
+name: Morning Org Audit
+
+on:
+  schedule:
+    # Run every weekday at 7:00 AM UTC (adjust for your timezone)
+    - cron: '0 7 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      org:
+        description: 'GitHub org or user to scan'
+        required: true
+        type: string
+      format:
+        description: 'Output format (terminal, json, html)'
+        default: 'html'
+        type: choice
+        options:
+          - html
+          - json
+          - terminal
+      concurrency:
+        description: 'Max parallel scans'
+        default: '5'
+        type: string
+
+env:
+  # Set these in repo Settings > Secrets
+  # AUDIT_ORG: your GitHub org name (used by cron schedule)
+  NODE_VERSION: '20'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout vibeaudit
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run org audit
+        env:
+          GITHUB_TOKEN: ${{ secrets.AUDIT_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          ORG="${{ inputs.org || vars.AUDIT_ORG }}"
+          FORMAT="${{ inputs.format || 'html' }}"
+          CONCURRENCY="${{ inputs.concurrency || '5' }}"
+
+          if [ -z "$ORG" ]; then
+            echo "Error: No org specified. Set AUDIT_ORG in repo variables or use workflow_dispatch."
+            exit 1
+          fi
+
+          node bin/vibe-audit.js \
+            --org "$ORG" \
+            --format "$FORMAT" \
+            --concurrency "$CONCURRENCY" \
+            || true
+
+      - name: Upload HTML report
+        if: ${{ inputs.format == 'html' || !inputs.format }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-audit-report-${{ github.run_number }}
+          path: vibe-audit-org-*.html
+          retention-days: 30
+
+      - name: Upload JSON report
+        if: inputs.format == 'json'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-audit-json-${{ github.run_number }}
+          path: vibe-audit-org-*.json
+          retention-days: 30
