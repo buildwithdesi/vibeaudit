@@ -1,0 +1,61 @@
+name: "⚗️ Fleet Security Scan"
+
+on:
+  schedule:
+    # Every weekday at 7:00 AM UTC (morning scan)
+    - cron: "0 7 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      format:
+        description: "Output format"
+        required: false
+        default: "html"
+        type: choice
+        options:
+          - terminal
+          - json
+          - markdown
+          - html
+
+permissions:
+  contents: read
+
+jobs:
+  fleet-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run fleet scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.FLEET_GITHUB_TOKEN }}
+        run: |
+          FORMAT="${{ github.event.inputs.format || 'html' }}"
+          node bin/vibe-audit-fleet.js fleet.json --format "$FORMAT" --out-file vibe-audit-fleet.html
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleet-report-${{ github.run_number }}
+          path: vibe-audit-fleet.html
+          retention-days: 30
+
+      - name: Upload JSON report
+        if: github.event.inputs.format == 'json'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleet-report-json-${{ github.run_number }}
+          path: vibe-audit-fleet.json
+          retention-days: 30

@@ -27,6 +27,14 @@ import { CWE_MAP } from '../src/data/cwe-map.js';
 import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
 import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
 
+// Delegate to fleet subcommand if first arg is "fleet"
+if (process.argv[2] === 'fleet') {
+  process.argv.splice(2, 1);
+  await import('./vibe-audit-fleet.js');
+  // fleet handles its own exit
+  await new Promise(() => {});
+}
+
 const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
@@ -85,6 +93,12 @@ ${bold('EXAMPLES')}
 
   ${dim('# Only check for secrets and auth')}
   npx vibe-audit --rules exposed-secrets,missing-auth
+
+${bold('FLEET MODE')}
+  Scan 70+ repos in one run (replaces your DigitalOcean bot):
+  ${cyan('npx vibe-audit fleet')} ${dim('--org my-company')}
+  ${cyan('npx vibe-audit fleet')} ${dim('fleet.json --format html')}
+  Run ${cyan('npx vibe-audit fleet --help')} for fleet options.
 
 ${bold('CONFIG')}
   Add ${cyan('.vibe-audit.json')} to your project root to set defaults.

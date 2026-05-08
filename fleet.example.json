@@ -1,0 +1,14 @@
+{
+  "org": "my-company",
+  "exclude": [
+    "my-company/deprecated-app",
+    "my-company/fork-we-dont-own"
+  ],
+  "skipArchived": true,
+  "skipForks": true,
+  "concurrency": 5,
+  "excludeRules": [
+    "high-entropy-strings"
+  ],
+  "format": "html"
+}
