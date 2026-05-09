@@ -23,6 +23,8 @@ export function report(findings, format, meta) {
       return reportMarkdown(findings, meta);
     case 'html':
       return reportHTMLFile(findings, meta);
+    case 'silent':
+      return;
     default:
       return reportTerminal(findings, meta);
   }

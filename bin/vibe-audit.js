@@ -18,7 +18,7 @@
  */
 
 import { resolve } from 'node:path';
-import { stat } from 'node:fs/promises';
+import { stat, readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { audit } from '../src/index.js';
 import { generateFixes } from '../src/fix.js';
@@ -26,6 +26,9 @@ import { ALL_RULES } from '../src/rules/index.js';
 import { CWE_MAP } from '../src/data/cwe-map.js';
 import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
 import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
+import { batchScan } from '../src/batch.js';
+import { reportBatchTerminal, reportBatchJSON } from '../src/reporters/batch-terminal.js';
+import { generateBatchHTML } from '../src/reporters/batch-html.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -38,6 +41,10 @@ const { values, positionals } = parseArgs({
     'fix-file': { type: 'boolean' },
     'skip-sca': { type: 'boolean' },
     deep: { type: 'boolean' },
+    batch: { type: 'boolean' },
+    'repos-file': { type: 'string' },
+    concurrency: { type: 'string' },
+    'out-file': { type: 'string', short: 'o' },
     'list-rules': { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
     version: { type: 'boolean', short: 'v' },
@@ -66,6 +73,12 @@ ${bold('OPTIONS')}
   ${cyan('-h, --help')}                              Show this help
   ${cyan('-v, --version')}                           Show version
 
+${bold('BATCH MODE')} ${dim('— scan 70+ repos in one run')}
+  ${cyan('--batch')}                                 Enable multi-repo batch scanning
+  ${cyan('--repos-file')} <path>                     JSON file listing repos to scan
+  ${cyan('--concurrency')} <n>                       Parallel repo scans ${dim('(default: 4)')}
+  ${cyan('-o, --out-file')} <path>                   Write report to file instead of stdout
+
 ${bold('EXAMPLES')}
   ${dim('# Audit current directory')}
   npx vibe-audit
@@ -85,6 +98,17 @@ ${bold('EXAMPLES')}
 
   ${dim('# Only check for secrets and auth')}
   npx vibe-audit --rules exposed-secrets,missing-auth
+
+  ${dim('# Batch scan all your repos (morning sweep)')}
+  npx vibe-audit --batch --repos-file repos.json --format html -o fleet-report.html
+
+  ${dim('# Batch scan repos listed as positional args')}
+  npx vibe-audit --batch user/repo1 user/repo2 user/repo3
+
+${bold('BATCH REPOS FILE FORMAT')}
+  ${dim('A JSON file with an array of "owner/repo" strings or objects:')}
+  ${dim('  ["owner/repo1", "owner/repo2", ...]')}
+  ${dim('  [{"repo": "owner/repo1"}, {"repo": "owner/repo2"}]')}
 
 ${bold('CONFIG')}
   Add ${cyan('.vibe-audit.json')} to your project root to set defaults.
@@ -134,7 +158,107 @@ if (values['list-rules']) {
   process.exit(0);
 }
 
-// ─── Run Audit ────────────────────────────────────────────────────────────────
+// ─── Batch Mode ──────────────────────────────────────────────────────────────
+
+if (values.batch) {
+  try {
+    // Collect repos from --repos-file and/or positional args.
+    let repos = [];
+
+    if (values['repos-file']) {
+      const filePath = resolve(values['repos-file']);
+      const raw = await readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        for (const entry of parsed) {
+          if (typeof entry === 'string') repos.push(entry);
+          else if (entry && typeof entry.repo === 'string') repos.push(entry.repo);
+        }
+      } else {
+        console.error(red('\n  Error: repos file must contain a JSON array\n'));
+        process.exit(2);
+      }
+    }
+
+    // Positional args as additional repos
+    for (const arg of positionals) {
+      if (parseGitHubTarget(arg)) repos.push(arg);
+    }
+
+    if (repos.length === 0) {
+      console.error(red('\n  Error: No repos specified. Use --repos-file or pass owner/repo args.\n'));
+      console.error(dim('  Example: npx vibe-audit --batch --repos-file repos.json'));
+      console.error(dim('  Example: npx vibe-audit --batch user/repo1 user/repo2\n'));
+      process.exit(2);
+    }
+
+    // Deduplicate
+    repos = [...new Set(repos)];
+
+    const concurrency = parseInt(values.concurrency, 10) || 4;
+    const format = values.format || 'terminal';
+
+    console.log(cyan(`\n  ⚗️  VIBE AUDIT — Batch Scan`));
+    console.log(dim(`  ${repos.length} repos · concurrency ${concurrency}\n`));
+
+    const results = await batchScan(repos, {
+      concurrency,
+      rules: values.rules?.split(',').filter(Boolean),
+      exclude: values.exclude?.split(',').filter(Boolean),
+      strict: values.strict,
+      onProgress({ type, repo, done, total }) {
+        if (type === 'start') {
+          process.stderr.write(dim(`  [${done + 1}/${total}] Scanning ${repo}...\n`));
+        } else if (type === 'done') {
+          process.stderr.write(dim(`  [${done}/${total}] ✓ ${repo}\n`));
+        } else if (type === 'error') {
+          process.stderr.write(red(`  [${done}/${total}] ✗ ${repo}\n`));
+        }
+      },
+    });
+
+    console.log('');
+
+    // Output results
+    const outFile = values['out-file'];
+
+    if (format === 'json') {
+      if (outFile) {
+        const { aggregateResults: agg } = await import('../src/batch.js');
+        const output = JSON.stringify({ summary: agg(results), repos: results }, null, 2);
+        await writeFile(outFile, output);
+        console.log(cyan(`  Report written to ${outFile}\n`));
+      } else {
+        reportBatchJSON(results);
+      }
+    } else if (format === 'html') {
+      const html = generateBatchHTML(results);
+      const dest = outFile || 'vibe-audit-fleet-report.html';
+      await writeFile(dest, html);
+      console.log(bold('  ⚗️  Fleet report generated'));
+      console.log(cyan(`  ${dest}`));
+      console.log(dim('  Open in your browser to view the interactive dashboard.\n'));
+    } else {
+      reportBatchTerminal(results);
+      if (outFile) {
+        const html = generateBatchHTML(results);
+        await writeFile(outFile, html);
+        console.log(dim(`  HTML report also saved to ${outFile}\n`));
+      }
+    }
+
+    // Exit code: 1 if any repo has criticals
+    const hasCritical = results.some(r => r.critical > 0);
+    const hasWarning = results.some(r => r.warning > 0);
+    const exitCode = hasCritical ? 1 : values.strict && hasWarning ? 1 : 0;
+    process.exit(exitCode);
+  } catch (err) {
+    console.error(red(`\n  Error: ${err.message}\n`));
+    process.exit(2);
+  }
+}
+
+// ─── Run Audit (single repo) ────────────────────────────────────────────────
 
 const rawTarget = positionals[0] || '.';
 
