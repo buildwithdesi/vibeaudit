@@ -75,7 +75,7 @@ export function parseGitHubTarget(target) {
  * @param {{ branch?: string }} options
  * @returns {AsyncGenerator<{ path: string, relativePath: string, content: string, lines: string[] }>}
  */
-export async function* fetchRepoFiles(owner, repo, { branch = 'HEAD' } = {}) {
+export async function* fetchRepoFiles(owner, repo, { branch = 'HEAD', onRateLimit } = {}) {
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
   const headers = {
     Accept: 'application/vnd.github.v3+json',
@@ -86,6 +86,13 @@ export async function* fetchRepoFiles(owner, repo, { branch = 'HEAD' } = {}) {
   // 1. Get the recursive tree in a single API call.
   const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
   const treeRes = await fetch(treeUrl, { headers });
+
+  if (onRateLimit) {
+    onRateLimit({
+      remaining: parseInt(treeRes.headers.get('x-ratelimit-remaining'), 10),
+      reset: parseInt(treeRes.headers.get('x-ratelimit-reset'), 10),
+    });
+  }
   if (!treeRes.ok) {
     const body = await treeRes.text();
     throw new Error(`GitHub API error (${treeRes.status}): ${body}`);
