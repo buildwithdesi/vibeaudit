@@ -131,6 +131,53 @@ export async function* fetchRepoFiles(owner, repo, { branch = 'HEAD' } = {}) {
 }
 
 /**
+ * Fetch all non-fork, non-archived repos for a GitHub org or user.
+ *
+ * @param {string} orgOrUser
+ * @returns {Promise<string[]>} List of "owner/repo" strings
+ */
+export async function fetchOrgRepos(orgOrUser) {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  const headers = {
+    Accept: 'application/vnd.github.v3+json',
+    'User-Agent': 'vibe-audit',
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const repos = [];
+  let page = 1;
+
+  while (true) {
+    // Try org endpoint first, fall back to user endpoint.
+    let url = `https://api.github.com/orgs/${orgOrUser}/repos?per_page=100&page=${page}&type=sources`;
+    let res = await fetch(url, { headers });
+
+    if (res.status === 404 && page === 1) {
+      url = `https://api.github.com/users/${orgOrUser}/repos?per_page=100&page=${page}&type=owner`;
+      res = await fetch(url, { headers });
+    }
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`GitHub API error fetching repos for "${orgOrUser}" (${res.status}): ${body}`);
+    }
+
+    const data = await res.json();
+    if (data.length === 0) break;
+
+    for (const repo of data) {
+      if (repo.archived || repo.fork || repo.disabled) continue;
+      repos.push(`${repo.owner.login}/${repo.name}`);
+    }
+
+    if (data.length < 100) break;
+    page++;
+  }
+
+  return repos;
+}
+
+/**
  * Shallow-clone a GitHub repo into a temporary directory.
  * Use this as a fallback when API access isn't available.
  *

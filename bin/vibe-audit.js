@@ -13,6 +13,9 @@
  *   --exclude <id,id,...>              Exclude specific rules
  *   --strict                           Exit 1 on warnings too
  *   --list-rules                       Show available rules and exit
+ *   --batch <file.json>                 Batch scan repos from a config file
+ *   --org <name>                        Scan all repos in a GitHub org/user
+ *   --concurrency <n>                   Max parallel scans (default: 5)
  *   --help                             Show help
  *   --version                          Show version
  */
@@ -26,6 +29,8 @@ import { ALL_RULES } from '../src/rules/index.js';
 import { CWE_MAP } from '../src/data/cwe-map.js';
 import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
 import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
+import { batchAudit, loadBatchConfig } from '../src/batch.js';
+import { generateBatchHTML } from '../src/reporters/batch-html.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -38,6 +43,9 @@ const { values, positionals } = parseArgs({
     'fix-file': { type: 'boolean' },
     'skip-sca': { type: 'boolean' },
     deep: { type: 'boolean' },
+    batch: { type: 'string', short: 'b' },
+    org: { type: 'string' },
+    concurrency: { type: 'string', short: 'c' },
     'list-rules': { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
     version: { type: 'boolean', short: 'v' },
@@ -62,6 +70,9 @@ ${bold('OPTIONS')}
   ${cyan('--fix-file')}                              Only save fix file (no terminal prompts)
   ${cyan('--skip-sca')}                              Skip dependency vulnerability scanning
   ${cyan('--deep')}                                  Enable deep scanning (git history secrets)
+  ${cyan('-b, --batch')} <repos.json>               Batch scan repos from a config file
+  ${cyan('--org')} <name>                            Scan all repos in a GitHub org/user
+  ${cyan('-c, --concurrency')} <n>                   Max parallel scans ${dim('(default: 5)')}
   ${cyan('--list-rules')}                            Show all available rules
   ${cyan('-h, --help')}                              Show this help
   ${cyan('-v, --version')}                           Show version
@@ -79,6 +90,12 @@ ${bold('EXAMPLES')}
 
   ${dim('# Get fix prompts for your AI tool')}
   npx vibe-audit --fix
+
+  ${dim('# Batch scan all repos in your org (replaces your DO bot)')}
+  npx vibe-audit --org mycompany --format html
+
+  ${dim('# Batch scan repos from a config file')}
+  npx vibe-audit --batch repos.json --concurrency 3
 
   ${dim('# JSON output for CI pipelines')}
   npx vibe-audit --format json --strict
@@ -132,6 +149,141 @@ if (values['list-rules']) {
   }
 
   process.exit(0);
+}
+
+// ─── Batch Mode ──────────────────────────────────────────────────────────────
+
+if (values.batch || values.org) {
+  const format = values.format || 'terminal';
+  const concurrencyOverride = values.concurrency ? parseInt(values.concurrency, 10) : undefined;
+
+  try {
+    const config = await loadBatchConfig({
+      file: values.batch,
+      org: values.org,
+    });
+
+    if (concurrencyOverride) config.concurrency = concurrencyOverride;
+    if (values.rules) config.rules = values.rules.split(',').filter(Boolean);
+    if (values.exclude) config.exclude = values.exclude.split(',').filter(Boolean);
+    if (values.strict) config.strict = true;
+
+    const repoCount = config.repos.length;
+    console.log('');
+    console.log(bold(`  ⚗️  VIBE AUDIT — Batch Scan`));
+    console.log(dim(`  ${repoCount} repos · concurrency ${config.concurrency}`));
+    console.log(dim('  ─────────────────────────────────────────────────────────────'));
+    console.log('');
+
+    const batchStart = performance.now();
+
+    const results = await batchAudit(config, {
+      onRepoStart(repo, i) {
+        process.stdout.write(dim(`  [${i + 1}/${repoCount}] Scanning ${repo}...`));
+      },
+      onRepoEnd(result) {
+        const icon = result.error ? red('✗') : result.critical > 0 ? red('●') : result.warning > 0 ? yellow('▲') : green('✓');
+        const detail = result.error
+          ? red(` error: ${result.error.slice(0, 60)}`)
+          : ` ${result.grade} — ${result.total} findings (${result.durationMs}ms)`;
+        process.stdout.write(`\r  ${icon} ${result.repo}${detail}\n`);
+      },
+    });
+
+    const batchDurationMs = Math.round(performance.now() - batchStart);
+    const scanned = results.filter(r => !r.error);
+    const errored = results.filter(r => r.error);
+    const totalFindings = scanned.reduce((s, r) => s + r.total, 0);
+    const totalCritical = scanned.reduce((s, r) => s + r.critical, 0);
+    const totalWarning = scanned.reduce((s, r) => s + r.warning, 0);
+
+    if (format === 'json') {
+      console.log(JSON.stringify({
+        summary: {
+          repos: repoCount,
+          scanned: scanned.length,
+          errored: errored.length,
+          totalFindings,
+          totalCritical,
+          totalWarning,
+          durationMs: batchDurationMs,
+        },
+        results: results.map(r => ({
+          repo: r.repo,
+          grade: r.grade,
+          critical: r.critical,
+          warning: r.warning,
+          info: r.info,
+          total: r.total,
+          durationMs: r.durationMs,
+          error: r.error,
+          findings: r.findings.map(f => ({
+            ruleId: f.ruleId,
+            severity: f.severity,
+            message: f.message,
+            file: f.file,
+            line: f.line,
+            cweId: f.cweId,
+            cvssScore: f.cvssScore,
+          })),
+        })),
+      }, null, 2));
+    } else if (format === 'html') {
+      const { writeFile } = await import('node:fs/promises');
+      const html = generateBatchHTML(results, { durationMs: batchDurationMs });
+      const outPath = 'vibe-audit-batch-report.html';
+      await writeFile(outPath, html);
+      console.log('');
+      console.log(dim('  ─────────────────────────────────────────────────────────────'));
+      console.log(`  ${bold('Report saved:')} ${cyan(outPath)}`);
+      console.log(`  ${bold('Repos:')} ${scanned.length} scanned, ${errored.length} errored`);
+      console.log(`  ${bold('Findings:')} ${red(bold(String(totalCritical)))} critical · ${yellow(String(totalWarning))} warnings · ${totalFindings} total`);
+      console.log(`  ${bold('Time:')} ${(batchDurationMs / 1000).toFixed(1)}s`);
+      console.log('');
+      console.log(dim('  Open in your browser to view the interactive fleet dashboard.'));
+    } else {
+      // Terminal summary
+      console.log('');
+      console.log(dim('  ─────────────────────────────────────────────────────────────'));
+      console.log(bold('  ⚗️  BATCH SUMMARY'));
+      console.log('');
+      console.log(`  ${bold('Repos:')}     ${scanned.length} scanned, ${errored.length} errored`);
+      console.log(`  ${bold('Findings:')} ${red(bold(String(totalCritical)))} critical · ${yellow(String(totalWarning))} warnings · ${totalFindings} total`);
+      console.log(`  ${bold('Time:')}     ${(batchDurationMs / 1000).toFixed(1)}s`);
+      console.log('');
+
+      // Grade distribution
+      const grades = { A: 0, B: 0, C: 0, D: 0, F: 0 };
+      for (const r of scanned) if (grades[r.grade] !== undefined) grades[r.grade]++;
+      const gradeLine = Object.entries(grades).map(([g, c]) => {
+        const color = { A: green, B: green, C: yellow, D: yellow, F: red }[g];
+        return `${color(bold(g))}:${c}`;
+      }).join('  ');
+      console.log(`  ${bold('Grades:')}   ${gradeLine}`);
+      console.log('');
+
+      // Worst repos
+      const worst = scanned.filter(r => r.grade === 'F' || r.grade === 'D').sort((a, b) => b.critical - a.critical);
+      if (worst.length > 0) {
+        console.log(red(bold('  Repos needing attention:')));
+        for (const r of worst.slice(0, 10)) {
+          console.log(`    ${red('●')} ${bold(r.repo)} — ${r.critical} critical, ${r.warning} warnings`);
+        }
+        console.log('');
+      }
+
+      console.log(dim('  Run with --format html for an interactive fleet dashboard.'));
+      console.log(dim('  Run with --format json to pipe into your notification system.'));
+    }
+
+    console.log('');
+    const hasCritical = totalCritical > 0;
+    const hasWarning = totalWarning > 0;
+    process.exit(hasCritical ? 1 : values.strict && hasWarning ? 1 : 0);
+  } catch (err) {
+    console.error(red(`\n  Error: ${err.message}\n`));
+    process.exit(2);
+  }
 }
 
 // ─── Run Audit ────────────────────────────────────────────────────────────────
