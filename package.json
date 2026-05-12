@@ -23,6 +23,8 @@
     "test": "node --test tests/**/*.test.js tests/**/**/*.test.js",
     "lint": "eslint src/ bin/ tests/",
     "audit:self": "node bin/vibe-audit.js .",
+    "scan:batch": "node bin/vibe-audit.js --org",
+    "scan:repos": "node bin/vibe-audit.js --batch",
     "ui": "node src/web/server.js",
     "ui:dev": "node --watch src/web/server.js",
     "prepublishOnly": "npm test && npm run lint"

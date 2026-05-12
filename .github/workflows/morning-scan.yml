@@ -1,0 +1,133 @@
+name: "⚗️ Vibe Audit — Morning Scan"
+
+on:
+  schedule:
+    # 7:00 AM UTC every weekday (Mon–Fri)
+    - cron: "0 7 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      org:
+        description: "GitHub org to scan (overrides SCAN_ORG secret)"
+        required: false
+      repos_file:
+        description: "Path to repos JSON file (overrides org scan)"
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scan:
+    name: Batch Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run batch scan
+        id: scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.SCAN_TOKEN || secrets.GITHUB_TOKEN }}
+          SCAN_ORG: ${{ inputs.org || vars.SCAN_ORG }}
+          SCAN_REPOS_FILE: ${{ inputs.repos_file || vars.SCAN_REPOS_FILE }}
+          SCAN_CONCURRENCY: ${{ vars.SCAN_CONCURRENCY || '5' }}
+        run: |
+          ARGS=""
+
+          if [ -n "$SCAN_REPOS_FILE" ]; then
+            ARGS="--batch $SCAN_REPOS_FILE"
+          elif [ -n "$SCAN_ORG" ]; then
+            ARGS="--org $SCAN_ORG"
+          else
+            echo "::error::Set SCAN_ORG or SCAN_REPOS_FILE in repository variables"
+            exit 1
+          fi
+
+          # Generate both terminal (for logs) and markdown (for issue) output
+          node bin/vibe-audit.js $ARGS --concurrency "$SCAN_CONCURRENCY" --format terminal || true
+
+          # Capture markdown for the issue body
+          REPORT=$(node bin/vibe-audit.js $ARGS --concurrency "$SCAN_CONCURRENCY" --format markdown 2>/dev/null)
+          echo "report<<REPORT_EOF" >> "$GITHUB_OUTPUT"
+          echo "$REPORT" >> "$GITHUB_OUTPUT"
+          echo "REPORT_EOF" >> "$GITHUB_OUTPUT"
+
+          # Capture JSON for artifacts
+          node bin/vibe-audit.js $ARGS --concurrency "$SCAN_CONCURRENCY" --format json > scan-results.json 2>/dev/null || true
+
+      - name: Upload scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-audit-scan-${{ github.run_number }}
+          path: scan-results.json
+          retention-days: 90
+
+      - name: Create or update daily issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `⚗️ Vibe Audit — ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}`;
+            const body = `${{ steps.scan.outputs.report }}`;
+            const labels = ['vibe-audit', 'security'];
+
+            // Close yesterday's issue if it exists
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'vibe-audit',
+              state: 'open',
+              sort: 'created',
+              direction: 'desc',
+              per_page: 5,
+            });
+
+            for (const issue of existing) {
+              if (issue.title.startsWith('⚗️ Vibe Audit —') && issue.title !== title) {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  state: 'closed',
+                });
+              }
+            }
+
+            // Create today's issue
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels,
+            });
+
+      - name: Post to Slack (optional)
+        if: vars.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ vars.SLACK_WEBHOOK_URL }}
+        run: |
+          # Extract summary from JSON
+          SUMMARY=$(node -e "
+            const r = require('./scan-results.json');
+            const s = r.summary;
+            const emoji = s.totalCriticals > 0 ? '🔴' : s.totalWarnings > 0 ? '🟡' : '✅';
+            console.log(JSON.stringify({
+              text: \`\${emoji} Vibe Audit: \${s.reposScanned} repos scanned — \${s.totalCriticals} critical, \${s.totalWarnings} warnings, \${s.reposClean} clean\`
+            }));
+          ")
+
+          curl -s -X POST "$SLACK_WEBHOOK_URL" \
+            -H 'Content-Type: application/json' \
+            -d "$SUMMARY"

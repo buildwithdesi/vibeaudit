@@ -1,0 +1,10 @@
+{
+  "repos": [
+    "my-org/frontend-app",
+    "my-org/backend-api",
+    "my-org/mobile-app",
+    "my-org/admin-dashboard",
+    "my-org/auth-service",
+    "my-org/payment-service"
+  ]
+}

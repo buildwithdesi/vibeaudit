@@ -38,6 +38,9 @@ const { values, positionals } = parseArgs({
     'fix-file': { type: 'boolean' },
     'skip-sca': { type: 'boolean' },
     deep: { type: 'boolean' },
+    batch: { type: 'string' },
+    org: { type: 'string' },
+    concurrency: { type: 'string' },
     'list-rules': { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
     version: { type: 'boolean', short: 'v' },
@@ -62,6 +65,9 @@ ${bold('OPTIONS')}
   ${cyan('--fix-file')}                              Only save fix file (no terminal prompts)
   ${cyan('--skip-sca')}                              Skip dependency vulnerability scanning
   ${cyan('--deep')}                                  Enable deep scanning (git history secrets)
+  ${cyan('--batch')} <repos.json>                     Scan multiple repos from a JSON file
+  ${cyan('--org')} <github-org>                       Scan all repos in a GitHub org
+  ${cyan('--concurrency')} <n>                        Parallel repo scans ${dim('(default: 5)')}
   ${cyan('--list-rules')}                            Show all available rules
   ${cyan('-h, --help')}                              Show this help
   ${cyan('-v, --version')}                           Show version
@@ -85,6 +91,15 @@ ${bold('EXAMPLES')}
 
   ${dim('# Only check for secrets and auth')}
   npx vibe-audit --rules exposed-secrets,missing-auth
+
+  ${dim('# Scan all repos in a GitHub org')}
+  GITHUB_TOKEN=ghp_xxx npx vibe-audit --org my-company
+
+  ${dim('# Scan repos from a list')}
+  npx vibe-audit --batch repos.json --format json
+
+  ${dim('# Batch scan with markdown output (for GitHub Issues / Slack)')}
+  npx vibe-audit --org my-company --format markdown
 
 ${bold('CONFIG')}
   Add ${cyan('.vibe-audit.json')} to your project root to set defaults.
@@ -132,6 +147,67 @@ if (values['list-rules']) {
   }
 
   process.exit(0);
+}
+
+// ─── Batch Mode ──────────────────────────────────────────────────────────────
+
+if (values.batch || values.org) {
+  const { scanRepos, fetchOrgRepos, loadReposList } = await import('../src/batch.js');
+  const { reportBatchTerminal, reportBatchJSON, reportBatchMarkdown } = await import('../src/reporters/batch.js');
+
+  const concurrency = values.concurrency ? parseInt(values.concurrency, 10) : 5;
+  const format = values.format || 'terminal';
+  let repos;
+
+  try {
+    if (values.org) {
+      console.log(cyan(`\n  ⚗️  Fetching repos for org: ${values.org}\n`));
+      repos = await fetchOrgRepos(values.org);
+      console.log(dim(`  Found ${repos.length} repos\n`));
+    } else {
+      repos = await loadReposList(values.batch);
+      console.log(cyan(`\n  ⚗️  Loaded ${repos.length} repos from ${values.batch}\n`));
+    }
+
+    if (repos.length === 0) {
+      console.error(red('\n  No repos found to scan.\n'));
+      process.exit(2);
+    }
+
+    const scanStart = performance.now();
+    const results = await scanRepos(repos, {
+      concurrency,
+      rules: values.rules?.split(',').filter(Boolean),
+      exclude: values.exclude?.split(',').filter(Boolean),
+      deep: values.deep,
+      onProgress(result, done, total) {
+        if (format === 'terminal') {
+          const icon = result.status === 'error' ? red('✕') : result.criticals > 0 ? red('●') : result.warnings > 0 ? yellow('▲') : green('✓');
+          const progress = dim(`[${done}/${total}]`);
+          console.log(`  ${progress} ${icon} ${result.label}${result.status === 'error' ? dim(` — ${result.error}`) : ` ${dim(`${result.criticals}C ${result.warnings}W ${result.infos}I ${result.durationMs}ms`)}`}`);
+        }
+      },
+    });
+    const durationMs = Math.round(performance.now() - scanStart);
+    const meta = { durationMs };
+
+    if (format === 'terminal') {
+      console.log('');
+      reportBatchTerminal(results, meta);
+    } else if (format === 'json') {
+      console.log(reportBatchJSON(results, meta));
+    } else if (format === 'markdown') {
+      console.log(reportBatchMarkdown(results, meta));
+    } else {
+      reportBatchTerminal(results, meta);
+    }
+
+    const hasCritical = results.some((r) => r.criticals > 0);
+    process.exit(hasCritical ? 1 : 0);
+  } catch (err) {
+    console.error(red(`\n  Error: ${err.message}\n`));
+    process.exit(2);
+  }
 }
 
 // ─── Run Audit ────────────────────────────────────────────────────────────────
