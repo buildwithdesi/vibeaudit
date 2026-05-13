@@ -1,0 +1,97 @@
+name: Morning Security Scan
+
+on:
+  schedule:
+    # 6 AM UTC every weekday (Mon–Fri)
+    - cron: '0 6 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      concurrency:
+        description: 'Parallel clone/scan workers'
+        default: '3'
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run multi-repo scan
+        id: scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.SCAN_TOKEN || secrets.GITHUB_TOKEN }}
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          SCAN_CONCURRENCY: ${{ inputs.concurrency || '3' }}
+        run: |
+          node scripts/scan-all-repos.js > /dev/null 2>&1 || true
+
+          # Read the generated markdown report
+          REPORT=$(cat morning-scan-report.md)
+
+          # Extract key stats for the issue title
+          CRITICAL=$(node -e "const r=JSON.parse(require('fs').readFileSync('morning-scan-report.json','utf8')); console.log(r.summary.totalCritical)")
+          WARNING=$(node -e "const r=JSON.parse(require('fs').readFileSync('morning-scan-report.json','utf8')); console.log(r.summary.totalWarning)")
+          REPOS=$(node -e "const r=JSON.parse(require('fs').readFileSync('morning-scan-report.json','utf8')); console.log(r.summary.reposScanned)")
+          DATE=$(date +%Y-%m-%d)
+
+          echo "critical=$CRITICAL" >> "$GITHUB_OUTPUT"
+          echo "warning=$WARNING" >> "$GITHUB_OUTPUT"
+          echo "repos=$REPOS" >> "$GITHUB_OUTPUT"
+          echo "date=$DATE" >> "$GITHUB_OUTPUT"
+
+          # Write report body to a temp file (too large for GITHUB_OUTPUT)
+          cp morning-scan-report.md "$RUNNER_TEMP/report.md"
+
+      - name: Create GitHub issue
+        env:
+          GH_TOKEN: ${{ secrets.SCAN_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          DATE="${{ steps.scan.outputs.date }}"
+          CRITICAL="${{ steps.scan.outputs.critical }}"
+          WARNING="${{ steps.scan.outputs.warning }}"
+          REPOS="${{ steps.scan.outputs.repos }}"
+
+          if [ "$CRITICAL" -gt 0 ]; then
+            TITLE="[CRITICAL] Morning Scan $DATE — ${CRITICAL}C ${WARNING}W across ${REPOS} repos"
+            LABELS="security,critical"
+          elif [ "$WARNING" -gt 0 ]; then
+            TITLE="Morning Scan $DATE — ${WARNING}W across ${REPOS} repos"
+            LABELS="security"
+          else
+            TITLE="Morning Scan $DATE — All clear across ${REPOS} repos"
+            LABELS="security"
+          fi
+
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "$TITLE" \
+            --body-file "$RUNNER_TEMP/report.md" \
+            --label "$LABELS" 2>/dev/null || \
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "$TITLE" \
+            --body-file "$RUNNER_TEMP/report.md"
+
+      - name: Upload full JSON report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: morning-scan-${{ steps.scan.outputs.date }}
+          path: |
+            morning-scan-report.json
+            morning-scan-report.md
+          retention-days: 90
