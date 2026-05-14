@@ -1,0 +1,111 @@
+name: "⚗️ Morning Vibe Audit"
+
+# Replaces the DigitalOcean bot — runs daily at 7:00 AM UTC.
+# Adjust the cron schedule to match your team's timezone:
+#   7:00 UTC = midnight PT / 3:00 AM ET / 8:00 AM CET
+
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch: # Allow manual trigger from Actions tab
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  scan:
+    name: Scan all repos
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run batch scan
+        id: audit
+        run: |
+          node bin/vibe-audit.js --batch vibe-audit-repos.json --format json > audit-results.json 2>&1 || true
+          node bin/vibe-audit.js --batch vibe-audit-repos.json --format markdown > audit-report.md 2>&1 || true
+
+      - name: Create or update GitHub Issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('audit-report.md', 'utf-8');
+            const today = new Date().toISOString().split('T')[0];
+            const title = `⚗️ Daily Vibe Audit — ${today}`;
+
+            // Check if there's already an issue for today
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'vibe-audit',
+              state: 'open',
+              per_page: 5,
+            });
+
+            const existing = issues.find(i => i.title === title);
+
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body: report,
+              });
+              console.log(`Updated issue #${existing.number}`);
+            } else {
+              // Close stale audit issues from previous days
+              for (const old of issues) {
+                if (old.title.startsWith('⚗️ Daily Vibe Audit')) {
+                  await github.rest.issues.update({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: old.number,
+                    state: 'closed',
+                  });
+                }
+              }
+
+              const { data: issue } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body: report,
+                labels: ['vibe-audit'],
+              });
+              console.log(`Created issue #${issue.number}`);
+            }
+
+      - name: Upload JSON results
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-audit-results
+          path: audit-results.json
+          retention-days: 30
+
+      - name: Fail on criticals
+        run: |
+          node -e "
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('audit-results.json', 'utf-8'));
+            if (data.summary.totalCriticals > 0) {
+              console.error('Critical security issues found across repos.');
+              process.exit(1);
+            }
+            console.log('No critical issues. All clear.');
+          "
