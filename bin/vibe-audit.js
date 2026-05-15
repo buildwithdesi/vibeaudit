@@ -26,6 +26,9 @@ import { ALL_RULES } from '../src/rules/index.js';
 import { CWE_MAP } from '../src/data/cwe-map.js';
 import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
 import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
+import { loadBatchConfig, batchScan, reportBatchTerminal, reportBatchJSON } from '../src/batch.js';
+import { generateBatchHTML } from '../src/reporters/batch-html.js';
+import { writeFile } from 'node:fs/promises';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -38,6 +41,8 @@ const { values, positionals } = parseArgs({
     'fix-file': { type: 'boolean' },
     'skip-sca': { type: 'boolean' },
     deep: { type: 'boolean' },
+    batch: { type: 'string', short: 'b' },
+    'batch-out': { type: 'string' },
     'list-rules': { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
     version: { type: 'boolean', short: 'v' },
@@ -62,6 +67,8 @@ ${bold('OPTIONS')}
   ${cyan('--fix-file')}                              Only save fix file (no terminal prompts)
   ${cyan('--skip-sca')}                              Skip dependency vulnerability scanning
   ${cyan('--deep')}                                  Enable deep scanning (git history secrets)
+  ${cyan('-b, --batch')} <config.json>               Scan multiple repos from a config file
+  ${cyan('--batch-out')} <path>                      Output path for batch report (default: vibe-audit-batch.html)
   ${cyan('--list-rules')}                            Show all available rules
   ${cyan('-h, --help')}                              Show this help
   ${cyan('-v, --version')}                           Show version
@@ -79,6 +86,9 @@ ${bold('EXAMPLES')}
 
   ${dim('# Get fix prompts for your AI tool')}
   npx vibe-audit --fix
+
+  ${dim('# Batch scan 70+ repos (replaces DigitalOcean cron bot)')}
+  npx vibe-audit --batch repos.json --format html
 
   ${dim('# JSON output for CI pipelines')}
   npx vibe-audit --format json --strict
@@ -132,6 +142,51 @@ if (values['list-rules']) {
   }
 
   process.exit(0);
+}
+
+// ─── Batch Mode ──────────────────────────────────────────────────────────────
+
+if (values.batch) {
+  try {
+    const batchConfig = await loadBatchConfig(resolve(values.batch));
+    const format = values.format || 'terminal';
+    const batchStart = performance.now();
+
+    const log = format === 'json' ? process.stderr.write.bind(process.stderr) : (msg) => console.log(msg);
+    log(cyan(`\n  ⚗️  Batch scan: ${batchConfig.repos.length} repos (concurrency: ${batchConfig.concurrency})\n`));
+
+    const results = await batchScan(batchConfig, ({ repo, done, total, result }) => {
+      if (result) {
+        const icon = result.error ? red('✗') : result.critical > 0 ? red('●') : result.warning > 0 ? yellow('▲') : green('✓');
+        log(dim(`  [${done}/${total}] `) + icon + ` ${repo}` + (result.error ? red(` — ${result.error.slice(0, 60)}`) : dim(` — ${result.total} findings`)) + '\n');
+      }
+    });
+
+    const totalDurationMs = Math.round(performance.now() - batchStart);
+
+    if (format === 'json') {
+      console.log(reportBatchJSON(results, totalDurationMs));
+    } else if (format === 'html') {
+      const html = generateBatchHTML(results, totalDurationMs);
+      const outPath = values['batch-out'] || 'vibe-audit-batch.html';
+      await writeFile(outPath, html);
+      console.log('');
+      console.log(bold(`  ⚗️  Batch report saved: ${cyan(outPath)}`));
+      console.log(dim('  Open in your browser to view the interactive fleet dashboard.'));
+      console.log('');
+      reportBatchTerminal(results, totalDurationMs);
+    } else {
+      reportBatchTerminal(results, totalDurationMs);
+    }
+
+    const hasCritical = results.some((r) => r.critical > 0);
+    const hasWarning = results.some((r) => r.warning > 0);
+    const exitCode = hasCritical ? 1 : batchConfig.strict && hasWarning ? 1 : 0;
+    process.exit(exitCode);
+  } catch (err) {
+    console.error(red(`\n  Error: ${err.message}\n`));
+    process.exit(2);
+  }
 }
 
 // ─── Run Audit ────────────────────────────────────────────────────────────────

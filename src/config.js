@@ -38,7 +38,7 @@ export async function loadConfig(projectRoot) {
       ignore: Array.isArray(parsed.ignore) ? parsed.ignore : DEFAULTS.ignore,
       rules: Array.isArray(parsed.rules) ? parsed.rules : DEFAULTS.rules,
       exclude: Array.isArray(parsed.exclude) ? parsed.exclude : DEFAULTS.exclude,
-      format: ['terminal', 'json', 'markdown'].includes(parsed.format)
+      format: ['terminal', 'json', 'markdown', 'html'].includes(parsed.format)
         ? parsed.format
         : DEFAULTS.format,
       strict: typeof parsed.strict === 'boolean' ? parsed.strict : DEFAULTS.strict,

@@ -1,0 +1,16 @@
+{
+  "repos": [
+    "your-org/app-frontend",
+    "your-org/app-backend",
+    "your-org/api-gateway",
+    "your-org/auth-service",
+    "your-org/billing-service",
+    "your-org/landing-page",
+    "your-org/mobile-app",
+    "your-org/admin-dashboard"
+  ],
+  "concurrency": 5,
+  "strict": false,
+  "rules": [],
+  "exclude": []
+}
