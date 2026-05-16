@@ -1,0 +1,104 @@
+name: Morning Scan
+
+on:
+  schedule:
+    # Every weekday at 7:00 AM UTC (adjust to your timezone)
+    - cron: '0 7 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      org:
+        description: 'GitHub org or user to scan'
+        required: true
+        type: string
+      concurrency:
+        description: 'Max parallel scans'
+        required: false
+        default: '5'
+        type: string
+      include-forks:
+        description: 'Include forked repos'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout vibe-audit
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run morning scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.SCAN_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          ORG="${{ inputs.org || vars.SCAN_ORG }}"
+          CONCURRENCY="${{ inputs.concurrency || '5' }}"
+          FORKS_FLAG=""
+          if [ "${{ inputs.include-forks }}" = "true" ]; then
+            FORKS_FLAG="--include-forks"
+          fi
+
+          node bin/vibe-audit.js \
+            --org "$ORG" \
+            --concurrency "$CONCURRENCY" \
+            --output ./reports \
+            $FORKS_FLAG || true
+
+          # Also generate JSON for programmatic consumption
+          node bin/vibe-audit.js \
+            --org "$ORG" \
+            --concurrency "$CONCURRENCY" \
+            --format json \
+            --output ./reports \
+            $FORKS_FLAG || true
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-audit-morning-scan-${{ github.run_number }}
+          path: reports/
+          retention-days: 90
+
+      - name: Post summary
+        if: always()
+        run: |
+          if [ -f reports/vibe-audit-multi-report.json ]; then
+            REPOS=$(jq '.meta.reposScanned' reports/vibe-audit-multi-report.json)
+            CRITS=$(jq '.summary.critical' reports/vibe-audit-multi-report.json)
+            WARNS=$(jq '.summary.warning' reports/vibe-audit-multi-report.json)
+            PASSING=$(jq '.summary.passing' reports/vibe-audit-multi-report.json)
+
+            echo "## Morning Scan Results" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Repos scanned | $REPOS |" >> $GITHUB_STEP_SUMMARY
+            echo "| Critical | $CRITS |" >> $GITHUB_STEP_SUMMARY
+            echo "| Warnings | $WARNS |" >> $GITHUB_STEP_SUMMARY
+            echo "| Passing (A/B) | $PASSING |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            if [ "$CRITS" -gt 0 ]; then
+              echo "> **Action required:** $CRITS critical findings detected." >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "Worst offenders:" >> $GITHUB_STEP_SUMMARY
+              jq -r '.repos | sort_by(-.criticals) | .[0:5] | .[] | select(.criticals > 0) | "- **\(.fullName)** — \(.criticals) critical, \(.warnings) warnings"' reports/vibe-audit-multi-report.json >> $GITHUB_STEP_SUMMARY
+            fi
+
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Download the HTML dashboard from the workflow artifacts for the full interactive report." >> $GITHUB_STEP_SUMMARY
+          fi
