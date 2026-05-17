@@ -131,6 +131,64 @@ export async function* fetchRepoFiles(owner, repo, { branch = 'HEAD' } = {}) {
 }
 
 /**
+ * Fetch all non-archived repositories for a GitHub org or user.
+ * Paginates automatically. Requires GITHUB_TOKEN for private repos.
+ *
+ * @param {string} orgOrUser - GitHub org or username
+ * @param {{ type?: 'org' | 'user', perPage?: number }} options
+ * @returns {Promise<Array<{ owner: string, repo: string, fullName: string, defaultBranch: string, private: boolean, archived: boolean, language: string | null }>>}
+ */
+export async function fetchOrgRepos(orgOrUser, { type = 'org', perPage = 100 } = {}) {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  const headers = {
+    Accept: 'application/vnd.github.v3+json',
+    'User-Agent': 'vibe-audit',
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const repos = [];
+  let page = 1;
+
+  while (true) {
+    const endpoint = type === 'org'
+      ? `https://api.github.com/orgs/${orgOrUser}/repos`
+      : `https://api.github.com/users/${orgOrUser}/repos`;
+    const url = `${endpoint}?per_page=${perPage}&page=${page}&sort=updated&direction=desc`;
+
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      if (res.status === 404 && type === 'org') {
+        return fetchOrgRepos(orgOrUser, { type: 'user', perPage });
+      }
+      const body = await res.text();
+      throw new Error(`GitHub API error fetching repos for "${orgOrUser}" (${res.status}): ${body}`);
+    }
+
+    const data = await res.json();
+    if (data.length === 0) break;
+
+    for (const r of data) {
+      if (r.archived) continue;
+      if (r.fork) continue;
+      repos.push({
+        owner: r.owner.login,
+        repo: r.name,
+        fullName: r.full_name,
+        defaultBranch: r.default_branch,
+        private: r.private,
+        archived: r.archived,
+        language: r.language,
+      });
+    }
+
+    if (data.length < perPage) break;
+    page++;
+  }
+
+  return repos;
+}
+
+/**
  * Shallow-clone a GitHub repo into a temporary directory.
  * Use this as a fallback when API access isn't available.
  *

@@ -26,6 +26,7 @@ import { ALL_RULES } from '../src/rules/index.js';
 import { CWE_MAP } from '../src/data/cwe-map.js';
 import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
 import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
+import { batchAudit, loadBatchConfig } from '../src/batch.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -38,6 +39,9 @@ const { values, positionals } = parseArgs({
     'fix-file': { type: 'boolean' },
     'skip-sca': { type: 'boolean' },
     deep: { type: 'boolean' },
+    org: { type: 'string' },
+    batch: { type: 'string' },
+    concurrency: { type: 'string', short: 'c' },
     'list-rules': { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
     version: { type: 'boolean', short: 'v' },
@@ -62,6 +66,9 @@ ${bold('OPTIONS')}
   ${cyan('--fix-file')}                              Only save fix file (no terminal prompts)
   ${cyan('--skip-sca')}                              Skip dependency vulnerability scanning
   ${cyan('--deep')}                                  Enable deep scanning (git history secrets)
+  ${cyan('--org')} <name>                             Batch scan all repos in a GitHub org/user
+  ${cyan('--batch')} <file>                           Batch scan repos listed in a JSON config file
+  ${cyan('-c, --concurrency')} <n>                    Max parallel repo scans ${dim('(default: 3)')}
   ${cyan('--list-rules')}                            Show all available rules
   ${cyan('-h, --help')}                              Show this help
   ${cyan('-v, --version')}                           Show version
@@ -79,6 +86,13 @@ ${bold('EXAMPLES')}
 
   ${dim('# Get fix prompts for your AI tool')}
   npx vibe-audit --fix
+
+  ${dim('# Batch scan all repos in a GitHub org')}
+  npx vibe-audit --org my-company --format html
+  npx vibe-audit --org my-company --concurrency 5
+
+  ${dim('# Batch scan from a config file')}
+  npx vibe-audit --batch repos.json
 
   ${dim('# JSON output for CI pipelines')}
   npx vibe-audit --format json --strict
@@ -134,7 +148,35 @@ if (values['list-rules']) {
   process.exit(0);
 }
 
-// ─── Run Audit ────────────────────────────────────────────────────────────────
+// ─── Batch Mode ──────────────────────────────────────────────────────────────
+
+if (values.org || values.batch) {
+  try {
+    let batchConfig = {};
+
+    if (values.batch) {
+      batchConfig = await loadBatchConfig(resolve(values.batch));
+    }
+
+    if (values.org) {
+      batchConfig.org = values.org;
+    }
+
+    if (values.format) batchConfig.format = values.format;
+    if (values.concurrency) batchConfig.concurrency = parseInt(values.concurrency, 10);
+    if (values.rules) batchConfig.rules = values.rules.split(',').filter(Boolean);
+    if (values.exclude) batchConfig.exclude = values.exclude.split(',').filter(Boolean);
+    if (values.strict) batchConfig.strict = values.strict;
+
+    const { exitCode } = await batchAudit(batchConfig);
+    process.exit(exitCode);
+  } catch (err) {
+    console.error(red(`\n  Error: ${err.message}\n`));
+    process.exit(2);
+  }
+}
+
+// ─── Run Audit (single repo) ────────────────────────────────────────────────
 
 const rawTarget = positionals[0] || '.';
 
