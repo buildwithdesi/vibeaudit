@@ -43,6 +43,7 @@ async function runRules(fileSource, rules, deep) {
  * @param {boolean} [cliOptions.strict]
  * @param {boolean} [cliOptions.skipSca]
  * @param {boolean} [cliOptions.deep]
+ * @param {boolean} [cliOptions.quiet] - Suppress report output (for programmatic/multi-repo use)
  * @param {AsyncIterable} [cliOptions.fileSource] - Custom file source (e.g. GitHub API). If provided, skips local file discovery.
  * @returns {Promise<{ findings: import('./rules/types.js').Finding[], exitCode: number }>}
  */
@@ -57,6 +58,7 @@ export async function audit(targetDir, cliOptions = {}) {
   const strict = cliOptions.strict ?? config.strict;
   const skipSca = cliOptions.skipSca ?? false;
   const deep = cliOptions.deep ?? false;
+  const quiet = cliOptions.quiet ?? false;
 
   // Resolve which rules to run.
   const rules = resolveRules(ruleIds, excludeIds);
@@ -91,13 +93,15 @@ export async function audit(targetDir, cliOptions = {}) {
   const severityOrder = { critical: 0, warning: 1, info: 2 };
   findings.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
 
-  // Report.
-  await report(findings, format, {
-    filesScanned,
-    rulesRun: rules.length,
-    durationMs,
-    targetDir,
-  });
+  // Report (skip when running in quiet/programmatic mode).
+  if (!quiet) {
+    await report(findings, format, {
+      filesScanned,
+      rulesRun: rules.length,
+      durationMs,
+      targetDir,
+    });
+  }
 
   // Exit code: 1 if criticals found, 1 if warnings + strict mode, 0 otherwise.
   const hasCritical = findings.some((f) => f.severity === 'critical');

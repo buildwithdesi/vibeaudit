@@ -1,0 +1,25 @@
+{
+  "$schema": "./repos.schema.json",
+
+  "defaults": {
+    "branch": "main",
+    "strict": false,
+    "exclude": []
+  },
+
+  "orgs": [
+    "jackdog668"
+  ],
+
+  "repos": [
+    { "name": "jackdog668/vibeaudit", "strict": true },
+
+    { "name": "jackdog668/example-app" },
+    { "name": "jackdog668/example-api" }
+  ],
+
+  "skip": [
+    "jackdog668/.github",
+    "jackdog668/deprecated-tool"
+  ]
+}

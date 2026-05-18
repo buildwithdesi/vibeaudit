@@ -1,0 +1,80 @@
+name: "Vibe Audit — Morning Scan"
+
+on:
+  schedule:
+    # 6:00 AM UTC every weekday (Mon–Fri). Adjust to your timezone:
+    #   US Pacific: 6 AM PT = 13:00 UTC  →  cron: '0 13 * * 1-5'
+    #   US Eastern: 6 AM ET = 11:00 UTC  →  cron: '0 11 * * 1-5'
+    #   Europe CET: 6 AM    =  5:00 UTC  →  cron: '0 5 * * 1-5'
+    - cron: "0 11 * * 1-5"
+
+  workflow_dispatch:
+    inputs:
+      changed_only:
+        description: "Only scan repos with commits in the last 24h"
+        required: false
+        default: "false"
+        type: boolean
+      post_issue:
+        description: "Create/update a GitHub issue with the report"
+        required: false
+        default: "true"
+        type: boolean
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scan:
+    name: Scan All Repos
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run multi-repo scan
+        id: scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.SCAN_TOKEN }}
+        run: |
+          ARGS="--format markdown --concurrency 8"
+
+          if [ "${{ inputs.changed_only }}" = "true" ]; then
+            ARGS="$ARGS --changed-only"
+          fi
+
+          if [ "${{ inputs.post_issue || 'true' }}" = "true" ]; then
+            ARGS="$ARGS --post-issue --issue-repo ${{ github.repository }}"
+          fi
+
+          node bin/scan-repos.js $ARGS | tee scan-report.md
+        continue-on-error: true
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-audit-report-${{ github.run_id }}
+          path: scan-report.md
+          retention-days: 90
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f scan-report.md ]; then
+            cat scan-report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## Scan failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "Check the workflow logs for details." >> "$GITHUB_STEP_SUMMARY"
+          fi
