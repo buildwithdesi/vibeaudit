@@ -1,0 +1,145 @@
+name: "⚗️ Vibe Audit — Morning Fleet Scan"
+
+# Replaces the DigitalOcean bot. Runs daily at 8 AM UTC (adjust to your timezone).
+on:
+  schedule:
+    - cron: "0 8 * * *" # 8:00 AM UTC, Mon–Sun
+  workflow_dispatch: # Manual trigger from GitHub UI
+    inputs:
+      target:
+        description: "Override target (org name or 'self' for this repo only)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  # Set this to your org name. The workflow scans all repos in this org.
+  FLEET_ORG: ${{ vars.FLEET_ORG || github.repository_owner }}
+  NODE_VERSION: "20"
+
+jobs:
+  fleet-scan:
+    name: Fleet Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout vibe-audit
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run fleet scan
+        id: scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.FLEET_SCAN_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          TARGET="${{ github.event.inputs.target || env.FLEET_ORG }}"
+
+          if [ "$TARGET" = "self" ]; then
+            # Single-repo mode: scan just this repo
+            node bin/vibe-audit.js . --format json > fleet-report.json 2>&1 || true
+            echo "mode=self" >> "$GITHUB_OUTPUT"
+          else
+            # Fleet mode: scan all org repos
+            node bin/vibe-audit-fleet.js \
+              --org "$TARGET" \
+              --format json \
+              --concurrency 5 \
+              --out-file fleet-report.json 2>&1 || true
+            echo "mode=fleet" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+
+      - name: Generate markdown report
+        id: report
+        env:
+          GITHUB_TOKEN: ${{ secrets.FLEET_SCAN_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          TARGET="${{ steps.scan.outputs.target }}"
+          MODE="${{ steps.scan.outputs.mode }}"
+
+          if [ "$MODE" = "self" ]; then
+            node bin/vibe-audit.js . --format markdown > fleet-report.md 2>&1 || true
+          else
+            node bin/vibe-audit-fleet.js \
+              --org "$TARGET" \
+              --format markdown > fleet-report.md 2>&1 || true
+          fi
+
+          # Extract summary for issue title
+          CRITICALS=$(node -e "
+            const r = JSON.parse(require('fs').readFileSync('fleet-report.json','utf8'));
+            const c = r.summary ? r.summary.totalCritical || r.summary.critical || 0 : 0;
+            console.log(c);
+          " 2>/dev/null || echo "0")
+
+          WARNINGS=$(node -e "
+            const r = JSON.parse(require('fs').readFileSync('fleet-report.json','utf8'));
+            const w = r.summary ? r.summary.totalWarning || r.summary.warning || 0 : 0;
+            console.log(w);
+          " 2>/dev/null || echo "0")
+
+          REPOS=$(node -e "
+            const r = JSON.parse(require('fs').readFileSync('fleet-report.json','utf8'));
+            const n = r.summary ? r.summary.reposScanned || 1 : 1;
+            console.log(n);
+          " 2>/dev/null || echo "1")
+
+          echo "criticals=$CRITICALS" >> "$GITHUB_OUTPUT"
+          echo "warnings=$WARNINGS" >> "$GITHUB_OUTPUT"
+          echo "repos=$REPOS" >> "$GITHUB_OUTPUT"
+
+          DATE=$(date -u +"%Y-%m-%d")
+          if [ "$CRITICALS" -gt 0 ]; then
+            echo "title=🔴 Fleet Scan $DATE — $CRITICALS critical, $WARNINGS warnings across $REPOS repos" >> "$GITHUB_OUTPUT"
+            echo "labels=security,critical,fleet-scan" >> "$GITHUB_OUTPUT"
+          elif [ "$WARNINGS" -gt 0 ]; then
+            echo "title=🟡 Fleet Scan $DATE — $WARNINGS warnings across $REPOS repos" >> "$GITHUB_OUTPUT"
+            echo "labels=security,fleet-scan" >> "$GITHUB_OUTPUT"
+          else
+            echo "title=🟢 Fleet Scan $DATE — All clear across $REPOS repos" >> "$GITHUB_OUTPUT"
+            echo "labels=security,fleet-scan" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or update GitHub Issue
+        uses: peter-evans/create-issue-from-file@v5
+        with:
+          title: ${{ steps.report.outputs.title }}
+          content-filepath: fleet-report.md
+          labels: ${{ steps.report.outputs.labels }}
+
+      - name: Upload JSON artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleet-scan-${{ github.run_id }}
+          path: fleet-report.json
+          retention-days: 90
+
+      - name: Notify Slack (optional)
+        if: steps.report.outputs.criticals != '0' && env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          CRITICALS="${{ steps.report.outputs.criticals }}"
+          WARNINGS="${{ steps.report.outputs.warnings }}"
+          REPOS="${{ steps.report.outputs.repos }}"
+          DATE=$(date -u +"%Y-%m-%d")
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          curl -s -X POST "$SLACK_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"text\": \"🔴 *Vibe Audit Fleet Scan — $DATE*\n$CRITICALS critical findings across $REPOS repos.\n<$RUN_URL|View full report>\"
+            }" || true
