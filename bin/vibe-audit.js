@@ -12,6 +12,8 @@
  *   --rules <id,id,...>                Only run specific rules
  *   --exclude <id,id,...>              Exclude specific rules
  *   --strict                           Exit 1 on warnings too
+ *   --batch <repos-file>               Scan multiple repos from a JSON file
+ *   --concurrency <n>                  Max parallel scans in batch mode (default: 5)
  *   --list-rules                       Show available rules and exit
  *   --help                             Show help
  *   --version                          Show version
@@ -26,6 +28,7 @@ import { ALL_RULES } from '../src/rules/index.js';
 import { CWE_MAP } from '../src/data/cwe-map.js';
 import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
 import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
+import { loadRepoList, batchAudit } from '../src/batch.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -34,6 +37,8 @@ const { values, positionals } = parseArgs({
     rules: { type: 'string', short: 'r' },
     exclude: { type: 'string', short: 'e' },
     strict: { type: 'boolean', short: 's' },
+    batch: { type: 'string', short: 'b' },
+    concurrency: { type: 'string', short: 'c' },
     fix: { type: 'boolean' },
     'fix-file': { type: 'boolean' },
     'skip-sca': { type: 'boolean' },
@@ -58,6 +63,8 @@ ${bold('OPTIONS')}
   ${cyan('-r, --rules')}  <id,id,...>               Only run these rules
   ${cyan('-e, --exclude')} <id,id,...>               Skip these rules
   ${cyan('-s, --strict')}                            Exit 1 on warnings too
+  ${cyan('-b, --batch')} <repos.json>                Scan multiple repos from a JSON file
+  ${cyan('-c, --concurrency')} <n>                   Max parallel scans in batch mode ${dim('(default: 5)')}
   ${cyan('--fix')}                                   Show copy-paste fix prompts + save VIBE-AUDIT-FIXES.md
   ${cyan('--fix-file')}                              Only save fix file (no terminal prompts)
   ${cyan('--skip-sca')}                              Skip dependency vulnerability scanning
@@ -79,6 +86,10 @@ ${bold('EXAMPLES')}
 
   ${dim('# Get fix prompts for your AI tool')}
   npx vibe-audit --fix
+
+  ${dim('# Batch scan 70+ repos')}
+  npx vibe-audit --batch repos.json
+  npx vibe-audit --batch repos.json --format markdown --concurrency 10
 
   ${dim('# JSON output for CI pipelines')}
   npx vibe-audit --format json --strict
@@ -132,6 +143,27 @@ if (values['list-rules']) {
   }
 
   process.exit(0);
+}
+
+// ─── Batch Mode ──────────────────────────────────────────────────────────────
+
+if (values.batch) {
+  try {
+    const repos = await loadRepoList(resolve(values.batch));
+    const { summary } = await batchAudit(repos, {
+      format: values.format || 'terminal',
+      rules: values.rules?.split(',').filter(Boolean),
+      exclude: values.exclude?.split(',').filter(Boolean),
+      strict: values.strict,
+      concurrency: values.concurrency ? parseInt(values.concurrency, 10) : undefined,
+    });
+
+    const exitCode = summary.totalCritical > 0 ? 1 : values.strict && summary.totalWarning > 0 ? 1 : summary.totalErrors > 0 ? 2 : 0;
+    process.exit(exitCode);
+  } catch (err) {
+    console.error(red(`\n  Error: ${err.message}\n`));
+    process.exit(2);
+  }
 }
 
 // ─── Run Audit ────────────────────────────────────────────────────────────────

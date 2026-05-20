@@ -1,0 +1,13 @@
+[
+  "your-org/api-service",
+  "your-org/web-app",
+  "your-org/mobile-backend",
+  {
+    "repo": "your-org/payments",
+    "rules": ["exposed-secrets", "missing-auth", "idor-vulnerability"]
+  },
+  {
+    "repo": "your-org/internal-tools",
+    "exclude": ["devtools-enabled"]
+  }
+]

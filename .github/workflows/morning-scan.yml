@@ -1,0 +1,85 @@
+name: Morning Vibe Audit
+
+on:
+  schedule:
+    # Every weekday at 7:00 AM UTC (adjust to your timezone)
+    - cron: '0 7 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      format:
+        description: 'Output format'
+        required: false
+        default: 'markdown'
+        type: choice
+        options:
+          - terminal
+          - json
+          - markdown
+      concurrency:
+        description: 'Max parallel scans'
+        required: false
+        default: '10'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run batch scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.AUDIT_GITHUB_TOKEN }}
+        run: |
+          node bin/vibe-audit.js \
+            --batch vibe-audit-repos.json \
+            --format ${{ inputs.format || 'json' }} \
+            --concurrency ${{ inputs.concurrency || '10' }} \
+            > scan-results.json 2>&1 || true
+
+      - name: Upload scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-audit-report-${{ github.run_number }}
+          path: scan-results.json
+          retention-days: 90
+
+      - name: Post summary to job
+        if: always()
+        run: |
+          if [ -f scan-results.json ]; then
+            echo "## ⚗️ Vibe Audit Morning Scan" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Run: #${{ github.run_number }} — $(date -u +%Y-%m-%d)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            # Extract summary from JSON output
+            node -e "
+              const fs = require('fs');
+              try {
+                const data = JSON.parse(fs.readFileSync('scan-results.json', 'utf8'));
+                const s = data.summary;
+                console.log('| Metric | Count |');
+                console.log('|--------|-------|');
+                console.log('| Repos scanned | ' + s.totalRepos + ' |');
+                console.log('| Critical | ' + s.totalCritical + ' |');
+                console.log('| Warnings | ' + s.totalWarning + ' |');
+                console.log('| Errors | ' + s.totalErrors + ' |');
+                console.log('');
+                if (s.reposWithCritical.length > 0) {
+                  console.log('### Repos with Critical Issues');
+                  for (const r of s.reposWithCritical) console.log('- **' + r + '**');
+                }
+              } catch (e) {
+                console.log('Could not parse scan results. Check the artifact for details.');
+              }
+            " >> $GITHUB_STEP_SUMMARY
+          fi
