@@ -104,5 +104,5 @@ export async function audit(targetDir, cliOptions = {}) {
   const hasWarning = findings.some((f) => f.severity === 'warning');
   const exitCode = hasCritical ? 1 : strict && hasWarning ? 1 : 0;
 
-  return { findings, exitCode };
+  return { findings, exitCode, filesScanned, rulesRun: rules.length, durationMs };
 }

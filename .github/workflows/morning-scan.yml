@@ -1,0 +1,161 @@
+name: "Morning Fleet Scan"
+
+on:
+  schedule:
+    - cron: "0 8 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      owner:
+        description: "GitHub user/org to scan"
+        required: false
+        default: ""
+        type: string
+      concurrency:
+        description: "Parallel scans"
+        required: false
+        default: "5"
+        type: string
+      skip_forks:
+        description: "Skip forked repos"
+        required: false
+        default: true
+        type: boolean
+      create_issues:
+        description: "Create issues for critical repos"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  fleet-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Determine scan owner
+        id: owner
+        run: |
+          SCAN_OWNER="${{ inputs.owner }}"
+          if [ -z "$SCAN_OWNER" ]; then
+            SCAN_OWNER="${{ github.repository_owner }}"
+          fi
+          echo "value=$SCAN_OWNER" >> "$GITHUB_OUTPUT"
+
+      - name: Run fleet scan
+        id: scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p reports
+          SCAN_OWNER="${{ steps.owner.outputs.value }}"
+          CONCURRENCY="${{ inputs.concurrency || '5' }}"
+          FLAGS="--format html --output reports/fleet-report.html --concurrency $CONCURRENCY --skip-archived"
+          if [ "${{ inputs.skip_forks }}" != "false" ]; then
+            FLAGS="$FLAGS --skip-forks"
+          fi
+          node bin/vibe-audit-org.js "$SCAN_OWNER" $FLAGS || true
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleet-report-${{ steps.owner.outputs.value }}-${{ github.run_id }}
+          path: reports/
+          retention-days: 30
+
+      - name: Parse results
+        if: always()
+        id: parse
+        run: |
+          JSON_FILE="reports/fleet-report.json"
+          if [ ! -f "$JSON_FILE" ]; then
+            echo "has_criticals=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          node -e "
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('$JSON_FILE', 'utf8'));
+            const s = data.summary || {};
+            const criticals = s.totalCritical || 0;
+            const warnings = s.totalWarning || 0;
+            const infos = s.totalInfo || 0;
+            const scanned = s.scannedRepos || s.totalRepos || 0;
+            const total = s.totalFindings || 0;
+
+            let grade = 'A';
+            if (criticals > 0) grade = 'F';
+            else if (warnings > 10) grade = 'D';
+            else if (warnings > 0) grade = 'C';
+            else if (infos > 5) grade = 'B';
+
+            const set = (k, v) => fs.appendFileSync(process.env.GITHUB_OUTPUT, k + '=' + v + '\n');
+            set('has_criticals', criticals > 0 ? 'true' : 'false');
+            set('grade', grade);
+            set('scanned', String(scanned));
+            set('criticals', String(criticals));
+            set('warnings', String(warnings));
+            set('infos', String(infos));
+            set('total', String(total));
+
+            const results = data.results || {};
+            const critRepos = Object.entries(results)
+              .filter(([, r]) => (r.findings || []).some(f => f.severity === 'critical'))
+              .map(([name, r]) => name + ' (' + r.findings.filter(f => f.severity === 'critical').length + ')')
+              .join(', ') || 'none';
+            set('critical_repos', critRepos);
+          "
+
+      - name: Create or update issue for critical findings
+        if: steps.parse.outputs.has_criticals == 'true' && (inputs.create_issues == true || github.event_name == 'schedule')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SCAN_DATE=$(date -u +"%Y-%m-%d")
+          TITLE="⚗️ Morning Fleet Scan — ${SCAN_DATE}"
+          ARTIFACT_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          BODY=$(cat <<ISSUEEOF
+          ## ⚗️ Fleet Scan Report — ${SCAN_DATE}
+
+          | Metric | Value |
+          |--------|-------|
+          | **Fleet Grade** | ${{ steps.parse.outputs.grade }} |
+          | **Repos Scanned** | ${{ steps.parse.outputs.scanned }} |
+          | **Total Findings** | ${{ steps.parse.outputs.total }} |
+          | **Critical** | ${{ steps.parse.outputs.criticals }} |
+          | **Warnings** | ${{ steps.parse.outputs.warnings }} |
+          | **Info** | ${{ steps.parse.outputs.infos }} |
+
+          ### Repos with Critical Findings
+          ${{ steps.parse.outputs.critical_repos }}
+
+          ### Full Report
+          [Download HTML report from workflow artifacts](${ARTIFACT_URL})
+
+          ---
+          *Generated by [vibeaudit](https://github.com/${{ github.repository }}) morning fleet scan*
+          ISSUEEOF
+          )
+
+          EXISTING=$(gh issue list --repo "${{ github.repository }}" --search "in:title \"Morning Fleet Scan — ${SCAN_DATE}\"" --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
+
+          if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
+            gh issue edit "$EXISTING" --repo "${{ github.repository }}" --body "$BODY"
+          else
+            gh issue create --repo "${{ github.repository }}" --title "$TITLE" --body "$BODY" --label "fleet-scan"
+          fi
