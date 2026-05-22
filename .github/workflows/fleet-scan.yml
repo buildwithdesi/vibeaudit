@@ -1,0 +1,64 @@
+name: Vibe Audit Fleet Scan
+
+on:
+  schedule:
+    # Every morning at 7 AM UTC (adjust to your timezone)
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      orgs:
+        description: 'GitHub orgs/users to scan (comma-separated)'
+        required: false
+      format:
+        description: 'Output format'
+        required: false
+        default: 'html'
+        type: choice
+        options:
+          - html
+          - json
+          - terminal
+
+permissions:
+  contents: read
+
+jobs:
+  fleet-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm ci
+
+      - name: Run fleet scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.FLEET_SCAN_TOKEN }}
+        run: |
+          FORMAT="${{ inputs.format || 'html' }}"
+          if [ -f fleet.json ]; then
+            node bin/vibe-audit-fleet.js --config fleet.json --format "$FORMAT" --output fleet-report."$FORMAT"
+          else
+            ORGS="${{ inputs.orgs || vars.FLEET_SCAN_ORGS }}"
+            if [ -z "$ORGS" ]; then
+              echo "Error: No orgs configured. Set FLEET_SCAN_ORGS repository variable or provide orgs input."
+              exit 1
+            fi
+            ORG_FLAGS=""
+            IFS=',' read -ra ORG_ARRAY <<< "$ORGS"
+            for org in "${ORG_ARRAY[@]}"; do
+              ORG_FLAGS="$ORG_FLAGS --org $(echo "$org" | xargs)"
+            done
+            node bin/vibe-audit-fleet.js $ORG_FLAGS --format "$FORMAT" --output fleet-report."$FORMAT"
+          fi
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleet-report-${{ github.run_number }}
+          path: fleet-report.*
+          retention-days: 30
