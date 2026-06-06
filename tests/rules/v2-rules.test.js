@@ -388,8 +388,8 @@ describe('cwe-metadata', () => {
 // ── Rule Registry ────────────────────────────────────────────────────────────
 
 describe('v2-rule-registry', () => {
-  it('has 79 rules', () => {
-    assert.equal(ALL_RULES.length, 79, `Expected 79 rules, got ${ALL_RULES.length}`);
+  it('has 80 rules', () => {
+    assert.equal(ALL_RULES.length, 80, `Expected 80 rules, got ${ALL_RULES.length}`);
   });
 
   it('all new rules have fix prompts', async () => {
@@ -405,7 +405,7 @@ describe('v2-rule-registry', () => {
       'race-condition', 'nosql-injection', 'xml-xxe', 'ldap-injection', 'header-injection',
       'subdomain-takeover', 'clickjacking', 'dangerously-set-inner-html', 'eval-usage', 'regex-dos', 'hardcoded-ip',
       'high-entropy-strings', 'git-history-secrets',
-      'docker-root-user', 'exposed-database-port',
+      'docker-root-user', 'exposed-database-port', 'client-side-db-access',
     ];
     for (const id of newRuleIds) {
       assert.ok(FIX_PROMPTS[id], `Missing fix prompt for ${id}`);
@@ -416,5 +416,47 @@ describe('v2-rule-registry', () => {
     const ids = ALL_RULES.map((r) => r.id);
     const unique = new Set(ids);
     assert.equal(ids.length, unique.size, `Duplicate rule IDs found: ${ids.filter((id, i) => ids.indexOf(id) !== i)}`);
+  });
+});
+
+describe('client-side-db-access', () => {
+  const rule = ruleById('client-side-db-access');
+
+  it('flags direct Supabase queries in client component', () => {
+    const file = makeFile('src/components/UserList.tsx', `
+import { supabase } from '../lib/supabase';
+export default function UserList() {
+  const getUsers = async () => {
+    const { data } = await supabase.from('users').select('*');
+    return data;
+  };
+}
+`);
+    const findings = rule.check(file);
+    assert.ok(findings.length > 0, 'Should flag direct client-side query');
+  });
+
+  it('flags direct Drizzle queries in client component', () => {
+    const file = makeFile('src/components/UserList.tsx', `
+import { db } from '../db';
+export default function UserList() {
+  const getUsers = async () => {
+    return db.select().from(users);
+  };
+}
+`);
+    const findings = rule.check(file);
+    assert.ok(findings.length > 0, 'Should flag direct Drizzle query');
+  });
+
+  it('skips server-only files', () => {
+    const file = makeFile('src/app/api/users/route.ts', `
+import { db } from '../db';
+export async function GET() {
+  return Response.json(await db.select().from(users));
+}
+`);
+    const findings = rule.check(file);
+    assert.equal(findings.length, 0);
   });
 });

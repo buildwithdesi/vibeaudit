@@ -457,6 +457,11 @@ export const FIX_PROMPTS = {
     prompt: `SECURITY FIX: My docker-compose.yml exposes database ports to the host machine. Anyone on the network can connect to my database directly. Fix: (1) Remove the "ports:" section from your database service. (2) Use "expose:" instead if other containers need to connect. (3) Your app connects to the database via the Docker network using the service name (e.g., postgres:5432), not localhost. (4) If you need database access for development, use "docker exec" to connect through the container.`,
     platformNotes: `Docker Compose deployments. For production, never expose database ports. Use a VPN or SSH tunnel for remote database access.`,
   },
+
+  'client-side-db-access': {
+    prompt: `SECURITY FIX: Direct database access (Supabase, Firebase, or query builders like Drizzle/Prisma) was detected in client-side code. This exposes database credentials, table structures, and allows clients to bypass backend security constraints. Fix: Move database queries into server-side functions (Server Actions, API routes, or server controllers). Call those server endpoints from the client. Never query the database directly from files that run in the browser.`,
+    platformNotes: `All platforms. Supabase/Firebase anon queries must be secured with RLS if used, but direct query builder connections (like Drizzle/Prisma) must never be client-side.`,
+  },
 };
 
 /**

@@ -91,9 +91,9 @@ import { hardcodedIp } from './hardcoded-ip.js';
 // Extended secrets detection (v2)
 import { highEntropyStrings } from './high-entropy-strings.js';
 import { gitHistorySecrets } from './git-history-secrets.js';
-// Infrastructure (v3)
 import { dockerRootUser } from './docker-root-user.js';
 import { exposedDatabasePort } from './exposed-database-port.js';
+import { clientSideDbAccess } from './client-side-db-access.js';
 
 /** @type {import('./types.js').Rule[]} */
 export const ALL_RULES = [
@@ -108,6 +108,7 @@ export const ALL_RULES = [
   missingSecurityHeaders,
   missingRateLimiting,
   insecureConnections,
+  clientSideDbAccess,
   // DevTools exposure
   clientBundleSecrets,
   clientOnlyAuth,

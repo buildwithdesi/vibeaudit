@@ -56,6 +56,7 @@ export const CWE_MAP = {
 
   // ── Client-Side Trust ──────────────────────────────────────────────────────
   'client-side-trust':          { cweId: 'CWE-602', cvssScore: 5.3, owaspCategory: 'A04:2021' },
+  'client-side-db-access':      { cweId: 'CWE-602', cvssScore: 8.6, owaspCategory: 'A04:2021' },
   'no-pagination':              { cweId: 'CWE-770', cvssScore: 4.3, owaspCategory: 'A04:2021' },
   'cors-credentials':           { cweId: 'CWE-942', cvssScore: 5.3, owaspCategory: 'A05:2021' },
   'debug-mode-exposed':         { cweId: 'CWE-489', cvssScore: 3.7, owaspCategory: 'A05:2021' },
