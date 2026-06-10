@@ -1,0 +1,60 @@
+name: "Morning Vibe Audit — All Repos"
+
+on:
+  schedule:
+    # 6:00 AM Central (11:00 UTC) every weekday
+    - cron: "0 11 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      concurrency:
+        description: "Parallel repo scans (1-10)"
+        required: false
+        default: "5"
+      include_forks:
+        description: "Include forked repos"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scan:
+    name: Scan all repos
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout vibeaudit
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run org-wide scan
+        id: scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.VIBEAUDIT_TOKEN }}
+          SCAN_OWNER: ${{ github.repository_owner }}
+          SCAN_CONCURRENCY: ${{ inputs.concurrency || '5' }}
+          SCAN_INCLUDE_FORKS: ${{ inputs.include_forks || 'false' }}
+        run: node bin/vibe-audit.js --org "$SCAN_OWNER" --format json > scan-results.json
+
+      - name: Create issue from results
+        env:
+          GITHUB_TOKEN: ${{ secrets.VIBEAUDIT_TOKEN }}
+        run: node .github/scripts/post-scan-issue.js
+
+      - name: Upload JSON artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-audit-scan-${{ github.run_number }}
+          path: scan-results.json
+          retention-days: 90

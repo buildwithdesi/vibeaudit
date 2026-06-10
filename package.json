@@ -1,6 +1,6 @@
 {
   "name": "@jackdog668/vibeaudit",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Security audit CLI for AI-generated codebases. Find the time bombs before they blow.",
   "type": "module",
   "engines": {

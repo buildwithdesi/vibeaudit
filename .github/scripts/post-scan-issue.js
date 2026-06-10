@@ -1,0 +1,206 @@
+#!/usr/bin/env node
+
+/**
+ * Post the morning vibe audit scan results as a GitHub issue.
+ * Reads scan-results.json (output of --org --format json) and creates/updates
+ * a pinned daily issue in the vibeaudit repo.
+ *
+ * Requires GITHUB_TOKEN env var.
+ */
+
+import { readFile } from 'node:fs/promises';
+
+const GITHUB_API = 'https://api.github.com';
+const REPO_OWNER = process.env.GITHUB_REPOSITORY_OWNER || 'jackdog668';
+const REPO_NAME = 'vibeaudit';
+const token = process.env.GITHUB_TOKEN;
+
+if (!token) {
+  console.error('GITHUB_TOKEN is required');
+  process.exit(1);
+}
+
+const headers = {
+  Accept: 'application/vnd.github.v3+json',
+  Authorization: `Bearer ${token}`,
+  'User-Agent': 'vibe-audit',
+  'Content-Type': 'application/json',
+};
+
+async function main() {
+  const raw = await readFile('scan-results.json', 'utf8');
+  const report = JSON.parse(raw);
+  const { owner, scannedAt, rulesRun, repos, totals } = report;
+
+  const date = new Date(scannedAt).toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  const shortDate = new Date(scannedAt).toISOString().slice(0, 10);
+
+  const grade =
+    totals.critical > 0
+      ? 'F'
+      : totals.warning > 10
+        ? 'D'
+        : totals.warning > 0
+          ? 'C'
+          : totals.info > 0
+            ? 'B'
+            : 'A';
+
+  const gradeEmoji = { A: '🟢', B: '🟢', C: '🟡', D: '🟡', F: '🔴' }[grade];
+
+  const title = `${gradeEmoji} Vibe Audit Morning Scan — ${shortDate} — Grade ${grade}`;
+
+  // Build issue body
+  const lines = [];
+  lines.push(`## Vibe Audit Morning Scan`);
+  lines.push(``);
+  lines.push(`**${date}** | ${totals.repos} repos scanned | ${rulesRun} rules | Grade: **${grade}** ${gradeEmoji}`);
+  lines.push(``);
+
+  lines.push(`| Metric | Count |`);
+  lines.push(`|--------|-------|`);
+  lines.push(`| Repos scanned | ${totals.repos} |`);
+  lines.push(`| Repos with findings | ${totals.reposWithFindings} |`);
+  lines.push(`| Repos with criticals | ${totals.reposWithCriticals} |`);
+  lines.push(`| Total critical | ${totals.critical} |`);
+  lines.push(`| Total warnings | ${totals.warning} |`);
+  lines.push(`| Total info | ${totals.info} |`);
+  lines.push(`| Scan errors | ${totals.errors} |`);
+  lines.push(``);
+
+  // Critical repos
+  const critRepos = repos
+    .filter((r) => r.summary.critical > 0)
+    .sort((a, b) => b.summary.critical - a.summary.critical);
+
+  if (critRepos.length > 0) {
+    lines.push(`### 🔴 Critical Findings`);
+    lines.push(``);
+    for (const r of critRepos) {
+      lines.push(
+        `<details><summary><strong>${r.repo}</strong> — ${r.summary.critical} critical, ${r.summary.warning} warnings</summary>`
+      );
+      lines.push(``);
+      for (const f of r.findings.filter((f) => f.severity === 'critical')) {
+        const cwe = f.cweId ? ` \`${f.cweId}\`` : '';
+        const cvss = f.cvssScore ? ` CVSS:${f.cvssScore}` : '';
+        lines.push(`- **${f.message}**${cwe}${cvss}`);
+        lines.push(`  - File: \`${f.file}\`${f.line ? `:${f.line}` : ''}`);
+        if (f.evidence) lines.push(`  - Evidence: \`${f.evidence}\``);
+        lines.push(`  - Fix: ${f.fix}`);
+      }
+      lines.push(``);
+      lines.push(`</details>`);
+      lines.push(``);
+    }
+  }
+
+  // Warning repos
+  const warnRepos = repos
+    .filter((r) => r.summary.warning > 0 && r.summary.critical === 0)
+    .sort((a, b) => b.summary.warning - a.summary.warning);
+
+  if (warnRepos.length > 0) {
+    lines.push(`### 🟡 Warnings`);
+    lines.push(``);
+    for (const r of warnRepos) {
+      lines.push(`<details><summary>${r.repo} — ${r.summary.warning} warnings</summary>`);
+      lines.push(``);
+      for (const f of r.findings.filter((f) => f.severity === 'warning')) {
+        const cwe = f.cweId ? ` \`${f.cweId}\`` : '';
+        lines.push(`- ${f.message}${cwe} — \`${f.file}\`${f.line ? `:${f.line}` : ''}`);
+      }
+      lines.push(``);
+      lines.push(`</details>`);
+      lines.push(``);
+    }
+  }
+
+  // Clean repos
+  const cleanRepos = repos.filter((r) => r.summary.total === 0 && !r.error);
+  if (cleanRepos.length > 0) {
+    lines.push(`### 🟢 Clean Repos (${cleanRepos.length})`);
+    lines.push(``);
+    lines.push(`<details><summary>All clear — no findings</summary>`);
+    lines.push(``);
+    for (const r of cleanRepos) {
+      lines.push(`- ${r.repo} (${r.filesScanned} files)`);
+    }
+    lines.push(``);
+    lines.push(`</details>`);
+    lines.push(``);
+  }
+
+  // Errors
+  const errorRepos = repos.filter((r) => r.error);
+  if (errorRepos.length > 0) {
+    lines.push(`### ⚠️ Scan Errors (${errorRepos.length})`);
+    lines.push(``);
+    lines.push(`<details><summary>Failed to scan</summary>`);
+    lines.push(``);
+    for (const r of errorRepos) {
+      lines.push(`- \`${r.repo}\`: ${r.error}`);
+    }
+    lines.push(``);
+    lines.push(`</details>`);
+    lines.push(``);
+  }
+
+  lines.push(`---`);
+  lines.push(`*Generated by Vibe Audit v1.2.0 — [View workflow run](${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${REPO_OWNER}/${REPO_NAME}/actions/runs/${process.env.GITHUB_RUN_ID || ''})*`);
+
+  const body = lines.join('\n');
+
+  // Close previous morning scan issues (keep history but declutter)
+  const searchRes = await fetch(
+    `${GITHUB_API}/search/issues?q=repo:${REPO_OWNER}/${REPO_NAME}+is:issue+is:open+label:morning-scan&per_page=10`,
+    { headers }
+  );
+  if (searchRes.ok) {
+    const { items } = await searchRes.json();
+    for (const issue of items) {
+      await fetch(`${GITHUB_API}/repos/${REPO_OWNER}/${REPO_NAME}/issues/${issue.number}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ state: 'closed' }),
+      });
+    }
+  }
+
+  // Ensure the morning-scan label exists
+  await fetch(`${GITHUB_API}/repos/${REPO_OWNER}/${REPO_NAME}/labels`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ name: 'morning-scan', color: '7B68EE', description: 'Daily vibe audit scan results' }),
+  });
+
+  // Create the new issue
+  const issueRes = await fetch(`${GITHUB_API}/repos/${REPO_OWNER}/${REPO_NAME}/issues`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      title,
+      body,
+      labels: ['morning-scan'],
+    }),
+  });
+
+  if (!issueRes.ok) {
+    const err = await issueRes.text();
+    console.error(`Failed to create issue: ${issueRes.status} ${err}`);
+    process.exit(1);
+  }
+
+  const issue = await issueRes.json();
+  console.log(`Created issue #${issue.number}: ${issue.html_url}`);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

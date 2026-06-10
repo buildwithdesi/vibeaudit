@@ -26,6 +26,7 @@ import { ALL_RULES } from '../src/rules/index.js';
 import { CWE_MAP } from '../src/data/cwe-map.js';
 import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
 import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
+import { scanOrg, formatOrgReportMarkdown, formatOrgReportTerminal } from '../src/org-scanner.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -38,6 +39,10 @@ const { values, positionals } = parseArgs({
     'fix-file': { type: 'boolean' },
     'skip-sca': { type: 'boolean' },
     deep: { type: 'boolean' },
+    org: { type: 'string' },
+    concurrency: { type: 'string' },
+    'include-forks': { type: 'boolean' },
+    'include-archived': { type: 'boolean' },
     'list-rules': { type: 'boolean' },
     help: { type: 'boolean', short: 'h' },
     version: { type: 'boolean', short: 'v' },
@@ -62,6 +67,10 @@ ${bold('OPTIONS')}
   ${cyan('--fix-file')}                              Only save fix file (no terminal prompts)
   ${cyan('--skip-sca')}                              Skip dependency vulnerability scanning
   ${cyan('--deep')}                                  Enable deep scanning (git history secrets)
+  ${cyan('--org')} <owner>                            Scan ALL repos for a GitHub user/org
+  ${cyan('--concurrency')} <n>                        Parallel repo scans for --org ${dim('(default: 5)')}
+  ${cyan('--include-forks')}                          Include forked repos in --org scan
+  ${cyan('--include-archived')}                       Include archived repos in --org scan
   ${cyan('--list-rules')}                            Show all available rules
   ${cyan('-h, --help')}                              Show this help
   ${cyan('-v, --version')}                           Show version
@@ -76,6 +85,10 @@ ${bold('EXAMPLES')}
   ${dim('# Audit a GitHub repo directly')}
   npx vibe-audit https://github.com/user/repo
   npx vibe-audit user/repo
+
+  ${dim('# Scan ALL repos for a user/org (morning scan)')}
+  npx vibe-audit --org jackdog668
+  npx vibe-audit --org jackdog668 --format json
 
   ${dim('# Get fix prompts for your AI tool')}
   npx vibe-audit --fix
@@ -132,6 +145,38 @@ if (values['list-rules']) {
   }
 
   process.exit(0);
+}
+
+// ─── Org Scan ─────────────────────────────────────────────────────────────────
+
+if (values.org) {
+  const format = values.format || 'terminal';
+  const orgOptions = {
+    rules: values.rules?.split(',').filter(Boolean),
+    exclude: values.exclude?.split(',').filter(Boolean),
+    concurrency: parseInt(values.concurrency || process.env.SCAN_CONCURRENCY || '5', 10),
+    includeArchived: values['include-archived'] || false,
+    includeForks: values['include-forks'] || (process.env.SCAN_INCLUDE_FORKS === 'true'),
+    onProgress: format === 'json' ? () => {} : (msg) => console.error(dim(`  ${msg}`)),
+  };
+
+  try {
+    const report = await scanOrg(values.org, orgOptions);
+
+    if (format === 'json') {
+      console.log(JSON.stringify(report, null, 2));
+    } else if (format === 'markdown') {
+      console.log(formatOrgReportMarkdown(report));
+    } else {
+      formatOrgReportTerminal(report);
+    }
+
+    const exitCode = report.totals.critical > 0 ? 1 : 0;
+    process.exit(exitCode);
+  } catch (err) {
+    console.error(red(`\n  Error: ${err.message}\n`));
+    process.exit(2);
+  }
 }
 
 // ─── Run Audit ────────────────────────────────────────────────────────────────
