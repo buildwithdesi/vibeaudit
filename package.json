@@ -25,6 +25,8 @@
     "audit:self": "node bin/vibe-audit.js .",
     "ui": "node src/web/server.js",
     "ui:dev": "node --watch src/web/server.js",
+    "scan": "node scripts/morning-scan.js",
+    "scan:discover": "node scripts/morning-scan.js --discover",
     "prepublishOnly": "npm test && npm run lint"
   },
   "keywords": [
