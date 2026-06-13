@@ -1,0 +1,28 @@
+{
+  "summary": {
+    "total": 1,
+    "critical": 0,
+    "warning": 1,
+    "info": 0,
+    "filesScanned": 20,
+    "rulesRun": 80,
+    "durationMs": 321
+  },
+  "findings": [
+    {
+      "ruleId": "missing-security-headers",
+      "ruleName": "Missing Security Headers",
+      "severity": "warning",
+      "message": "Config file is missing security headers: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy",
+      "file": "vite.config.ts",
+      "line": 1,
+      "evidence": "Missing: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy",
+      "fix": "Add security headers to your deployment config or middleware. At minimum set: Content-Security-Policy, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Strict-Transport-Security, and Referrer-Policy: strict-origin-when-cross-origin.",
+      "cweId": "CWE-693",
+      "cvssScore": 4.3,
+      "owaspCategory": "A05:2021",
+      "prompt": "SECURITY FIX: My deployment is missing security headers. Add these headers in your middleware or deployment config: Content-Security-Policy (controls what resources can load), X-Frame-Options: DENY (prevents clickjacking), X-Content-Type-Options: nosniff (prevents MIME sniffing), Strict-Transport-Security: max-age=31536000 (forces HTTPS), Referrer-Policy: strict-origin-when-cross-origin. For Next.js: add to next.config.js headers(). For Vercel: add to vercel.json. For Express: use helmet middleware.",
+      "platformNotes": "Lovable/Base44: Platform may handle some headers. Replit: Add in your server config. Vercel/Netlify: Add to platform config files."
+    }
+  ]
+}

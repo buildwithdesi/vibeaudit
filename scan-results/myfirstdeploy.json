@@ -1,0 +1,28 @@
+{
+  "summary": {
+    "total": 1,
+    "critical": 0,
+    "warning": 1,
+    "info": 0,
+    "filesScanned": 2,
+    "rulesRun": 80,
+    "durationMs": 49
+  },
+  "findings": [
+    {
+      "ruleId": "missing-gitignore",
+      "ruleName": "Missing .gitignore Entries",
+      "severity": "warning",
+      "message": "\"node_modules\" (Dependencies directory) is not in .gitignore.",
+      "file": ".gitignore",
+      "line": 1,
+      "evidence": "Missing: node_modules",
+      "fix": "Add \"node_modules\" to your .gitignore to keep your repo clean and avoid accidentally committing unnecessary or sensitive files.",
+      "cweId": "CWE-538",
+      "cvssScore": 5.3,
+      "owaspCategory": "A05:2021",
+      "prompt": "SECURITY FIX: My .env file is not in .gitignore, which means my secrets will be committed to git. Add .env, .env.local, .env.production, .env.development, and .env.staging to .gitignore. Also add node_modules/ and .DS_Store if missing. If .env was already committed, run: git rm --cached .env && git commit -m \"Remove .env from tracking\". If it was pushed to a public repo, ROTATE ALL SECRETS immediately — they are compromised.",
+      "platformNotes": "Lovable/Base44/Canva Code: These platforms handle git internally — check platform settings for secret management. Replit: Use the Secrets tab instead of .env files."
+    }
+  ]
+}

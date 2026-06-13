@@ -1,0 +1,43 @@
+{
+  "summary": {
+    "total": 2,
+    "critical": 2,
+    "warning": 0,
+    "info": 0,
+    "filesScanned": 8,
+    "rulesRun": 80,
+    "durationMs": 104
+  },
+  "findings": [
+    {
+      "ruleId": "no-input-validation",
+      "ruleName": "No Input Validation",
+      "severity": "critical",
+      "message": "Direct innerHTML assignment — potential XSS vector",
+      "file": "js/history.js",
+      "line": 28,
+      "evidence": "list.innerHTML = `",
+      "fix": "Sanitize all user input before use. For HTML: use a sanitization library or textContent instead of innerHTML. For SQL: use parameterized queries. For shell: use allowlists, never interpolate user input into commands.",
+      "cweId": "CWE-20",
+      "cvssScore": 8.6,
+      "owaspCategory": "A03:2021",
+      "prompt": "SECURITY FIX: User input is used without sanitization — this creates XSS, SQL injection, and command injection vulnerabilities. Find all instances of: innerHTML (replace with textContent), eval() (remove entirely), SQL string concatenation (use parameterized queries), and shell exec with user input (use allowlists). For each one, sanitize the input before use. Never trust anything from the user — validate type, length, and format on the server side.",
+      "platformNotes": "All platforms: React/JSX already prevents XSS by default (don't use dangerouslySetInnerHTML). Lovable/Base44: The framework handles most sanitization but check for raw HTML insertion."
+    },
+    {
+      "ruleId": "no-input-validation",
+      "ruleName": "No Input Validation",
+      "severity": "critical",
+      "message": "Direct innerHTML assignment — potential XSS vector",
+      "file": "js/history.js",
+      "line": 37,
+      "evidence": "list.innerHTML = \"\";",
+      "fix": "Sanitize all user input before use. For HTML: use a sanitization library or textContent instead of innerHTML. For SQL: use parameterized queries. For shell: use allowlists, never interpolate user input into commands.",
+      "cweId": "CWE-20",
+      "cvssScore": 8.6,
+      "owaspCategory": "A03:2021",
+      "prompt": "SECURITY FIX: User input is used without sanitization — this creates XSS, SQL injection, and command injection vulnerabilities. Find all instances of: innerHTML (replace with textContent), eval() (remove entirely), SQL string concatenation (use parameterized queries), and shell exec with user input (use allowlists). For each one, sanitize the input before use. Never trust anything from the user — validate type, length, and format on the server side.",
+      "platformNotes": "All platforms: React/JSX already prevents XSS by default (don't use dangerouslySetInnerHTML). Lovable/Base44: The framework handles most sanitization but check for raw HTML insertion."
+    }
+  ]
+}

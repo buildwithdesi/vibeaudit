@@ -1,0 +1,88 @@
+{
+  "summary": {
+    "total": 5,
+    "critical": 4,
+    "warning": 1,
+    "info": 0,
+    "filesScanned": 4,
+    "rulesRun": 80,
+    "durationMs": 42
+  },
+  "findings": [
+    {
+      "ruleId": "missing-gitignore",
+      "ruleName": "Missing .gitignore Entries",
+      "severity": "critical",
+      "message": "\".env\" (Environment variables file) is not in .gitignore — will be committed to git.",
+      "file": ".gitignore",
+      "line": 1,
+      "evidence": "Missing: .env",
+      "fix": "Add \".env\" to your .gitignore file immediately. If you've already committed it, the file is in git history even after deletion. Run: \"git rm --cached .env\" then add to .gitignore. If pushed to a public repo, rotate ALL secrets in that file — they are compromised.",
+      "cweId": "CWE-538",
+      "cvssScore": 5.3,
+      "owaspCategory": "A05:2021",
+      "prompt": "SECURITY FIX: My .env file is not in .gitignore, which means my secrets will be committed to git. Add .env, .env.local, .env.production, .env.development, and .env.staging to .gitignore. Also add node_modules/ and .DS_Store if missing. If .env was already committed, run: git rm --cached .env && git commit -m \"Remove .env from tracking\". If it was pushed to a public repo, ROTATE ALL SECRETS immediately — they are compromised.",
+      "platformNotes": "Lovable/Base44/Canva Code: These platforms handle git internally — check platform settings for secret management. Replit: Use the Secrets tab instead of .env files."
+    },
+    {
+      "ruleId": "missing-gitignore",
+      "ruleName": "Missing .gitignore Entries",
+      "severity": "critical",
+      "message": "\".env.local\" (Local environment overrides) is not in .gitignore — will be committed to git.",
+      "file": ".gitignore",
+      "line": 1,
+      "evidence": "Missing: .env.local",
+      "fix": "Add \".env.local\" to your .gitignore file immediately. If you've already committed it, the file is in git history even after deletion. Run: \"git rm --cached .env.local\" then add to .gitignore. If pushed to a public repo, rotate ALL secrets in that file — they are compromised.",
+      "cweId": "CWE-538",
+      "cvssScore": 5.3,
+      "owaspCategory": "A05:2021",
+      "prompt": "SECURITY FIX: My .env file is not in .gitignore, which means my secrets will be committed to git. Add .env, .env.local, .env.production, .env.development, and .env.staging to .gitignore. Also add node_modules/ and .DS_Store if missing. If .env was already committed, run: git rm --cached .env && git commit -m \"Remove .env from tracking\". If it was pushed to a public repo, ROTATE ALL SECRETS immediately — they are compromised.",
+      "platformNotes": "Lovable/Base44/Canva Code: These platforms handle git internally — check platform settings for secret management. Replit: Use the Secrets tab instead of .env files."
+    },
+    {
+      "ruleId": "missing-gitignore",
+      "ruleName": "Missing .gitignore Entries",
+      "severity": "critical",
+      "message": "\".env.production\" (Production secrets) is not in .gitignore — will be committed to git.",
+      "file": ".gitignore",
+      "line": 1,
+      "evidence": "Missing: .env.production",
+      "fix": "Add \".env.production\" to your .gitignore file immediately. If you've already committed it, the file is in git history even after deletion. Run: \"git rm --cached .env.production\" then add to .gitignore. If pushed to a public repo, rotate ALL secrets in that file — they are compromised.",
+      "cweId": "CWE-538",
+      "cvssScore": 5.3,
+      "owaspCategory": "A05:2021",
+      "prompt": "SECURITY FIX: My .env file is not in .gitignore, which means my secrets will be committed to git. Add .env, .env.local, .env.production, .env.development, and .env.staging to .gitignore. Also add node_modules/ and .DS_Store if missing. If .env was already committed, run: git rm --cached .env && git commit -m \"Remove .env from tracking\". If it was pushed to a public repo, ROTATE ALL SECRETS immediately — they are compromised.",
+      "platformNotes": "Lovable/Base44/Canva Code: These platforms handle git internally — check platform settings for secret management. Replit: Use the Secrets tab instead of .env files."
+    },
+    {
+      "ruleId": "missing-gitignore",
+      "ruleName": "Missing .gitignore Entries",
+      "severity": "critical",
+      "message": "\".env.development\" (Development secrets) is not in .gitignore — will be committed to git.",
+      "file": ".gitignore",
+      "line": 1,
+      "evidence": "Missing: .env.development",
+      "fix": "Add \".env.development\" to your .gitignore file immediately. If you've already committed it, the file is in git history even after deletion. Run: \"git rm --cached .env.development\" then add to .gitignore. If pushed to a public repo, rotate ALL secrets in that file — they are compromised.",
+      "cweId": "CWE-538",
+      "cvssScore": 5.3,
+      "owaspCategory": "A05:2021",
+      "prompt": "SECURITY FIX: My .env file is not in .gitignore, which means my secrets will be committed to git. Add .env, .env.local, .env.production, .env.development, and .env.staging to .gitignore. Also add node_modules/ and .DS_Store if missing. If .env was already committed, run: git rm --cached .env && git commit -m \"Remove .env from tracking\". If it was pushed to a public repo, ROTATE ALL SECRETS immediately — they are compromised.",
+      "platformNotes": "Lovable/Base44/Canva Code: These platforms handle git internally — check platform settings for secret management. Replit: Use the Secrets tab instead of .env files."
+    },
+    {
+      "ruleId": "missing-gitignore",
+      "ruleName": "Missing .gitignore Entries",
+      "severity": "warning",
+      "message": "\"node_modules\" (Dependencies directory) is not in .gitignore.",
+      "file": ".gitignore",
+      "line": 1,
+      "evidence": "Missing: node_modules",
+      "fix": "Add \"node_modules\" to your .gitignore to keep your repo clean and avoid accidentally committing unnecessary or sensitive files.",
+      "cweId": "CWE-538",
+      "cvssScore": 5.3,
+      "owaspCategory": "A05:2021",
+      "prompt": "SECURITY FIX: My .env file is not in .gitignore, which means my secrets will be committed to git. Add .env, .env.local, .env.production, .env.development, and .env.staging to .gitignore. Also add node_modules/ and .DS_Store if missing. If .env was already committed, run: git rm --cached .env && git commit -m \"Remove .env from tracking\". If it was pushed to a public repo, ROTATE ALL SECRETS immediately — they are compromised.",
+      "platformNotes": "Lovable/Base44/Canva Code: These platforms handle git internally — check platform settings for secret management. Replit: Use the Secrets tab instead of .env files."
+    }
+  ]
+}
