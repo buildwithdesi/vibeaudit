@@ -17,6 +17,9 @@ const DEFAULTS = {
   exclude: [],
   format: 'terminal',
   strict: false,
+  customEscapers: [],
+  customAuthGuards: [],
+  disableForPaths: {},
 };
 
 /**
@@ -42,6 +45,9 @@ export async function loadConfig(projectRoot) {
         ? parsed.format
         : DEFAULTS.format,
       strict: typeof parsed.strict === 'boolean' ? parsed.strict : DEFAULTS.strict,
+      customEscapers: Array.isArray(parsed.customEscapers) ? parsed.customEscapers : DEFAULTS.customEscapers,
+      customAuthGuards: Array.isArray(parsed.customAuthGuards) ? parsed.customAuthGuards : DEFAULTS.customAuthGuards,
+      disableForPaths: parsed.disableForPaths && typeof parsed.disableForPaths === 'object' ? parsed.disableForPaths : DEFAULTS.disableForPaths,
     };
   } catch {
     // No config file or invalid JSON — use defaults.

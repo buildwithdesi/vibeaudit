@@ -1,28 +1,21 @@
 /**
  * Rule: nextjs-server-action-exposure
- * Detects Next.js server actions that lack authentication checks.
- * Server actions marked with "use server" are callable from the client
- * and must validate the caller's identity.
+ * Detects Next.js server actions that lack authentication checks. Server
+ * actions are callable from the client and must validate the caller.
+ *
+ * Context-aware: only EXPORTED functions are flagged (non-exported helpers
+ * aren't client-callable), and auth detection recognizes custom/imported
+ * guards and wrapper functions.
  */
 
 /** @typedef {import('./types.js').Rule} Rule */
 
-import { parseSource, findFunctions, containsCall, containsNode, getLine, isParseable } from '../ast.js';
+import { parseSource, isParseable, findExportedFunctions, collectImportedNames, callsAuthGuard } from '../ast.js';
 
 const USE_SERVER = /['"]use server['"]/;
 const SERVER_ACTION_FILE = /(?:actions|server-actions?)\.(js|ts|jsx|tsx)$/i;
 const SKIP = /(?:\.test\.|\.spec\.|__tests__|node_modules|src\/rules\/)/i;
-
-function hasAuthCheckAST(body) {
-  if (containsCall(body, /^(?:getServerSession|getSession|auth|getAuth|requireAuth|isAuthenticated|authenticate|withAuth|currentUser|getUser|verifyToken|getToken|clerkClient)$/i)) return true;
-  if (containsNode(body, (node) => {
-    if (node.type !== 'MemberExpression') return false;
-    const prop = node.property;
-    if (prop.type !== 'Identifier') return false;
-    return /^(?:user|auth|userId)$/.test(prop.name);
-  })) return true;
-  return false;
-}
+const FILE_LEVEL_AUTH = /(?:getServerSession|getSession|auth\(\)|require\w*auth\w*|currentUser|getUser|session\.user|clerkClient|verify\w*token)/i;
 
 /** @type {Rule} */
 export const nextjsServerActionExposure = {
@@ -41,41 +34,41 @@ export const nextjsServerActionExposure = {
     const ast = parseSource(file.content);
     if (!ast) return [];
 
+    const imported = collectImportedNames(ast);
+    const exported = findExportedFunctions(ast);
+
     const findings = [];
-    const fns = findFunctions(ast);
+    for (const fn of exported) {
+      if (callsAuthGuard(fn.body, imported, file._config?.customAuthGuards)) continue;
 
-    for (const fn of fns) {
-      if (!fn.name) continue;
-      // Only check exported async functions (server actions pattern)
-      if (hasAuthCheckAST(fn.body || fn.node.body || fn.node)) continue;
-
+      const line = fn.loc?.start?.line || 1;
       findings.push({
         ruleId: 'nextjs-server-action-exposure',
         ruleName: 'Next.js Server Action Exposure',
         severity: 'critical',
         message: `Server action "${fn.name}" has no authentication check. Anyone can call it.`,
         file: file.relativePath,
-        line: fn.loc?.start?.line || getLine(fn.node) || 1,
-        evidence: file.lines[(fn.loc?.start?.line || getLine(fn.node) || 1) - 1]?.trim().slice(0, 120),
-        fix: 'Add auth at the top of every server action: "const session = await getServerSession(); if (!session) throw new Error(\'Unauthorized\');".',
+        line,
+        evidence: file.lines[line - 1]?.trim().slice(0, 120),
+        fix: 'Add auth at the top of every exported server action (e.g. "const session = await getServerSession(); if (!session) throw new Error(\'Unauthorized\');") or wrap it with your auth guard. If it is intentionally public, add "// vibe-audit-ignore-next-line nextjs-server-action-exposure".',
       });
     }
 
-    // Regex fallback — file-level check
-    if (findings.length === 0 && hasDirective) {
-      const hasAnyAuth = /(?:getServerSession|getSession|auth\(\)|requireAuth|currentUser|getUser|session\.user)/i.test(file.content);
-      if (!hasAnyAuth) {
-        const lineIdx = file.lines.findIndex((l) => USE_SERVER.test(l));
-        findings.push({
-          ruleId: 'nextjs-server-action-exposure',
-          ruleName: 'Next.js Server Action Exposure',
-          severity: 'critical',
-          message: 'File uses "use server" directive but contains no authentication checks.',
-          file: file.relativePath,
-          line: lineIdx + 1,
-          fix: 'Add authentication checks to every exported function in this server action file.',
-        });
-      }
+    // If we found exported functions, trust that result (precise per-function check).
+    if (exported.length > 0) return findings;
+
+    // Fallback: a "use server" file we couldn't resolve into exports, with no auth anywhere.
+    if (hasDirective && !FILE_LEVEL_AUTH.test(file.content)) {
+      const lineIdx = file.lines.findIndex((l) => USE_SERVER.test(l));
+      findings.push({
+        ruleId: 'nextjs-server-action-exposure',
+        ruleName: 'Next.js Server Action Exposure',
+        severity: 'critical',
+        message: 'File uses "use server" directive but contains no authentication checks.',
+        file: file.relativePath,
+        line: lineIdx + 1,
+        fix: 'Add authentication checks to every exported function in this server action file.',
+      });
     }
 
     return findings;
