@@ -14,7 +14,7 @@ import { parseSource, isParseable, findExportedFunctions, collectImportedNames, 
 
 const USE_SERVER = /['"]use server['"]/;
 const SERVER_ACTION_FILE = /(?:actions|server-actions?)\.(js|ts|jsx|tsx)$/i;
-const SKIP = /(?:\.test\.|\.spec\.|__tests__|node_modules|src\/rules\/)/i;
+const SKIP = /(?:\.test\.|\.spec\.|__tests__|node_modules|fixtures\/|src\/rules\/)/i;
 const FILE_LEVEL_AUTH = /(?:getServerSession|getSession|auth\(\)|require\w*auth\w*|currentUser|getUser|session\.user|clerkClient|verify\w*token)/i;
 
 /** @type {Rule} */

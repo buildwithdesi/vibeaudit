@@ -123,3 +123,31 @@ export function escaperRegex(escapers) {
   const names = escapers.map((e) => e.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
   return new RegExp(`(?:${names})\\s*[.(]`, 'i');
 }
+
+/** Key/env-var names that are DESIGNED to ship to the browser (publishable, analytics, etc.). */
+const PUBLIC_KEY_ALLOW =
+  /PUBLISHABLE|MAPBOX|POSTHOG|GOOGLE_?MAPS|MAPS_API_KEY|RECAPTCHA_SITE|HCAPTCHA_SITE|TURNSTILE_SITE|ANON_KEY|SUPABASE_ANON|ALGOLIA_(?:APP|SEARCH)|SENTRY_DSN|MEASUREMENT_ID|MIXPANEL|AMPLITUDE|SEGMENT_WRITE|GA_TRACKING|GTAG/i;
+
+/** ...unless the name ALSO carries a genuinely sensitive marker (then it's still a leak). */
+const KEY_STILL_DANGEROUS =
+  /SECRET|PRIVATE|SERVICE_ROLE|SERVICE_KEY|PASSWORD|PASSWD|ADMIN_KEY|MASTER_KEY|DATABASE_URL|DB_PASSWORD/i;
+
+/**
+ * Is this key/env-var name one that is intentionally public (safe in a client
+ * bundle)? e.g. CLERK_PUBLISHABLE_KEY, NEXT_PUBLIC_MAPBOX_TOKEN, POSTHOG_KEY.
+ * A GEMINI/STRIPE_SECRET/etc. key is NOT public and stays flagged.
+ *
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function isDesignedPublicKey(name) {
+  return PUBLIC_KEY_ALLOW.test(name) && !KEY_STILL_DANGEROUS.test(name);
+}
+
+/**
+ * Route paths that are public by convention — auth is not expected, so flagging
+ * them as "missing auth" is noise. Webhooks authenticate by signature (a
+ * separate rule covers that), so they're excluded here too.
+ */
+export const PUBLIC_ROUTE_CONVENTION =
+  /(?:^|\/)(?:manifest|sitemap|robots|rss|feed|og|opengraph|icon|favicon|health|healthz|ping|status|version|webhooks?)(?:[.-][\w.-]*)?(?:\/|$)|\/public\//i;

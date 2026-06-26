@@ -13,6 +13,7 @@
 /** @typedef {import('./types.js').Rule} Rule */
 
 import { parseSource, isParseable, walk, callsAuthGuard, collectImportedNames } from '../ast.js';
+import { PUBLIC_ROUTE_CONVENTION } from '../context.js';
 
 const HTTP_METHOD = /^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/;
 
@@ -64,7 +65,7 @@ const AUTH_REGEX = [
 ];
 
 const API_FILES = /(?:api\/|routes\/|server\/|functions\/|\.server\.|pages\/api\/|app\/api\/)/i;
-const SKIP = /(?:\.test\.|\.spec\.|__tests__|src\/rules\/)/i;
+const SKIP = /(?:\.test\.|\.spec\.|__tests__|fixtures\/|src\/rules\/)/i;
 
 /** @type {Rule} */
 export const missingAuth = {
@@ -76,6 +77,8 @@ export const missingAuth = {
   check(file) {
     if (!API_FILES.test(file.relativePath)) return [];
     if (SKIP.test(file.relativePath)) return [];
+    // Public-by-convention routes (manifest, sitemap, og-image, /public/, webhooks) don't need auth.
+    if (PUBLIC_ROUTE_CONVENTION.test(file.relativePath)) return [];
 
     if (isParseable(file.relativePath)) {
       const ast = parseSource(file.content);

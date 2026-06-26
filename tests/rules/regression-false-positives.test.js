@@ -18,6 +18,8 @@ import { nextjsServerActionExposure } from '../../src/rules/nextjs-server-action
 import { noInputValidation } from '../../src/rules/no-input-validation.js';
 import { dangerouslySetInnerHtml } from '../../src/rules/dangerously-set-inner-html.js';
 import { clientSideDbAccess } from '../../src/rules/client-side-db-access.js';
+import { clientBundleSecrets } from '../../src/rules/client-bundle-secrets.js';
+import { exposedEnvVars } from '../../src/rules/exposed-env-vars.js';
 import { isSuppressed, pathDisabledFor } from '../../src/suppress.js';
 
 /** Build a FileContext like the scanner passes to rules. */
@@ -181,5 +183,37 @@ describe('suppression', () => {
     assert.equal(pathDisabledFor(config, 'missing-auth', 'public/api.js'), true);
     assert.equal(pathDisabledFor(config, 'missing-auth', 'src/api.js'), false);
     assert.equal(pathDisabledFor(config, 'other', 'public/api.js'), false);
+  });
+});
+
+describe('FP fix: designed-public keys', () => {
+  it('does NOT flag publishable / analytics keys', () => {
+    assert.equal(clientBundleSecrets.check(mk('src/App.tsx', `const k = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;`)).length, 0);
+    assert.equal(clientBundleSecrets.check(mk('src/components/Map.tsx', `const t = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;`)).length, 0);
+    assert.equal(exposedEnvVars.check(mk('.env', `NEXT_PUBLIC_MAPBOX_TOKEN=pk.y\nNEXT_PUBLIC_POSTHOG_KEY=phc_x`)).length, 0);
+  });
+
+  it('STILL flags real secrets in client env', () => {
+    assert.ok(clientBundleSecrets.check(mk('src/App.tsx', `const k = import.meta.env.VITE_GEMINI_API_KEY;`)).length >= 1);
+    assert.ok(exposedEnvVars.check(mk('.env', `NEXT_PUBLIC_STRIPE_SECRET=sk_live_x\nREACT_APP_DATABASE_URL=postgres://u:p@h/db`)).length >= 1);
+  });
+});
+
+describe('FP fix: public-by-convention routes (missing-auth)', () => {
+  it('does NOT flag manifest / og / public / fixtures', () => {
+    for (const p of [
+      'src/app/api/manifest/route.ts',
+      'src/app/api/og/route.tsx',
+      'src/app/api/library/public/clips/route.ts',
+      'tests/fixtures/api/demo.js',
+    ]) {
+      const file = mk(p, `export async function GET() { return Response.json({}); }`);
+      assert.equal(missingAuth.check(file).length, 0, `should not flag ${p}`);
+    }
+  });
+
+  it('STILL flags a normal unauthed mutation route', () => {
+    const file = mk('src/app/api/account/route.ts', `export async function DELETE(req) { await db.deleteUser(); return Response.json({}); }`);
+    assert.ok(missingAuth.check(file).some((f) => f.ruleId === 'missing-auth'));
   });
 });
