@@ -279,7 +279,10 @@ Drop a `.vibe-audit.json` in your project root:
   "ignore": ["legacy/", "vendor/"],
   "exclude": ["predictable-ids"],
   "format": "terminal",
-  "strict": false
+  "strict": false,
+  "customEscapers": ["myEscapeHtml"],
+  "customAuthGuards": ["requireAuthedApiFromReq"],
+  "disableForPaths": { "missing-auth": ["^public/"] }
 }
 ```
 
@@ -290,8 +293,26 @@ Drop a `.vibe-audit.json` in your project root:
 | `exclude` | string[] | `[]` | Skip these rules |
 | `format` | string | `"terminal"` | `terminal`, `json`, `markdown`, or `html` |
 | `strict` | boolean | `false` | Exit 1 on warnings too |
+| `customEscapers` | string[] | `[]` | Extra HTML escaper/sanitizer names that make `innerHTML` / `dangerouslySetInnerHTML` safe |
+| `customAuthGuards` | string[] | `[]` | Extra auth-guard function names that satisfy `missing-auth` / server-action checks |
+| `disableForPaths` | object | `{}` | Per-rule path patterns to skip, e.g. `{ "rule-id": ["^public/"] }` |
 
 CLI flags override config file values.
+
+### Suppressing a finding
+
+When a finding is a false positive, silence it inline with a comment — no config needed:
+
+```js
+// vibe-audit-ignore-next-line missing-auth
+export async function GET(req) { /* intentionally public */ }
+
+const admin = createServiceRoleClient(); // vibe-audit-ignore supabase-service-key-client
+```
+
+A bare `// vibe-audit-ignore` (no rule id) suppresses every rule on that line; comma-separate ids to silence several.
+
+> **Note on framework awareness:** Vibe Audit understands Next.js App Router context. A file is treated as **server** by default — importing React does not make it "client." Server-only code (`import 'server-only'`, route handlers, `'use server'`) is exempt from client-exposure rules, and auth guards imported from your own libs are recognized automatically.
 
 ---
 

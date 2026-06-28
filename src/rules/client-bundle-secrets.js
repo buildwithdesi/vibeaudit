@@ -8,6 +8,8 @@
 
 /** @typedef {import('./types.js').Rule} Rule */
 
+import { isDesignedPublicKey } from '../context.js';
+
 /** Client-side file patterns — these get bundled and sent to the browser. */
 const CLIENT_FILE_PATTERNS = /(?:^src\/(?:components|pages|app|views|layouts|hooks|context|lib\/client)|\.client\.|\/client\/|^app\/|^pages\/(?!api\/))/i;
 
@@ -81,6 +83,8 @@ export const clientBundleSecrets = {
           regex.lastIndex = 0;
           let match;
           while ((match = regex.exec(line)) !== null) {
+            // Publishable / analytics keys are meant to be in the browser.
+            if (isDesignedPublicKey(match[0])) continue;
             findings.push({
               ruleId: 'client-bundle-secrets',
               ruleName: 'Client Bundle Secrets',

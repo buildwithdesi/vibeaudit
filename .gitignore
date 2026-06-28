@@ -7,3 +7,8 @@ Thumbs.db
 .env.*
 !.env.example
 VIBE-AUDIT-FIXES.md
+
+# Morning-scan output is committed for history: the .md summary AND the .json
+# detail (per-repo findings with file:line). Do NOT ignore reports/ — only
+# transient scratch files.
+reports/*.tmp
