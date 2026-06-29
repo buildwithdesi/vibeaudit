@@ -1,0 +1,103 @@
+# Vibe Audit Morning Scan
+
+**Monday, June 29, 2026** | 12 public repos scanned | 150 private repos blocked (token scope) | 58.5s
+
+## Portfolio Health
+
+| Grade | Count | |
+|-------|-------|-|
+| A | 6 | Clean |
+| B | 1 | Minor warnings |
+| C | 1 | Multiple warnings |
+| D | 1 | Many warnings |
+| F | 3 | Critical findings |
+
+**Total: 97 criticals, 80 warnings across 12 repos**
+
+> **Note:** 150 private repos could not be scanned. This session's GitHub token is scoped only to `jackdog668/vibeaudit`. To scan all repos, add a Personal Access Token (PAT) with `repo` scope as `SCAN_TOKEN` in GitHub Actions secrets, or run locally with `GITHUB_TOKEN=ghp_xxx node scripts/morning-scan.js --discover`.
+
+## All Results
+
+| Repo | Grade | Critical | Warning | Info |
+|------|-------|----------|---------|------|
+| jackdog668/Siftly | F | 34 | 41 | 1 |
+| jackdog668/vibeaudit | F | 62 | 26 | 0 |
+| jackdog668/vibe-vocab | F | 1 | 3 | 0 |
+| jackdog668/a-silly-idea | D | 0 | 7 | 0 |
+| jackdog668/sierrabakerconsulting | C | 0 | 2 | 0 |
+| jackdog668/da-video-tool | B | 0 | 1 | 0 |
+| jackdog668/vibe-tracker | A | 0 | 0 | 0 |
+| jackdog668/photo-organizer-da | A | 0 | 0 | 0 |
+| jackdog668/percolator-class-guide | A | 0 | 0 | 0 |
+| jackdog668/second-brain-system | A | 0 | 0 | 0 |
+| jackdog668/myfirstdeploy | A | 0 | 0 | 0 |
+| jackdog668/jackdog668 | A | 0 | 0 | 0 |
+
+## Critical Findings (action required)
+
+### jackdog668/Siftly — Grade F
+
+Real security issues — this app has **no authentication on any API route**:
+
+- **missing-auth**: Exported GET handler has no authentication check. (app/api/analyze/images/route.ts:8)
+- **missing-auth**: Exported POST handler has no authentication check. (app/api/analyze/images/route.ts:52)
+- **missing-auth**: Exported PUT handler has no authentication check. (app/api/analyze/route.ts)
+- **missing-auth**: Exported DELETE handler has no authentication check. (app/api/analyze/route.ts)
+- **missing-auth**: 30+ additional unprotected API endpoints
+- **missing-csrf**: Multiple Next.js mutation handlers without CSRF protection
+- **api-data-overfetch**: Prisma queries without select/include — returns ALL fields
+
+**Priority: HIGH.** If Siftly is deployed, anyone can call these API routes without logging in.
+
+### jackdog668/vibe-vocab — Grade F
+
+- **exposed-env-vars**: `VITE_DATABASE_URL` exposes a database connection string to the browser. The `VITE_` prefix makes this variable available in client-side JavaScript bundles.
+- **insecure-connections**: CORS allows all origins — any website can call the API
+- **no-pagination**: SQL SELECT without LIMIT clause — returns all matching rows
+- **missing-security-headers**: Missing Content-Security-Policy, X-Frame-Options
+
+**Priority: HIGH.** The `VITE_DATABASE_URL` leak means anyone viewing the page source can find the database connection string.
+
+### jackdog668/vibeaudit — Grade F (mostly false positives)
+
+62 criticals from `nextjs-server-action-exposure` firing on utility functions in `src/context.js` — these are **not** Next.js server actions, they're plain JS exports. This is a known false-positive pattern. The 3 real findings are dependency vulnerabilities:
+
+- **vulnerable-dependency**: `flatted@<=3.4.1` — Prototype Pollution via `parse()` (CVSS 7.5)
+- **vulnerable-dependency**: `brace-expansion@<1.1.13` — DoS via zero-step sequence (CVSS 7.5)
+- **vulnerable-dependency**: `js-yaml@<=4.1.1` — Quadratic DoS in merge key handling (CVSS 7.5)
+
+**Priority: LOW.** Run `npm audit fix` to resolve dep vulnerabilities. The context.js false positives should be suppressed or the rule refined.
+
+## Warnings
+
+### jackdog668/a-silly-idea — Grade D
+- **insecure-error-handling**: 7 empty catch blocks — errors silently swallowed
+
+### jackdog668/sierrabakerconsulting — Grade C
+- **missing-security-headers**: Missing Content-Security-Policy, X-Frame-Options
+- **deployment-config-insecure**: vercel.json has no security headers configured
+
+### jackdog668/da-video-tool — Grade B
+- **missing-security-headers**: Missing Content-Security-Policy, X-Frame-Options
+
+## Clean Repos (Grade A)
+
+- jackdog668/vibe-tracker
+- jackdog668/photo-organizer-da
+- jackdog668/percolator-class-guide
+- jackdog668/second-brain-system
+- jackdog668/myfirstdeploy
+- jackdog668/jackdog668
+
+## Private Repos (not scanned)
+
+150 private repos were not scanned because the session GitHub token is scoped to `vibeaudit` only. To enable full scanning:
+
+1. **GitHub Actions (recommended):** Create a fine-grained PAT with "Contents: Read" access to all your repos. Add it as `SCAN_TOKEN` in your vibeaudit repo secrets. The `.github/workflows/morning-scan.yml` workflow runs daily at 7 AM CT.
+
+2. **Local scan:** Run `GITHUB_TOKEN=ghp_xxx node scripts/morning-scan.js --discover` with a PAT that has repo access.
+
+3. **Claude Code routine:** Add a PAT as an environment variable in the Claude Code environment settings to enable the full scan from this routine.
+
+---
+*Generated by Vibe Audit v1.1.0 — 2026-06-29T09:30:00.000Z*
