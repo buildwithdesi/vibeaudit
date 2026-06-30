@@ -1,0 +1,134 @@
+{
+  "date": "2026-06-30",
+  "results": [
+    {
+      "repo": "jackdog668/a-silly-idea",
+      "grade": "D",
+      "criticals": 0,
+      "warnings": 7,
+      "infos": 0,
+      "total": 7,
+      "findings": [
+        {
+          "ruleId": "insecure-error-handling",
+          "ruleName": "Insecure Error Handling",
+          "severity": "warning",
+          "message": "Empty catch block — errors silently swallowed",
+          "file": "app.js",
+          "line": 682,
+          "evidence": "requestAnimationFrame(() => { try { panel.focus(); } catch (_) {} });",
+          "fix": "Return a generic error message to users (\"Something went wrong\"). Log full error details server-side only with console.error(). Never expose .stack or raw error objects in responses.",
+          "cweId": "CWE-209",
+          "cvssScore": 4.3,
+          "owaspCategory": "A09:2021"
+        },
+        {
+          "ruleId": "insecure-error-handling",
+          "ruleName": "Insecure Error Handling",
+          "severity": "warning",
+          "message": "Empty catch block — errors silently swallowed",
+          "file": "app.js",
+          "line": 687,
+          "evidence": "if (p && view === \"overview\") { p.hidden = true; const sky = el(\"sky\"); if (sky && sky.focus) try { sky.focus({ preventS",
+          "fix": "Return a generic error message to users (\"Something went wrong\"). Log full error details server-side only with console.error(). Never expose .stack or raw error objects in responses.",
+          "cweId": "CWE-209",
+          "cvssScore": 4.3,
+          "owaspCategory": "A09:2021"
+        },
+        {
+          "ruleId": "insecure-error-handling",
+          "ruleName": "Insecure Error Handling",
+          "severity": "warning",
+          "message": "Empty catch block — errors silently swallowed",
+          "file": "app.js",
+          "line": 692,
+          "evidence": "function setHash(id) { try { history.replaceState(null, \"\", `#idea/${id}`); } catch (_) {} }",
+          "fix": "Return a generic error message to users (\"Something went wrong\"). Log full error details server-side only with console.error(). Never expose .stack or raw error objects in responses.",
+          "cweId": "CWE-209",
+          "cvssScore": 4.3,
+          "owaspCategory": "A09:2021"
+        },
+        {
+          "ruleId": "insecure-error-handling",
+          "ruleName": "Insecure Error Handling",
+          "severity": "warning",
+          "message": "Empty catch block — errors silently swallowed",
+          "file": "app.js",
+          "line": 693,
+          "evidence": "function clearHash() { try { history.replaceState(null, \"\", location.pathname + location.search); } catch (_) {} }",
+          "fix": "Return a generic error message to users (\"Something went wrong\"). Log full error details server-side only with console.error(). Never expose .stack or raw error objects in responses.",
+          "cweId": "CWE-209",
+          "cvssScore": 4.3,
+          "owaspCategory": "A09:2021"
+        },
+        {
+          "ruleId": "clickjacking",
+          "ruleName": "Clickjacking Protection Missing",
+          "severity": "warning",
+          "message": "Headers are configured but X-Frame-Options/frame-ancestors is missing — vulnerable to clickjacking.",
+          "file": "app.js",
+          "line": 949,
+          "fix": "Add X-Frame-Options: DENY header, or use CSP frame-ancestors: 'none'. If using helmet: helmet() sets this by default.",
+          "cweId": "CWE-1021",
+          "cvssScore": 4.3,
+          "owaspCategory": "A05:2021"
+        },
+        {
+          "ruleId": "insecure-connections",
+          "ruleName": "Insecure Connections",
+          "severity": "warning",
+          "message": "Non-localhost HTTP URL — data sent unencrypted",
+          "file": "index.html",
+          "line": 16,
+          "evidence": "<link rel=\"icon\" href=\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='",
+          "fix": "Use HTTPS for all external connections. HTTP transmits data in plaintext — anyone on the network can read it.",
+          "cweId": "CWE-319",
+          "cvssScore": 5.3,
+          "owaspCategory": "A02:2021"
+        },
+        {
+          "ruleId": "insecure-connections",
+          "ruleName": "Insecure Connections",
+          "severity": "warning",
+          "message": "Non-localhost HTTP URL — data sent unencrypted",
+          "file": "styles.css",
+          "line": 75,
+          "evidence": "background-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter",
+          "fix": "Use HTTPS for all external connections. HTTP transmits data in plaintext — anyone on the network can read it.",
+          "cweId": "CWE-319",
+          "cvssScore": 5.3,
+          "owaspCategory": "A02:2021"
+        }
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "repo": "jackdog668/generator20x",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/screenshot-pools",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/sierra-baker-starter",
+      "error": "Not found / empty"
+    },
+    {
+      "repo": "jackdog668/second-brain-system",
+      "error": "Rate limited"
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "gradeA": 0,
+    "gradeB": 0,
+    "gradeC": 0,
+    "gradeD": 1,
+    "gradeF": 0,
+    "totalCriticals": 0,
+    "totalWarnings": 7,
+    "skipped": 4
+  }
+}
