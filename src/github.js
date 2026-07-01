@@ -104,15 +104,16 @@ export async function* fetchRepoFiles(owner, repo, { branch = 'HEAD' } = {}) {
     return SCAN_EXTENSIONS.has(ext) || ALWAYS_SCAN.has(name);
   });
 
-  // 2. Fetch each file's content (using blob API for efficiency).
+  // 2. Fetch each file's content via the Git Blobs API (works behind proxies
+  //    where raw.githubusercontent.com may be unreachable).
   for (const file of files) {
     try {
-      // Use the raw content endpoint for simplicity.
-      const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${file.path}`;
-      const fileRes = await fetch(rawUrl, { headers });
+      const blobUrl = `https://api.github.com/repos/${owner}/${repo}/git/blobs/${file.sha}`;
+      const fileRes = await fetch(blobUrl, { headers });
       if (!fileRes.ok) continue;
 
-      const content = await fileRes.text();
+      const blob = await fileRes.json();
+      const content = Buffer.from(blob.content, 'base64').toString('utf8');
       // Skip huge files (> 2 MB).
       if (content.length > 2 * 1024 * 1024) continue;
 

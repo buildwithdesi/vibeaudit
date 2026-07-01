@@ -1,0 +1,70 @@
+{
+  "date": "2026-07-01",
+  "scanMethod": "GitHub Blob API via proxy",
+  "reposScanned": 39,
+  "reposPending": 120,
+  "summary": {
+    "totalCriticals": 254,
+    "totalWarnings": 234,
+    "gradeDistribution": {
+      "A": 19,
+      "B": 3,
+      "C": 4,
+      "D": 1,
+      "F": 12
+    }
+  },
+  "results": [
+    {"repo": "jackdog668/vibe-vocab", "grade": "F", "criticals": 129, "warnings": 49, "info": 0},
+    {"repo": "jackdog668/da-tonight-video", "grade": "F", "criticals": 44, "warnings": 19, "info": 1},
+    {"repo": "jackdog668/content-drop", "grade": "F", "criticals": 42, "warnings": 81, "info": 7},
+    {"repo": "jackdog668/transformersgenerator", "grade": "F", "criticals": 12, "warnings": 11, "info": 0},
+    {"repo": "jackdog668/sierrabakerconsulting", "grade": "F", "criticals": 10, "warnings": 1, "info": 0},
+    {"repo": "jackdog668/Storefront", "grade": "F", "criticals": 4, "warnings": 42, "info": 5},
+    {"repo": "jackdog668/epic-meitner", "grade": "F", "criticals": 3, "warnings": 3, "info": 1},
+    {"repo": "jackdog668/chromatic-illusion-weaponizer", "grade": "F", "criticals": 3, "warnings": 3, "info": 0},
+    {"repo": "jackdog668/vibeaudit", "grade": "F", "criticals": 3, "warnings": 0, "info": 0, "note": "Test fixtures - expected"},
+    {"repo": "jackdog668/curious-labs-vol1", "grade": "F", "criticals": 2, "warnings": 1, "info": 0},
+    {"repo": "jackdog668/Skool-Forge", "grade": "F", "criticals": 1, "warnings": 3, "info": 0},
+    {"repo": "jackdog668/percolator-class-guide", "grade": "F", "criticals": 1, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/a-silly-idea", "grade": "D", "criticals": 0, "warnings": 7, "info": 0},
+    {"repo": "jackdog668/screenshot-pools", "grade": "C", "criticals": 0, "warnings": 3, "info": 0},
+    {"repo": "jackdog668/second-brain-system", "grade": "C", "criticals": 0, "warnings": 3, "info": 0},
+    {"repo": "jackdog668/myfirstdeploy", "grade": "C", "criticals": 0, "warnings": 3, "info": 0},
+    {"repo": "jackdog668/digitalalchemy-dev", "grade": "C", "criticals": 0, "warnings": 2, "info": 0},
+    {"repo": "jackdog668/digital-alchemy-freebies", "grade": "B", "criticals": 0, "warnings": 1, "info": 0},
+    {"repo": "jackdog668/file-manager", "grade": "B", "criticals": 0, "warnings": 1, "info": 0},
+    {"repo": "jackdog668/Digital-Alchemy-Command-Center", "grade": "B", "criticals": 0, "warnings": 1, "info": 0},
+    {"repo": "jackdog668/generator20x", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/sierra-baker-starter", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/homiedex", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/runofshow", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/shownotes1", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/shownotes2", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/shownotes3", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/shownotes4", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/shownotes5", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/shownotes6", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/Digital-Alchemy-Skool", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/tonightlesson2", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/thisone", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/thisone2", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/joyful-tesla", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/meet-corekind-digital-alchemy", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/outputs", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/da-video-tool", "grade": "A", "criticals": 0, "warnings": 0, "info": 0},
+    {"repo": "jackdog668/landingpage", "grade": "A", "criticals": 0, "warnings": 0, "info": 0}
+  ],
+  "codeSearchFindings": [
+    {
+      "repo": "jackdog668/digital-alchemy-os",
+      "severity": "critical",
+      "rule": "exposed-env-vars",
+      "file": "src/lib/gemini.ts",
+      "detail": "NEXT_PUBLIC_GEMINI_API_KEY ships API key to browser bundle",
+      "cvss": 7.5,
+      "cwe": "CWE-200"
+    }
+  ],
+  "infrastructureFix": "Patched src/github.js to use Git Blobs API instead of raw.githubusercontent.com for proxy compatibility"
+}
