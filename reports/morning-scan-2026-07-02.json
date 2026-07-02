@@ -1,0 +1,100 @@
+{
+  "date": "2026-07-02",
+  "results": [
+    {
+      "repo": "jackdog668/da-video-tool",
+      "grade": "B",
+      "criticals": 0,
+      "warnings": 1,
+      "infos": 0,
+      "total": 1,
+      "findings": [
+        {
+          "ruleId": "missing-security-headers",
+          "ruleName": "Missing Security Headers",
+          "severity": "warning",
+          "message": "Config file is missing security headers: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy",
+          "file": "vite.config.ts",
+          "line": 1,
+          "evidence": "Missing: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy",
+          "fix": "Add security headers to your deployment config or middleware. At minimum set: Content-Security-Policy, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Strict-Transport-Security, and Referrer-Policy: strict-origin-when-cross-origin.",
+          "cweId": "CWE-693",
+          "cvssScore": 4.3,
+          "owaspCategory": "A05:2021"
+        }
+      ]
+    },
+    {
+      "repo": "jackdog668/percolator-class-guide",
+      "grade": "A",
+      "criticals": 0,
+      "warnings": 0,
+      "infos": 0,
+      "total": 0,
+      "findings": []
+    },
+    {
+      "repo": "jackdog668/second-brain-system",
+      "grade": "A",
+      "criticals": 0,
+      "warnings": 0,
+      "infos": 0,
+      "total": 0,
+      "findings": []
+    },
+    {
+      "repo": "jackdog668/jackdog668",
+      "grade": "A",
+      "criticals": 0,
+      "warnings": 0,
+      "infos": 0,
+      "total": 0,
+      "findings": []
+    }
+  ],
+  "errors": [
+    {
+      "repo": "jackdog668/vibeaudit",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/sierrabakerconsulting",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/Siftly",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/vibe-tracker",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/photo-organizer-da",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/myfirstdeploy",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/a-silly-idea",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/vibe-vocab",
+      "error": "Rate limited"
+    }
+  ],
+  "summary": {
+    "total": 4,
+    "gradeA": 3,
+    "gradeB": 1,
+    "gradeC": 0,
+    "gradeD": 0,
+    "gradeF": 0,
+    "totalCriticals": 0,
+    "totalWarnings": 1,
+    "skipped": 8
+  }
+}
