@@ -35,24 +35,34 @@ const RATE_LIMIT_INDICATORS = [
 /** Only check server-side files. */
 const SERVER_FILE_PATTERNS = /(?:api\/|routes\/|server\/|functions\/|middleware|\.server\.|pages\/api\/)/i;
 
+/** Route names that are high-risk for brute-force or resource/cost abuse. */
+const HIGH_RISK_ROUTE_NAMES = /(?:login|signup|register|forgot|reset|checkout|pay|stripe|payment|chat|ai\/|generate|translate|openai|anthropic|claude|gemini)/i;
+
 /** @type {Rule} */
 export const missingRateLimiting = {
   id: 'missing-rate-limiting',
   name: 'Missing Rate Limiting',
   severity: 'warning',
-  description: 'Detects API routes calling paid services without rate limiting — a recipe for surprise bills.',
+  description: 'Detects API routes calling paid services or handling sensitive operations without rate limiting.',
 
   check(file) {
     if (!SERVER_FILE_PATTERNS.test(file.relativePath)) return [];
 
-    // Check if file calls any paid APIs.
+    // Check if file calls any paid APIs or is a high-risk endpoint.
     let callsPaidAPI = false;
     let paidAPIName = '';
-    for (const pattern of PAID_API_PATTERNS) {
-      if (pattern.test(file.content)) {
-        callsPaidAPI = true;
-        paidAPIName = file.content.match(pattern)?.[0] || 'paid API';
-        break;
+    const isHighRiskRoute = HIGH_RISK_ROUTE_NAMES.test(file.relativePath);
+
+    if (isHighRiskRoute) {
+      callsPaidAPI = true;
+      paidAPIName = 'high-risk route path';
+    } else {
+      for (const pattern of PAID_API_PATTERNS) {
+        if (pattern.test(file.content)) {
+          callsPaidAPI = true;
+          paidAPIName = file.content.match(pattern)?.[0] || 'paid API';
+          break;
+        }
       }
     }
 
@@ -63,16 +73,20 @@ export const missingRateLimiting = {
 
     if (hasRateLimiting) return [];
 
+    const message = isHighRiskRoute
+      ? `High-risk API route (path suggests auth, payments, or AI) has no rate limiting. A bot or abusive user could brute-force or abuse this endpoint.`
+      : `API route calls a paid service but has no rate limiting. A bot or abusive user could run up your bill.`;
+
     return [
       {
         ruleId: 'missing-rate-limiting',
         ruleName: 'Missing Rate Limiting',
         severity: 'warning',
-        message: `API route calls a paid service but has no rate limiting. A bot or abusive user could run up your bill.`,
+        message,
         file: file.relativePath,
         line: 1,
-        evidence: paidAPIName.slice(0, 80),
-        fix: `Add rate limiting before calling paid APIs. Use Upstash Ratelimit (serverless-friendly) or express-rate-limit. Set sensible per-user and global limits. Also consider adding spend alerts on your API provider dashboard.`,
+        evidence: isHighRiskRoute ? file.relativePath : paidAPIName.slice(0, 80),
+        fix: `Add rate limiting before calling paid APIs or exposing sensitive actions. Use Upstash Ratelimit (serverless-friendly) or express-rate-limit. Set sensible per-user and global limits.`,
       },
     ];
   },

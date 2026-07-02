@@ -460,3 +460,58 @@ export async function GET() {
     assert.equal(findings.length, 0);
   });
 });
+
+describe('hardened-rules-2026', () => {
+  it('vercel-env-leak catches VITE_ and PUBLIC_ secrets', () => {
+    const rule = ruleById('vercel-env-leak');
+    const file1 = makeFile('.env', 'VITE_STRIPE_SECRET_KEY=sk_test_123');
+    const findings1 = rule.check(file1);
+    assert.ok(findings1.length > 0, 'Should flag VITE_ prefix secret');
+    assert.ok(findings1[0].message.includes('VITE_STRIPE_SECRET_KEY'), 'Should name the variable in message');
+
+    const file2 = makeFile('.env', 'PUBLIC_DATABASE_URL=postgres://...');
+    const findings2 = rule.check(file2);
+    assert.ok(findings2.length > 0, 'Should flag PUBLIC_ prefix secret');
+  });
+
+  it('payment-amount-client catches unit_amount from request body', () => {
+    const rule = ruleById('payment-amount-client');
+    const file = makeFile('api/checkout.js', `
+      stripe.checkout.sessions.create({
+        line_items: [{
+          price_data: {
+            unit_amount: req.body.amount,
+            currency: 'usd'
+          }
+        }]
+      });
+    `);
+    const findings = rule.check(file);
+    assert.ok(findings.length > 0, 'Should flag client-provided unit_amount');
+  });
+
+  it('missing-rate-limiting flags high-risk paths without rate limiting', () => {
+    const rule = ruleById('missing-rate-limiting');
+    // Path includes 'checkout' but file content has no direct OpenAI/Stripe calls, still flags it
+    const file = makeFile('api/checkout/route.js', `
+      export async function POST(req) {
+        return Response.json({ ok: true });
+      }
+    `);
+    const findings = rule.check(file);
+    assert.ok(findings.length > 0, 'Should flag high-risk path missing rate limit');
+    assert.ok(findings[0].message.includes('High-risk API route'), 'Should have high-risk message');
+  });
+
+  it('missing-auth flags unauthenticated demo/debug endpoints with specific warnings', () => {
+    const rule = ruleById('missing-auth');
+    const file = makeFile('api/demo-login.js', `
+      export async function GET(req) {
+        return Response.json({ debug: true });
+      }
+    `);
+    const findings = rule.check(file);
+    assert.ok(findings.length > 0, 'Should flag missing auth in demo route');
+    assert.ok(findings[0].message.includes('Unauthenticated test/demo/debug endpoint'), 'Should have custom demo route warning');
+  });
+});

@@ -83,6 +83,8 @@ export const missingAuth = {
     if (!API_FILES.test(file.relativePath)) return [];
     if (SKIP.test(file.relativePath)) return [];
 
+    const isDemoRoute = /(?:demo|test|debug|sandbox)/i.test(file.relativePath);
+
     if (isParseable(file.relativePath)) {
       const ast = parseSource(file.content);
       if (ast) {
@@ -94,15 +96,21 @@ export const missingAuth = {
           if (hasAuthCheckAST(handler.body)) continue;
 
           const line = handler.loc?.start?.line || 1;
+          const message = isDemoRoute
+            ? `Unauthenticated test/demo/debug endpoint found: Exported ${handler.name} handler has no authentication check. Leaving unauthenticated test routes in production is a major vulnerability.`
+            : `Exported ${handler.name} handler has no authentication check.`;
+
           findings.push({
             ruleId: 'missing-auth',
             ruleName: 'Missing Authentication',
             severity: 'critical',
-            message: `Exported ${handler.name} handler has no authentication check.`,
+            message,
             file: file.relativePath,
             line,
             evidence: file.lines[line - 1]?.trim().slice(0, 120),
-            fix: `Add auth at the top: "const session = await getServerSession(); if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })".`,
+            fix: isDemoRoute
+              ? `Remove this test/demo endpoint before deploying, or secure it with proper authentication checks at the top: "const session = await getServerSession(); if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })".`
+              : `Add auth at the top: "const session = await getServerSession(); if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 })".`,
           });
         }
 
@@ -124,15 +132,21 @@ export const missingAuth = {
         hasRouteHandler = true;
         const upTo = file.content.slice(0, match.index);
         const lineNum = upTo.split('\n').length;
+        const message = isDemoRoute
+          ? `Unauthenticated test/demo/debug endpoint found: ${framework} route handler found with no authentication check in file. Leaving unauthenticated test routes in production is a major vulnerability.`
+          : `${framework} route handler found with no authentication check in file.`;
+
         findings.push({
           ruleId: 'missing-auth',
           ruleName: 'Missing Authentication',
           severity: 'critical',
-          message: `${framework} route handler found with no authentication check in file.`,
+          message,
           file: file.relativePath,
           line: lineNum,
           evidence: file.lines[lineNum - 1]?.trim(),
-          fix: `Add authentication before processing. Verify the user's session/token at the top of every handler.`,
+          fix: isDemoRoute
+            ? `Add authentication before processing, or delete this file. Ensure test/demo endpoints are either fully secured or deleted before production deployment.`
+            : `Add authentication before processing. Verify the user's session/token at the top of every handler.`,
         });
       }
     }

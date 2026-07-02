@@ -12,6 +12,10 @@ const API_FILES = /(?:api\/|routes\/|server\/|functions\/|\.server\.|pages\/api\
 const PAYMENT_AMOUNT_FROM_REQUEST = [
   // Stripe amount from request body
   { pattern: /amount\s*:\s*(?:req\.body|request\.body|body)\.\w*(?:amount|price|total|cost)/gi, label: 'Stripe payment amount from request body' },
+  // Stripe unit_amount (individual item pricing) from request
+  { pattern: /unit_amount\s*:\s*(?:req\.body|request\.body|body|req\.query|req\.params)\.\w*(?:amount|price|total|cost)/gi, label: 'Stripe unit_amount from request body' },
+  // Stripe unit_amount directly from request
+  { pattern: /unit_amount\s*:\s*(?:req\.body|request\.body|body|req\.query|req\.params)\.(?:amount|price|total|cost)/gi, label: 'Stripe unit_amount directly from request body' },
   // Generic: create payment with body amount
   { pattern: /(?:paymentIntents|charges|checkout\.sessions)\.create\s*\(\s*\{[\s\S]{0,200}amount\s*:\s*(?:req|request|body)\./gi, label: 'Payment created with client-provided amount' },
   // amount directly from params/query

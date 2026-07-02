@@ -16,30 +16,31 @@ export const vercelEnvLeak = {
   id: 'vercel-env-leak',
   name: 'Vercel Environment Variable Leak',
   severity: 'critical',
-  description: 'Detects server-only secrets exposed via NEXT_PUBLIC_ prefix.',
+  description: 'Detects server-only secrets exposed via NEXT_PUBLIC_, VITE_, PUBLIC_, or NUXT_PUBLIC_ prefixes.',
 
   check(file) {
     if (SKIP.test(file.relativePath)) return [];
-    if (!ENV_FILES.test(file.relativePath) && !/NEXT_PUBLIC_/i.test(file.content)) return [];
+    if (!ENV_FILES.test(file.relativePath) && !/(?:NEXT_PUBLIC_|VITE_|PUBLIC_|NUXT_PUBLIC_)/i.test(file.content)) return [];
 
     const findings = [];
 
     for (let i = 0; i < file.lines.length; i++) {
       const line = file.lines[i];
-      const match = line.match(/NEXT_PUBLIC_(\w+)/);
+      const match = line.match(/(NEXT_PUBLIC_|VITE_|PUBLIC_|NUXT_PUBLIC_)(\w+)/i);
       if (!match) continue;
 
-      const varName = match[1];
+      const prefix = match[1];
+      const varName = match[2];
       if (SENSITIVE_NAMES.test(varName)) {
         findings.push({
           ruleId: 'vercel-env-leak',
           ruleName: 'Vercel Environment Variable Leak',
           severity: 'critical',
-          message: `NEXT_PUBLIC_${varName} exposes a server-only secret to the browser.`,
+          message: `${prefix}${varName} exposes a server-only secret to the browser.`,
           file: file.relativePath,
           line: i + 1,
-          evidence: `NEXT_PUBLIC_${varName}`,
-          fix: `Remove the NEXT_PUBLIC_ prefix. Access this secret only in server-side code via process.env.${varName}.`,
+          evidence: `${prefix}${varName}`,
+          fix: `Remove the ${prefix} prefix. Access this secret only in server-side code via process.env.${varName}.`,
         });
       }
     }
