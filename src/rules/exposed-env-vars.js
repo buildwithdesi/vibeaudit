@@ -14,6 +14,9 @@ import { isDesignedPublicKey } from '../context.js';
  */
 const CLIENT_PREFIXES = ['VITE_', 'NEXT_PUBLIC_', 'REACT_APP_', 'NUXT_PUBLIC_', 'EXPO_PUBLIC_'];
 
+/** Test/spec files and fixtures intentionally contain fake env vars to exercise this rule. */
+const SKIP = /(?:\.test\.|\.spec\.|__tests__|fixtures\/|src\/rules\/)/i;
+
 /** Keywords that suggest sensitive data — these should NEVER be client-prefixed. */
 const SENSITIVE_KEYWORDS = [
   'SECRET',
@@ -47,6 +50,9 @@ export const exposedEnvVars = {
   description: 'Detects server-side secrets exposed through client-side environment variable prefixes.',
 
   check(file) {
+    // Skip test fixtures — fake env vars there are intentional, not real leaks.
+    if (SKIP.test(file.relativePath)) return [];
+
     // Only check env files and source files that reference process.env / import.meta.env.
     const isEnvFile = file.relativePath.includes('.env');
     const referencesEnv = file.content.includes('process.env') || file.content.includes('import.meta.env');

@@ -60,6 +60,9 @@ const SECRET_PATTERNS = [
 /** Files where secrets are expected and NOT a problem. */
 const IGNORE_FILES = /\.(env\.example|env\.sample|env\.template)$/;
 
+/** Test/spec files and fixtures intentionally contain fake secrets to exercise this rule. */
+const SKIP = /(?:\.test\.|\.spec\.|__tests__|fixtures\/|src\/rules\/)/i;
+
 /** Lines that are clearly commented out or documentation. */
 function isCommentOrDoc(line) {
   const trimmed = line.trim();
@@ -88,6 +91,8 @@ export const exposedSecrets = {
   check(file) {
     // Skip example env files.
     if (IGNORE_FILES.test(file.relativePath)) return [];
+    // Skip test fixtures — fake secrets there are intentional, not real leaks.
+    if (SKIP.test(file.relativePath)) return [];
 
     const findings = [];
 

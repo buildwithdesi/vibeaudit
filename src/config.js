@@ -23,6 +23,34 @@ const DEFAULTS = {
 };
 
 /**
+ * Validate a raw parsed config object and merge it with defaults.
+ * Shared by local config loading (readFile) and remote config fetching (GitHub API),
+ * so both paths apply a project's .vibe-audit.json the same way.
+ *
+ * @param {object} parsed
+ * @returns {VibeAuditConfig}
+ */
+export function normalizeConfig(parsed) {
+  return {
+    ignore: Array.isArray(parsed.ignore) ? parsed.ignore : DEFAULTS.ignore,
+    rules: Array.isArray(parsed.rules) ? parsed.rules : DEFAULTS.rules,
+    exclude: Array.isArray(parsed.exclude) ? parsed.exclude : DEFAULTS.exclude,
+    format: ['terminal', 'json', 'markdown'].includes(parsed.format)
+      ? parsed.format
+      : DEFAULTS.format,
+    strict: typeof parsed.strict === 'boolean' ? parsed.strict : DEFAULTS.strict,
+    customEscapers: Array.isArray(parsed.customEscapers) ? parsed.customEscapers : DEFAULTS.customEscapers,
+    customAuthGuards: Array.isArray(parsed.customAuthGuards) ? parsed.customAuthGuards : DEFAULTS.customAuthGuards,
+    disableForPaths: parsed.disableForPaths && typeof parsed.disableForPaths === 'object' ? parsed.disableForPaths : DEFAULTS.disableForPaths,
+  };
+}
+
+/** @returns {VibeAuditConfig} A fresh copy of the default config. */
+export function getDefaultConfig() {
+  return { ...DEFAULTS };
+}
+
+/**
  * Load config from .vibe-audit.json in the project root.
  * Falls back to defaults if no config file exists.
  *
@@ -34,23 +62,9 @@ export async function loadConfig(projectRoot) {
 
   try {
     const raw = await readFile(configPath, 'utf-8');
-    const parsed = JSON.parse(raw);
-
-    // Validate and merge with defaults.
-    return {
-      ignore: Array.isArray(parsed.ignore) ? parsed.ignore : DEFAULTS.ignore,
-      rules: Array.isArray(parsed.rules) ? parsed.rules : DEFAULTS.rules,
-      exclude: Array.isArray(parsed.exclude) ? parsed.exclude : DEFAULTS.exclude,
-      format: ['terminal', 'json', 'markdown'].includes(parsed.format)
-        ? parsed.format
-        : DEFAULTS.format,
-      strict: typeof parsed.strict === 'boolean' ? parsed.strict : DEFAULTS.strict,
-      customEscapers: Array.isArray(parsed.customEscapers) ? parsed.customEscapers : DEFAULTS.customEscapers,
-      customAuthGuards: Array.isArray(parsed.customAuthGuards) ? parsed.customAuthGuards : DEFAULTS.customAuthGuards,
-      disableForPaths: parsed.disableForPaths && typeof parsed.disableForPaths === 'object' ? parsed.disableForPaths : DEFAULTS.disableForPaths,
-    };
+    return normalizeConfig(JSON.parse(raw));
   } catch {
     // No config file or invalid JSON — use defaults.
-    return { ...DEFAULTS };
+    return getDefaultConfig();
   }
 }

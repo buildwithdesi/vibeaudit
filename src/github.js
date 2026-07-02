@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, extname } from 'node:path';
+import { normalizeConfig } from './config.js';
 
 /**
  * Patterns that indicate a GitHub target rather than a local path.
@@ -127,6 +128,33 @@ export async function* fetchRepoFiles(owner, repo, { branch = 'HEAD' } = {}) {
       // Skip files we can't fetch.
       continue;
     }
+  }
+}
+
+/**
+ * Fetch and validate a target repo's own .vibe-audit.json via the GitHub raw content API.
+ * Lets remote scans (morning-scan, GitHub-target CLI runs) respect the same project-level
+ * ignore/rules/exclude config that a local `vibeaudit .` run would honor.
+ *
+ * @param {string} owner
+ * @param {string} repo
+ * @param {{ branch?: string }} [options]
+ * @returns {Promise<import('./config.js').VibeAuditConfig | null>} null if no config file exists or it's invalid.
+ */
+export async function fetchRemoteConfig(owner, repo, { branch = 'HEAD' } = {}) {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  const headers = { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'vibe-audit' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  try {
+    const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/.vibe-audit.json`;
+    const res = await fetch(rawUrl, { headers });
+    if (!res.ok) return null;
+    const text = await res.text();
+    return normalizeConfig(JSON.parse(text));
+  } catch {
+    // No config file, invalid JSON, or network failure — caller falls back to defaults.
+    return null;
   }
 }
 

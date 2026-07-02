@@ -20,7 +20,9 @@ import { dangerouslySetInnerHtml } from '../../src/rules/dangerously-set-inner-h
 import { clientSideDbAccess } from '../../src/rules/client-side-db-access.js';
 import { clientBundleSecrets } from '../../src/rules/client-bundle-secrets.js';
 import { exposedEnvVars } from '../../src/rules/exposed-env-vars.js';
+import { exposedSecrets } from '../../src/rules/exposed-secrets.js';
 import { isSuppressed, pathDisabledFor } from '../../src/suppress.js';
+import { audit } from '../../src/index.js';
 
 /** Build a FileContext like the scanner passes to rules. */
 function mk(relativePath, content, _config) {
@@ -215,5 +217,79 @@ describe('FP fix: public-by-convention routes (missing-auth)', () => {
   it('STILL flags a normal unauthed mutation route', () => {
     const file = mk('src/app/api/account/route.ts', `export async function DELETE(req) { await db.deleteUser(); return Response.json({}); }`);
     assert.ok(missingAuth.check(file).some((f) => f.ruleId === 'missing-auth'));
+  });
+});
+
+describe('FP fix: test fixtures are not real secrets (exposed-secrets, exposed-env-vars)', () => {
+  const fakeGoogleKey = 'AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+
+  it('does NOT flag a fake secret living in tests/fixtures', () => {
+    const file = mk('tests/fixtures/.env', `GOOGLE_API_KEY=${fakeGoogleKey}`);
+    assert.equal(exposedSecrets.check(file).length, 0);
+
+    const envFile = mk('tests/fixtures/.env', `VITE_STRIPE_SECRET_KEY=sk_test_123`);
+    assert.equal(exposedEnvVars.check(envFile).length, 0);
+  });
+
+  it('does NOT flag a fake secret in a __tests__ or .test. file', () => {
+    assert.equal(exposedSecrets.check(mk('src/rules/__tests__/fixtures.js', `const key = "${fakeGoogleKey}";`)).length, 0);
+    assert.equal(exposedSecrets.check(mk('src/lib/auth.test.js', `const key = "${fakeGoogleKey}";`)).length, 0);
+  });
+
+  it('STILL flags the same secret shape outside tests/fixtures', () => {
+    const file = mk('src/lib/firebase.js', `const key = "${fakeGoogleKey}";`);
+    assert.ok(exposedSecrets.check(file).length > 0);
+
+    const envFile = mk('.env', `VITE_STRIPE_SECRET_KEY=sk_test_123`);
+    assert.ok(exposedEnvVars.check(envFile).length > 0);
+  });
+});
+
+describe('FP fix: remote scans (audit()) respect the target repo\'s .vibe-audit.json ignore list', () => {
+  const fakeSecret = 'AIzaSyBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+
+  /** Build a fake remote file source like fetchRepoFiles() would yield. */
+  async function* fakeRemoteFileSource(files) {
+    for (const [relativePath, content] of files) {
+      yield { path: `github://owner/repo/${relativePath}`, relativePath, content, lines: content.split('\n') };
+    }
+  }
+
+  it('excludes findings from a directory the repo\'s own config ignores, but keeps real ones', async () => {
+    const files = [
+      ['legacy/old-config.js', `const key = "${fakeSecret}";`], // should be ignored
+      ['src/lib/config.js', `const key = "${fakeSecret}";`], // should still be flagged
+    ];
+
+    const { findings } = await audit('owner/repo', {
+      fileSource: fakeRemoteFileSource(files),
+      format: 'json',
+      skipSca: true,
+      // Simulates the target repo's own .vibe-audit.json — passed directly so this
+      // test never touches the network (fetchRemoteConfig is only exercised in prod).
+      config: { ignore: ['legacy'], rules: [], exclude: [], format: 'json', strict: false, customEscapers: [], customAuthGuards: [], disableForPaths: {} },
+    });
+
+    const flaggedFiles = new Set(findings.filter((f) => f.ruleId === 'exposed-secrets').map((f) => f.file));
+    assert.ok(!flaggedFiles.has('legacy/old-config.js'), 'should not flag ignored directory');
+    assert.ok(flaggedFiles.has('src/lib/config.js'), 'should still flag non-ignored directory');
+  });
+
+  it('without an ignore config, flags both (control — proves the ignore list is what suppressed it above)', async () => {
+    const files = [
+      ['legacy/old-config.js', `const key = "${fakeSecret}";`],
+      ['src/lib/config.js', `const key = "${fakeSecret}";`],
+    ];
+
+    const { findings } = await audit('owner/repo', {
+      fileSource: fakeRemoteFileSource(files),
+      format: 'json',
+      skipSca: true,
+      config: { ignore: [], rules: [], exclude: [], format: 'json', strict: false, customEscapers: [], customAuthGuards: [], disableForPaths: {} },
+    });
+
+    const flaggedFiles = new Set(findings.filter((f) => f.ruleId === 'exposed-secrets').map((f) => f.file));
+    assert.ok(flaggedFiles.has('legacy/old-config.js'));
+    assert.ok(flaggedFiles.has('src/lib/config.js'));
   });
 });

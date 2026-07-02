@@ -1,10 +1,31 @@
 import { discoverFiles } from './scanner.js';
 import { resolveRules } from './rules/index.js';
 import { report } from './reporter.js';
-import { loadConfig } from './config.js';
+import { loadConfig, getDefaultConfig } from './config.js';
 import { CWE_MAP } from './data/cwe-map.js';
 import { runSCA } from './sca/index.js';
 import { isSuppressed, pathDisabledFor } from './suppress.js';
+import { parseGitHubTarget, fetchRemoteConfig } from './github.js';
+
+/**
+ * Check whether a relative path has any path segment matching one of the ignore
+ * patterns. Applied uniformly to local AND remote file sources — local discovery
+ * already skips ignored directories at walk time (this is a harmless no-op there),
+ * but remote sources (GitHub API) fetch everything up front, so this is the only
+ * place that actually honors a project's .vibe-audit.json "ignore" list for them.
+ *
+ * @param {string} relativePath
+ * @param {string[]} ignore
+ * @returns {boolean}
+ */
+function isIgnoredPath(relativePath, ignore) {
+  if (!ignore || ignore.length === 0) return false;
+  const segments = relativePath.split('/');
+  return ignore.some((pattern) => {
+    const name = pattern.replace(/\/$/, '');
+    return segments.includes(name);
+  });
+}
 
 /**
  * Run rules against a file iterator (local or remote).
@@ -19,6 +40,7 @@ async function runRules(fileSource, rules, deep, config = {}) {
   let filesScanned = 0;
 
   for await (const file of fileSource) {
+    if (isIgnoredPath(file.relativePath, config.ignore)) continue;
     filesScanned++;
     if (deep) file._deepMode = true;
     file._config = config;
@@ -50,13 +72,29 @@ async function runRules(fileSource, rules, deep, config = {}) {
  * @param {boolean} [cliOptions.skipSca]
  * @param {boolean} [cliOptions.deep]
  * @param {AsyncIterable} [cliOptions.fileSource] - Custom file source (e.g. GitHub API). If provided, skips local file discovery.
+ * @param {import('./config.js').VibeAuditConfig} [cliOptions.config] - Pre-resolved config. Skips loadConfig()/fetchRemoteConfig() entirely (used by tests and callers that already resolved config).
  * @returns {Promise<{ findings: import('./rules/types.js').Finding[], exitCode: number }>}
  */
 export async function audit(targetDir, cliOptions = {}) {
   const start = performance.now();
 
-  // Load config — for remote scans, use defaults since there's no local config file.
-  const config = cliOptions.fileSource ? { ignore: [], rules: [], exclude: [], format: 'terminal', strict: false, customEscapers: [], customAuthGuards: [], disableForPaths: {} } : await loadConfig(targetDir);
+  // Load config. For remote scans (GitHub-fetched files), fetch the target repo's own
+  // .vibe-audit.json over the API so remote runs respect the same ignore/rules/exclude
+  // config a local `vibeaudit .` run would — otherwise test fixtures containing fake
+  // secrets get flagged as if they were production code.
+  // `cliOptions.config` lets callers (tests, or callers that already resolved config)
+  // skip both the local file read and the remote API round-trip.
+  let config;
+  if (cliOptions.config) {
+    config = cliOptions.config;
+  } else if (cliOptions.fileSource) {
+    // targetDir may be "owner/repo" (morning-scan.js) or "github://owner/repo" (CLI) — try both.
+    const target = parseGitHubTarget(targetDir.replace(/^github:\/\//, '')) || parseGitHubTarget(targetDir);
+    const remoteConfig = target ? await fetchRemoteConfig(target.owner, target.repo) : null;
+    config = remoteConfig || getDefaultConfig();
+  } else {
+    config = await loadConfig(targetDir);
+  }
   const format = cliOptions.format || config.format;
   const ruleIds = cliOptions.rules?.length ? cliOptions.rules : config.rules;
   const excludeIds = cliOptions.exclude?.length ? cliOptions.exclude : config.exclude;
