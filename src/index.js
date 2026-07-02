@@ -4,25 +4,31 @@ import { report } from './reporter.js';
 import { loadConfig } from './config.js';
 import { CWE_MAP } from './data/cwe-map.js';
 import { runSCA } from './sca/index.js';
+import { isSuppressed, pathDisabledFor } from './suppress.js';
 
 /**
  * Run rules against a file iterator (local or remote).
  * @param {AsyncIterable} fileSource
  * @param {Array} rules
  * @param {boolean} deep
+ * @param {object} [config] - resolved config (exposes customEscapers / customAuthGuards / disableForPaths to rules via file._config)
  * @returns {Promise<{ findings: Array, filesScanned: number }>}
  */
-async function runRules(fileSource, rules, deep) {
+async function runRules(fileSource, rules, deep, config = {}) {
   const findings = [];
   let filesScanned = 0;
 
   for await (const file of fileSource) {
     filesScanned++;
     if (deep) file._deepMode = true;
+    file._config = config;
     for (const rule of rules) {
+      if (pathDisabledFor(config, rule.id, file.relativePath)) continue;
       try {
-        const ruleFindings = rule.check(file);
-        findings.push(...ruleFindings);
+        const ruleFindings = rule.check(file) || [];
+        for (const finding of ruleFindings) {
+          if (!isSuppressed(file, finding)) findings.push(finding);
+        }
       } catch {
         // A rule should never crash the entire audit.
       }
@@ -50,7 +56,7 @@ export async function audit(targetDir, cliOptions = {}) {
   const start = performance.now();
 
   // Load config — for remote scans, use defaults since there's no local config file.
-  const config = cliOptions.fileSource ? { ignore: [], rules: [], exclude: [], format: 'terminal', strict: false } : await loadConfig(targetDir);
+  const config = cliOptions.fileSource ? { ignore: [], rules: [], exclude: [], format: 'terminal', strict: false, customEscapers: [], customAuthGuards: [], disableForPaths: {} } : await loadConfig(targetDir);
   const format = cliOptions.format || config.format;
   const ruleIds = cliOptions.rules?.length ? cliOptions.rules : config.rules;
   const excludeIds = cliOptions.exclude?.length ? cliOptions.exclude : config.exclude;
@@ -63,7 +69,7 @@ export async function audit(targetDir, cliOptions = {}) {
 
   // Scan files and run rules — use custom file source or local discovery.
   const fileSource = cliOptions.fileSource || discoverFiles(targetDir, config.ignore);
-  const { findings, filesScanned } = await runRules(fileSource, rules, deep);
+  const { findings, filesScanned } = await runRules(fileSource, rules, deep, config);
 
   // SCA: Dependency vulnerability scanning (only for local scans).
   if (!skipSca && !cliOptions.fileSource) {

@@ -257,3 +257,115 @@ export function getLine(node) {
 export function isParseable(relativePath) {
   return /\.(?:js|jsx|ts|tsx|mjs|cjs)$/i.test(relativePath);
 }
+
+/**
+ * Collect the local names of everything imported into a module.
+ * Used to recognize developer-defined auth guards (e.g. a custom
+ * `requireAuthedApiFromReq` imported from a local lib).
+ *
+ * @param {import('acorn').Node} ast
+ * @returns {Set<string>}
+ */
+export function collectImportedNames(ast) {
+  const names = new Set();
+  walk(ast, (node) => {
+    if (node.type !== 'ImportDeclaration') return;
+    for (const spec of node.specifiers || []) {
+      if (spec.local?.name) names.add(spec.local.name);
+    }
+  });
+  return names;
+}
+
+/**
+ * Find functions that are actually EXPORTED (and therefore client-callable as
+ * server actions / route handlers). Covers `export function X`,
+ * `export const X = () => {}`, `export const X = async function () {}`, and
+ * `export default function`. Non-exported helpers are intentionally excluded —
+ * they cannot be invoked from the client.
+ *
+ * For const exports whose initializer is a call expression
+ * (`export const POST = withAuth(handler)`), `wrapped` is true and `body` is
+ * the call expression itself so a wrapper guard can be detected.
+ *
+ * @param {import('acorn').Node} ast
+ * @returns {Array<{name: string, body: import('acorn').Node, loc: object, wrapped: boolean}>}
+ */
+export function findExportedFunctions(ast) {
+  const out = [];
+  walk(ast, (node) => {
+    if (node.type === 'ExportNamedDeclaration' && node.declaration) {
+      const d = node.declaration;
+      if (d.type === 'FunctionDeclaration' && d.id) {
+        out.push({ name: d.id.name, body: d.body, loc: d.loc, wrapped: false });
+      } else if (d.type === 'VariableDeclaration') {
+        for (const decl of d.declarations || []) {
+          if (!decl.id?.name || !decl.init) continue;
+          const init = decl.init;
+          if (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression') {
+            out.push({ name: decl.id.name, body: init.body, loc: decl.id.loc || node.loc, wrapped: false });
+          } else if (init.type === 'CallExpression') {
+            out.push({ name: decl.id.name, body: init, loc: decl.id.loc || node.loc, wrapped: true });
+          }
+        }
+      }
+    } else if (node.type === 'ExportDefaultDeclaration') {
+      const d = node.declaration;
+      if (d && (d.type === 'FunctionDeclaration' || d.type === 'ArrowFunctionExpression' || d.type === 'FunctionExpression')) {
+        out.push({ name: d.id?.name || 'default', body: d.body, loc: d.loc, wrapped: false });
+      }
+    }
+  });
+  return out;
+}
+
+/** Call names that are recognizably authentication / authorization guards. */
+export const AUTH_GUARD_NAME =
+  /(?:get(?:Server)?Session|require\w*[Aa]uth\w*|requireUser\w*|requireSession\w*|requireAdmin\w*|isAuthenticated|authenticate\w*|withAuth\w*|currentUser|getUser\b|getToken\b|verify(?:Id)?Token|verify\w*[Aa]uth\w*|check\w*[Aa]uth\w*|ensure\w*[Aa]uth\w*|ensureUser\w*|ensureSession\w*|assert\w*[Aa]uth\w*|assertUser\w*|protect\w*|authGuard\w*|authorize\w*|clerkClient|getAuth\b|auth\b)/;
+
+/** Substring signal for an IMPORTED identifier that is probably an auth guard. */
+const IMPORTED_GUARD_HINT = /(?:auth|session|guard|protect|require|ensure|verify|access|permission|identity|clerk|token|currentuser|getuser)/i;
+
+/**
+ * Does this function body perform an authentication / authorization check?
+ *
+ * Recognizes: known auth-shaped call names; `req.user` / `request.auth` /
+ * `session.user` / `ctx.user` access; and calls to imported identifiers whose
+ * names look like guards (catches custom helpers the hardcoded list misses).
+ *
+ * @param {import('acorn').Node} body
+ * @param {Set<string>} [importedNames]
+ * @returns {boolean}
+ */
+export function callsAuthGuard(body, importedNames, extraGuards) {
+  if (!body) return false;
+
+  if (Array.isArray(extraGuards) && extraGuards.length) {
+    const escaped = extraGuards.map((g) => String(g).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    if (containsCall(body, new RegExp(`^(?:${escaped.join('|')})$`))) return true;
+  }
+
+  if (containsCall(body, AUTH_GUARD_NAME)) return true;
+
+  if (containsNode(body, (node) => {
+    if (node.type !== 'MemberExpression') return false;
+    const prop = node.property;
+    if (prop.type !== 'Identifier') return false;
+    if (!/^(?:user|auth|userId|session|currentUser)$/.test(prop.name)) return false;
+    const obj = node.object;
+    return obj.type === 'Identifier' && /^(?:req|request|session|ctx|context|locals)$/.test(obj.name);
+  })) return true;
+
+  if (importedNames && importedNames.size) {
+    if (containsNode(body, (node) => {
+      if (node.type !== 'CallExpression') return false;
+      const callee = node.callee;
+      let name = null;
+      if (callee.type === 'Identifier') name = callee.name;
+      else if (callee.type === 'MemberExpression' && callee.object?.type === 'Identifier') name = callee.object.name;
+      return name && importedNames.has(name) && IMPORTED_GUARD_HINT.test(name);
+    })) return true;
+  }
+
+  return false;
+}

@@ -6,6 +6,8 @@
 
 /** @typedef {import('./types.js').Rule} Rule */
 
+import { isDesignedPublicKey } from '../context.js';
+
 /**
  * Client-side env prefixes — these get bundled into the browser build.
  * People vibe-coding often don't realize VITE_ vars are PUBLIC.
@@ -63,6 +65,8 @@ export const exposedEnvVars = {
           const pattern = new RegExp(`${prefix}[A-Z0-9_]*${keyword}[A-Z0-9_]*`, 'g');
           let match;
           while ((match = pattern.exec(line)) !== null) {
+            // Designed-public keys (publishable, mapbox, posthog, anon, …) are safe.
+            if (isDesignedPublicKey(match[0])) continue;
             findings.push({
               ruleId: 'exposed-env-vars',
               ruleName: 'Exposed Environment Variables',

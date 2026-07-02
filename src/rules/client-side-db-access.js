@@ -1,12 +1,18 @@
 /**
  * Rule: client-side-db-access
- * Detects direct database access (Supabase, Firebase, or query builders like Drizzle/Prisma)
- * inside client-side files.
+ * Detects direct database access (Supabase, Firebase, or query builders like
+ * Drizzle/Prisma) inside code that actually runs on the client.
+ *
+ * Context-aware: uses the shared client/server detection so server components
+ * (the App Router default) and files importing "server-only" or marked
+ * 'use server' are not flagged for querying the database directly.
  */
 
 /** @typedef {import('./types.js').Rule} Rule */
 
-// Patterns representing direct DB query/client initializations or queries
+import { isClient } from '../context.js';
+
+// Patterns representing direct DB query/client initializations or queries.
 const DB_PATTERNS = [
   {
     regex: /\.from\s*\(\s*['"`][a-zA-Z0-9_-]+['"`]\s*\)\s*\.(?:select|insert|update|delete|upsert)/gi,
@@ -22,10 +28,7 @@ const DB_PATTERNS = [
   },
 ];
 
-// Skip files that are meant to be server-only
-const SERVER_ONLY_FILES = /(?:^src\/app\/api\/|^src\/pages\/api\/|^src\/server\/|^api\/|route\.ts$|action\.ts$|\.server\.ts$)/i;
 const SKIP_PATTERN = /(?:\.test\.|\.spec\.|__tests__|node_modules)/i;
-const CLIENT_FILES = /\.(?:jsx|tsx|vue|svelte|html)$|(?:^src\/(?:components|pages|app|views))/i;
 
 /** @type {Rule} */
 export const clientSideDbAccess = {
@@ -35,10 +38,9 @@ export const clientSideDbAccess = {
   description: 'Detects direct database queries (Supabase, Firebase, or query builders) in client-side code.',
 
   check(file) {
-    // Only scan files that run on client
-    if (!CLIENT_FILES.test(file.relativePath)) return [];
-    if (SERVER_ONLY_FILES.test(file.relativePath)) return [];
     if (SKIP_PATTERN.test(file.relativePath)) return [];
+    // Only client code is at risk — server components / 'use server' / server-only are fine.
+    if (!isClient(file)) return [];
 
     const findings = [];
 
@@ -58,7 +60,7 @@ export const clientSideDbAccess = {
             file: file.relativePath,
             line: i + 1,
             evidence: trimmed.slice(0, 120),
-            fix: `Move all database query logic to the server side (e.g. Server Actions, API routes, or server-only controller functions). Call this server endpoint from your client component. Direct client-side queries expose your database structure and bypass strict server security controls.`,
+            fix: `Move database query logic to the server (Server Actions, API routes, or server-only modules) and call that endpoint from the client. Direct client-side queries expose your schema and bypass server-side security controls.`,
           });
         }
       }
