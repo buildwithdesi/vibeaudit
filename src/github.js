@@ -110,10 +110,10 @@ export async function* fetchRepoFiles(owner, repo, { branch = 'HEAD' } = {}) {
     try {
       // Use the raw content endpoint for simplicity.
       const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${file.path}`;
-      const fileRes = await fetch(rawUrl, { headers });
+      const fileRes = await fetch(rawUrl, { headers }); // vibe-audit-ignore perf-no-await-parallel  (sequential fetch avoids GitHub secondary rate limits)
       if (!fileRes.ok) continue;
 
-      const content = await fileRes.text();
+      const content = await fileRes.text(); // vibe-audit-ignore perf-no-await-parallel  (part of the same intentional sequential fetch)
       // Skip huge files (> 2 MB).
       if (content.length > 2 * 1024 * 1024) continue;
 

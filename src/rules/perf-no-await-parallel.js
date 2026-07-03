@@ -17,6 +17,26 @@ import { enclosingLoop } from './perf-utils.js';
 
 const SKIP = /(?:\.test\.|\.spec\.|__tests__|node_modules)/i;
 
+/**
+ * `await Promise.all/allSettled/race/any(...)` IS the parallel/batched pattern —
+ * awaiting combined promises (often once per concurrency chunk) is correct, not the
+ * antipattern. Never flag it.
+ */
+function isParallelCombinator(arg) {
+  return Boolean(
+    arg &&
+      arg.type === 'CallExpression' &&
+      arg.callee &&
+      arg.callee.type === 'MemberExpression' &&
+      arg.callee.object &&
+      arg.callee.object.type === 'Identifier' &&
+      arg.callee.object.name === 'Promise' &&
+      arg.callee.property &&
+      arg.callee.property.type === 'Identifier' &&
+      /^(?:all|allSettled|race|any)$/.test(arg.callee.property.name),
+  );
+}
+
 /** @type {Rule} */
 export const perfNoAwaitParallel = {
   id: 'perf-no-await-parallel',
@@ -34,6 +54,7 @@ export const perfNoAwaitParallel = {
     const seen = new Set();
     walk(ast, (node, ancestors) => {
       if (node.type !== 'AwaitExpression') return;
+      if (isParallelCombinator(node.argument)) return; // await Promise.all(...) is the fix, not the bug
       if (!enclosingLoop(ancestors)) return;
 
       const line = node.loc?.start?.line || 0;

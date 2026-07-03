@@ -30,7 +30,11 @@ describe('perf-n-plus-one', () => {
     assert.ok(fires(perfNPlusOne, 'api/x.js',
       'const profiles = users.map((u) => prisma.profile.findUnique({ where: { id: u.id } }));'));
     assert.ok(fires(perfNPlusOne, 'api/x.js',
-      'orders.forEach(async (o) => { await fetch(`/api/ship/${o.id}`); });'));
+      'orders.forEach(async (o) => { await db.shipment.create({ data: { orderId: o.id } }); });'));
+  });
+  it('does NOT flag a bare fetch in a loop (that is perf-no-await-parallel, not N+1)', () => {
+    // A network fetch is not batchable with WHERE IN, so it is not an N+1 query.
+    assert.ok(clean(perfNPlusOne, 'api/x.js', 'for (const id of ids) { await fetch(`/api/${id}`); }'));
   });
   it('does NOT flag a single query, or a query in a helper called once', () => {
     assert.ok(clean(perfNPlusOne, 'api/x.js', 'const u = await prisma.user.findUnique({ where: { id } });'));
@@ -58,6 +62,10 @@ describe('perf-no-await-parallel', () => {
   it('does NOT flag the parallel pattern (await inside a .map callback + Promise.all)', () => {
     assert.ok(clean(perfNoAwaitParallel, 'api/x.js',
       'const results = await Promise.all(ids.map(async (id) => await fetch(id)));'));
+  });
+  it('does NOT flag await Promise.all(...) inside a loop (chunked concurrency — the fix, not the bug)', () => {
+    assert.ok(clean(perfNoAwaitParallel, 'api/x.js',
+      'for (const chunk of chunks) {\n  await Promise.all(chunk.map((f) => f()));\n}'));
   });
   it('does NOT flag a single await, or `for await…of` async iteration', () => {
     assert.ok(clean(perfNoAwaitParallel, 'api/x.js', 'const r = await fetch(url);'));

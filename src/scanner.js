@@ -114,7 +114,7 @@ export async function* discoverFiles(root, extraIgnore = []) {
 
       // Check file size.
       try {
-        const stats = await stat(fullPath);
+        const stats = await stat(fullPath); // vibe-audit-ignore perf-no-await-parallel  (streaming walker reads one entry at a time)
         if (stats.size > MAX_FILE_SIZE || stats.size === 0) continue;
       } catch {
         continue;
@@ -123,7 +123,7 @@ export async function* discoverFiles(root, extraIgnore = []) {
       // Read content.
       let content;
       try {
-        content = await readFile(fullPath, 'utf-8');
+        content = await readFile(fullPath, 'utf-8'); // vibe-audit-ignore perf-no-await-parallel  (streaming walker reads one entry at a time)
       } catch {
         continue;
       }

@@ -52,9 +52,9 @@ async function discoverRepos(owner) {
   let page = 1;
   while (true) {
     const url = `https://api.github.com/users/${owner}/repos?per_page=100&page=${page}&sort=updated&direction=desc`;
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { headers }); // vibe-audit-ignore perf-no-await-parallel  (pagination is inherently sequential — need page N to know if N+1 exists)
     if (!res.ok) throw new Error(`Failed to list repos: ${res.status}`);
-    const batch = await res.json();
+    const batch = await res.json(); // vibe-audit-ignore perf-no-await-parallel  (pagination response, inherently sequential)
     if (batch.length === 0) break;
     for (const r of batch) {
       if (!r.archived && !r.fork) repos.push(r.full_name);
@@ -141,7 +141,7 @@ async function main() {
   while (i < repos.length) {
     if (rateLimitBackoff > 0) {
       console.log(`   Rate limited — waiting ${rateLimitBackoff}s...`);
-      await sleep(rateLimitBackoff * 1000);
+      await sleep(rateLimitBackoff * 1000); // vibe-audit-ignore perf-no-await-parallel  (intentional rate-limit backoff between batches)
       rateLimitBackoff = 0;
     }
 

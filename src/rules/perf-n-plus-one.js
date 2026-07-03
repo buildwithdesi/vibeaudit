@@ -37,7 +37,9 @@ function rootIdentifier(node) {
 function isQueryCall(node) {
   if (node.type !== 'CallExpression') return false;
   const callee = node.callee;
-  if (callee.type === 'Identifier') return callee.name === 'fetch'; // network I/O per iteration
+  // DB queries only — they're batchable (WHERE ... IN). A network fetch in a loop is
+  // real, but "batch with WHERE IN" doesn't apply to it, so that case belongs to
+  // perf-no-await-parallel (run them together with Promise.all), not here.
   if (callee.type !== 'MemberExpression') return false;
   const prop = callee.property;
   if (prop && prop.type === 'Identifier' && STRONG_QUERY.test(prop.name)) return true;
