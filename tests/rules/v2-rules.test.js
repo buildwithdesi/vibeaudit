@@ -362,9 +362,32 @@ const appName = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6";
 // ── CWE/CVSS Metadata ───────────────────────────────────────────────────────
 
 describe('cwe-metadata', () => {
-  it('all rules have CWE mappings', () => {
+  it('all rules have CWE mappings (a11y rules carry a WCAG criterion instead)', () => {
     for (const rule of ALL_RULES) {
+      // Accessibility rules are WCAG conformance checks, not security weaknesses —
+      // they classify findings with a WCAG success criterion, not a CWE/CVSS/OWASP triad.
+      if (rule.id.startsWith('a11y-')) continue;
       assert.ok(CWE_MAP[rule.id], `Rule ${rule.id} missing CWE mapping`);
+    }
+  });
+
+  it('all a11y rules attach a WCAG success criterion to their findings', () => {
+    const badSnippets = {
+      'a11y-img-no-alt': ['A.jsx', '<img src="/x.png" />'],
+      'a11y-form-no-label': ['A.jsx', '<input type="text" placeholder="x" />'],
+      'a11y-no-lang': ['a.html', '<html><body></body></html>'],
+      'a11y-button-no-name': ['A.jsx', '<button></button>'],
+      'a11y-positive-tabindex': ['A.jsx', '<div tabIndex={5}>x</div>'],
+      'a11y-click-no-keyboard': ['A.jsx', '<div onClick={handle}>x</div>'],
+    };
+    for (const rule of ALL_RULES.filter((r) => r.id.startsWith('a11y-'))) {
+      const [path, src] = badSnippets[rule.id];
+      const findings = rule.check(makeFile(path, src));
+      assert.ok(findings.length > 0, `${rule.id} should flag its bad snippet`);
+      assert.ok(
+        findings.every((f) => /^WCAG /.test(f.wcag || '')),
+        `${rule.id} findings must carry a WCAG success criterion`,
+      );
     }
   });
 
@@ -388,8 +411,8 @@ describe('cwe-metadata', () => {
 // ── Rule Registry ────────────────────────────────────────────────────────────
 
 describe('v2-rule-registry', () => {
-  it('has 80 rules', () => {
-    assert.equal(ALL_RULES.length, 80, `Expected 80 rules, got ${ALL_RULES.length}`);
+  it('has 86 rules', () => {
+    assert.equal(ALL_RULES.length, 86, `Expected 86 rules, got ${ALL_RULES.length}`);
   });
 
   it('all new rules have fix prompts', async () => {
