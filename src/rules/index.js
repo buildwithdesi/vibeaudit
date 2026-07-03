@@ -101,6 +101,9 @@ import { a11yNoLang } from './a11y-no-lang.js';
 import { a11yButtonNoName } from './a11y-button-no-name.js';
 import { a11yPositiveTabindex } from './a11y-positive-tabindex.js';
 import { a11yClickNoKeyboard } from './a11y-click-no-keyboard.js';
+// Scale / Performance (v1.2)
+import { perfNPlusOne } from './perf-n-plus-one.js';
+import { perfNoAwaitParallel } from './perf-no-await-parallel.js';
 
 /** @type {import('./types.js').Rule[]} */
 export const ALL_RULES = [
@@ -203,6 +206,9 @@ export const ALL_RULES = [
   a11yButtonNoName,
   a11yPositiveTabindex,
   a11yClickNoKeyboard,
+  // Scale / Performance (v1.2)
+  perfNPlusOne,
+  perfNoAwaitParallel,
 ];
 
 /**
