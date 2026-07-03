@@ -72,6 +72,7 @@ async function runRules(fileSource, rules, deep, config = {}) {
  * @param {boolean} [cliOptions.skipSca]
  * @param {boolean} [cliOptions.deep]
  * @param {AsyncIterable} [cliOptions.fileSource] - Custom file source (e.g. GitHub API). If provided, skips local file discovery.
+ * @param {string[]} [cliOptions.extraIgnore] - Baseline ignore patterns merged on top of the resolved config's ignore list. Applied to every file source, so a self/portfolio scan can always exclude reports/ and test fixtures even when a remote .vibe-audit.json fetch fails open to an empty ignore list.
  * @param {import('./config.js').VibeAuditConfig} [cliOptions.config] - Pre-resolved config. Skips loadConfig()/fetchRemoteConfig() entirely (used by tests and callers that already resolved config).
  * @returns {Promise<{ findings: import('./rules/types.js').Finding[], exitCode: number }>}
  */
@@ -95,6 +96,17 @@ export async function audit(targetDir, cliOptions = {}) {
   } else {
     config = await loadConfig(targetDir);
   }
+
+  // Baseline ignores that always apply on top of the resolved config. Remote scans
+  // (GitHub API) rely on fetchRemoteConfig() to supply a repo's ignore list, but that
+  // call fails open — a rate limit, 404, or an unreachable raw HEAD ref returns null and
+  // falls back to getDefaultConfig()'s EMPTY ignore. That is exactly how the portfolio
+  // self-scan graded its own reports/ and test fixtures as criticals. A caller-supplied
+  // baseline guarantees those paths never count, regardless of whether the fetch lands.
+  if (cliOptions.extraIgnore?.length) {
+    config = { ...config, ignore: [...(config.ignore || []), ...cliOptions.extraIgnore] };
+  }
+
   const format = cliOptions.format || config.format;
   const ruleIds = cliOptions.rules?.length ? cliOptions.rules : config.rules;
   const excludeIds = cliOptions.exclude?.length ? cliOptions.exclude : config.exclude;

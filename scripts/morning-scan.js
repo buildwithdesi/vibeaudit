@@ -37,6 +37,12 @@ const discover = hasFlag('discover');
 const owner = flag('owner', 'jackdog668');
 const concurrency = parseInt(flag('concurrency', '3'), 10);
 
+// Directories that are never production attack surface: test fixtures (often deliberately
+// vulnerable) and generated scan reports. Excluded from every repo's grade so the dashboard
+// reflects real risk — not the scanner grading its own test data. Passed as a hard baseline
+// so a grade never silently depends on fetchRemoteConfig() landing the repo's ignore list.
+const BASELINE_IGNORE = ['reports', 'tests', 'fixtures', '__tests__', '__fixtures__'];
+
 async function discoverRepos(owner) {
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
   const headers = { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'vibe-audit' };
@@ -72,6 +78,7 @@ async function scanRepo(name) {
       format: 'json',
       skipSca: true,
       fileSource,
+      extraIgnore: BASELINE_IGNORE,
     });
 
     const criticals = findings.filter((f) => f.severity === 'critical').length;
@@ -232,7 +239,6 @@ function generateReport(results, errors, totalRepos, durationSec) {
     md += `| Repo | Grade | Critical | Warning | Info |\n`;
     md += `|------|-------|----------|---------|------|\n`;
     for (const r of results) {
-      const icon = r.criticals > 0 ? 'F' : r.warnings > 0 ? r.grade : 'A';
       md += `| ${r.repo} | ${r.grade} | ${r.criticals} | ${r.warnings} | ${r.infos} |\n`;
     }
     md += `\n`;
