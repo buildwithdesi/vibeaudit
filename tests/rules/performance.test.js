@@ -11,6 +11,8 @@ import assert from 'node:assert/strict';
 
 import { perfNPlusOne } from '../../src/rules/perf-n-plus-one.js';
 import { perfNoAwaitParallel } from '../../src/rules/perf-no-await-parallel.js';
+import { perfDbClientPerRequest } from '../../src/rules/perf-db-client-per-request.js';
+import { serverlessFsWrite } from '../../src/rules/serverless-fs-write.js';
 
 function mk(relativePath, content) {
   return { path: `/project/${relativePath}`, relativePath, content, lines: content.split('\n') };
@@ -100,5 +102,47 @@ describe('perf pack: N+1 route vs batched route', () => {
   it('leaves the batched route clean', () => {
     assert.equal(perfNPlusOne.check(batchedRoute).length, 0);
     assert.equal(perfNoAwaitParallel.check(batchedRoute).length, 0);
+  });
+});
+
+// ─── perf-db-client-per-request ───────────────────────────────────────────────
+describe('perf-db-client-per-request', () => {
+  it('flags a pooled client created inside a handler/function', () => {
+    assert.ok(fires(perfDbClientPerRequest, 'app/api/users/route.ts',
+      'export async function GET() {\n  const prisma = new PrismaClient();\n  return Response.json(await prisma.user.findMany());\n}'));
+    assert.ok(fires(perfDbClientPerRequest, 'api/db.js',
+      'function handler() {\n  const pool = new Pool();\n  return pool.query("select 1");\n}'));
+  });
+  it('does NOT flag a module-scope singleton', () => {
+    assert.ok(clean(perfDbClientPerRequest, 'lib/db.ts',
+      'const prisma = new PrismaClient();\nexport async function GET() { return prisma.user.findMany(); }'));
+  });
+  it('does NOT flag the globalThis singleton (module scope OR memoized getter)', () => {
+    assert.ok(clean(perfDbClientPerRequest, 'lib/db.ts',
+      "const prisma = globalThis.prisma ?? new PrismaClient();\nif (process.env.NODE_ENV !== 'production') globalThis.prisma = prisma;"));
+    assert.ok(clean(perfDbClientPerRequest, 'lib/db.ts',
+      'export function getPrisma() {\n  return globalThis.__prisma ??= new PrismaClient();\n}'));
+  });
+  it('does NOT flag non-pooled constructors', () => {
+    assert.ok(clean(perfDbClientPerRequest, 'app/api/x/route.ts',
+      'export function GET() {\n  const m = new Map();\n  const d = new Date();\n  return Response.json({});\n}'));
+  });
+});
+
+// ─── serverless-fs-write ──────────────────────────────────────────────────────
+describe('serverless-fs-write', () => {
+  it('flags fs writes / embedded SQLite in server-runtime files', () => {
+    assert.ok(fires(serverlessFsWrite, 'app/api/save/route.ts',
+      "import fs from 'fs';\nexport async function POST(req) {\n  fs.writeFileSync('./data.json', await req.text());\n  return Response.json({ ok: true });\n}"));
+    assert.ok(fires(serverlessFsWrite, 'app/api/log/route.ts', "const db = new Database('app.db');"));
+  });
+  it('does NOT flag writes to /tmp (the allowed ephemeral path)', () => {
+    assert.ok(clean(serverlessFsWrite, 'app/api/x/route.ts',
+      "import os from 'os';\nfs.writeFileSync(os.tmpdir() + '/scratch', data);"));
+    assert.ok(clean(serverlessFsWrite, 'app/api/x/route.ts', "fs.writeFileSync('/tmp/x.json', data);"));
+  });
+  it('does NOT flag reads, or writes outside server-runtime files', () => {
+    assert.ok(clean(serverlessFsWrite, 'app/api/x/route.ts', "const cfg = fs.readFileSync('./config.json', 'utf8');"));
+    assert.ok(clean(serverlessFsWrite, 'scripts/build.js', "fs.writeFileSync('./dist/out.json', data);"));
   });
 });

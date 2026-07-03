@@ -364,10 +364,10 @@ const appName = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6";
 describe('cwe-metadata', () => {
   it('all rules have CWE mappings (a11y rules carry a WCAG criterion instead)', () => {
     for (const rule of ALL_RULES) {
-      // Accessibility (a11y-) and scale/performance (perf-) rules are not security
-      // weaknesses: a11y classifies with a WCAG success criterion, and perf rules are
-      // quality/scale checks with no CWE/CVSS/OWASP taxonomy. Skip both here.
-      if (rule.id.startsWith('a11y-') || rule.id.startsWith('perf-')) continue;
+      // Accessibility (a11y-), scale/performance (perf-), and production-readiness
+      // (serverless-fs-write) rules are not security weaknesses: a11y classifies with a
+      // WCAG success criterion, the rest are quality/scale/ops checks with no CWE taxonomy.
+      if (rule.id.startsWith('a11y-') || rule.id.startsWith('perf-') || rule.id === 'serverless-fs-write') continue;
       assert.ok(CWE_MAP[rule.id], `Rule ${rule.id} missing CWE mapping`);
     }
   });
@@ -412,8 +412,8 @@ describe('cwe-metadata', () => {
 // ── Rule Registry ────────────────────────────────────────────────────────────
 
 describe('v2-rule-registry', () => {
-  it('has 88 rules', () => {
-    assert.equal(ALL_RULES.length, 88, `Expected 88 rules, got ${ALL_RULES.length}`);
+  it('has 90 rules', () => {
+    assert.equal(ALL_RULES.length, 90, `Expected 90 rules, got ${ALL_RULES.length}`);
   });
 
   it('all new rules have fix prompts', async () => {

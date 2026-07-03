@@ -254,7 +254,7 @@ Detects `res.redirect(req.query.*)` and similar patterns where redirect URLs com
 ## Coverage Summary
 
 - **20/20 items covered** by Vibe Audit
-- **88 total rules** across 16 categories (these + 68 more, now including accessibility/WCAG and scale/performance packs)
+- **90 total rules** across 16 categories (these + 70 more, now including accessibility/WCAG and scale/performance packs)
 - **Zero configuration** — just run `npx vibe-audit .`
 - **Copy-paste fixes** — use `--fix` flag to get AI-ready fix prompts
 - **Beyond the code** — every scan points you to the DA Pre-Flight Audit Prompt for the judgment layer a static scanner can't see (business logic, data model, threat model)
@@ -265,7 +265,7 @@ The viral checklist is security-only. Two things that wreck vibe-coded apps aren
 
 **Accessibility (the ADA-lawsuit lane).** An accessibility statement or an overlay widget does not stop a lawsuit — lawyers run automated scanners (PowerMapper, axe) against real WCAG conformance. Vibe Audit ships six Level A checks (`a11y-img-no-alt`, `a11y-form-no-label`, `a11y-no-lang`, `a11y-button-no-name`, `a11y-positive-tabindex`, `a11y-click-no-keyboard`) tuned to get you under the automated-scanner radar. Static analysis catches the low-hanging Level A misses; pair with axe-core for screen-reader depth.
 
-**Scale (the "$50k server bill" lane).** "The AI made it sequential" is a fuzzy diagnosis. The real culprits are **N+1 queries**, **missing DB indexes**, **no caching**, and **no connection pooling**. Vibe Audit statically catches the two that live in code — `perf-n-plus-one` (a query inside a loop or `.map`) and `perf-no-await-parallel` (sequential `await` that should be `Promise.all`). Indexes, caching, and pooling are architecture judgment, not static patterns — they belong to the Pre-Flight Audit Prompt, not the scanner. We say so plainly.
+**Scale (the "$50k server bill" lane).** "The AI made it sequential" is a fuzzy diagnosis. The real culprits are **N+1 queries**, **per-request DB connections**, **ephemeral-disk writes**, **missing indexes**, and **no caching**. Vibe Audit statically catches the ones that live in code — `perf-n-plus-one` (a query inside a loop or `.map`), `perf-no-await-parallel` (sequential `await` that should be `Promise.all`), `perf-db-client-per-request` (`new PrismaClient()` created per request → connection-pool exhaustion), and `serverless-fs-write` (writing to a serverless disk that gets wiped between requests). The rest — index design, cache strategy, sharding, load balancing — is architecture judgment, not static patterns, and belongs to the Pre-Flight Audit Prompt, not the scanner. We say so plainly.
 
 ## For Educators
 

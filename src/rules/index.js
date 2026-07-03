@@ -93,6 +93,7 @@ import { highEntropyStrings } from './high-entropy-strings.js';
 import { gitHistorySecrets } from './git-history-secrets.js';
 import { dockerRootUser } from './docker-root-user.js';
 import { exposedDatabasePort } from './exposed-database-port.js';
+import { serverlessFsWrite } from './serverless-fs-write.js';
 import { clientSideDbAccess } from './client-side-db-access.js';
 // Accessibility / WCAG (v1.2)
 import { a11yImgNoAlt } from './a11y-img-no-alt.js';
@@ -104,6 +105,7 @@ import { a11yClickNoKeyboard } from './a11y-click-no-keyboard.js';
 // Scale / Performance (v1.2)
 import { perfNPlusOne } from './perf-n-plus-one.js';
 import { perfNoAwaitParallel } from './perf-no-await-parallel.js';
+import { perfDbClientPerRequest } from './perf-db-client-per-request.js';
 
 /** @type {import('./types.js').Rule[]} */
 export const ALL_RULES = [
@@ -199,6 +201,7 @@ export const ALL_RULES = [
   // Infrastructure (v3)
   dockerRootUser,
   exposedDatabasePort,
+  serverlessFsWrite,
   // Accessibility / WCAG (v1.2)
   a11yImgNoAlt,
   a11yFormNoLabel,
@@ -209,6 +212,7 @@ export const ALL_RULES = [
   // Scale / Performance (v1.2)
   perfNPlusOne,
   perfNoAwaitParallel,
+  perfDbClientPerRequest,
 ];
 
 /**

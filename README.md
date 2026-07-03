@@ -8,7 +8,7 @@ Vibe coding is fast. Shipping insecure code is faster. Vibe Audit catches the se
 npx @jackdog668/vibeaudit
 ```
 
-No config required. **88 rules** across 16 attack surfaces (now including accessibility/WCAG and scale/performance). Two production dependencies. Runs in seconds.
+No config required. **90 rules** across 16 attack surfaces (now including accessibility/WCAG and scale/performance). Two production dependencies. Runs in seconds.
 
 > Every finding ships with a CWE ID, a CVSS v3.1 score, an OWASP Top 10 mapping, a plain-English explanation, **and** a copy-paste fix prompt for your AI coding tool.
 
@@ -83,7 +83,7 @@ Every **security** finding carries its **CWE ID, CVSS v3.1 score, and OWASP Top 
 
 ## What It Checks
 
-**88 rules** across 16 categories, plus dependency scanning (SCA). Severity is as reported by Vibe Audit: 🔴 **CRIT** · 🟡 **WARN** · ⚪ **INFO**. CVSS is the v3.1 base score.
+**90 rules** across 16 categories, plus dependency scanning (SCA). Severity is as reported by Vibe Audit: 🔴 **CRIT** · 🟡 **WARN** · ⚪ **INFO**. CVSS is the v3.1 base score.
 
 ### 🔑 Secrets & Credentials
 
@@ -233,6 +233,7 @@ Every **security** finding carries its **CWE ID, CVSS v3.1 score, and OWASP Top 
 | --- | --- | --- | --- | --- |
 | `docker-root-user` | 🟡 | 6.5 | CWE-250 | Dockerfiles running containers as `root` |
 | `exposed-database-port` | 🟡 | 5.3 | CWE-284 | Database ports exposed to the host in compose files |
+| `serverless-fs-write` | 🟡 | — | — | Filesystem writes / SQLite in serverless routes — ephemeral disk, data silently lost |
 
 ### ♿ Accessibility / WCAG
 
@@ -253,12 +254,13 @@ The real culprits behind the "$50k server bill" — named, not vibed. Quality/sc
 
 | Rule | Sev | What it catches |
 | --- | --- | --- |
-| `perf-n-plus-one` | 🟡 | A DB/network query inside a loop or `.map`/`.forEach` (the N+1 pattern) |
+| `perf-n-plus-one` | 🟡 | A DB query inside a loop or `.map`/`.forEach` (the N+1 pattern) |
 | `perf-no-await-parallel` | 🟡 | Sequential `await` in a loop that should run in parallel with `Promise.all` |
+| `perf-db-client-per-request` | 🟡 | Pooled DB client (`new PrismaClient()`, pg `Pool`) created per-request — exhausts the connection pool |
 
 ### 📦 Dependencies (SCA)
 
-Beyond the 88 rules above, Vibe Audit runs **software composition analysis** via `npm audit` to flag **known-vulnerable dependencies** (`vulnerable-dependency`, CWE-1035). Skip it with `--skip-sca`.
+Beyond the 90 rules above, Vibe Audit runs **software composition analysis** via `npm audit` to flag **known-vulnerable dependencies** (`vulnerable-dependency`, CWE-1035). Skip it with `--skip-sca`.
 
 > Run `vibeaudit --list-rules` for the complete, always-current list.
 
