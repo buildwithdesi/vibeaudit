@@ -1,6 +1,7 @@
 import { bold, red, yellow, cyan, green, gray, dim } from './colors.js';
 import { getFixPrompt } from './data/prompts.js';
 import { generateHTML } from './reporters/html.js';
+import { PREFLIGHT_AUDIT_URL, PREFLIGHT_AUDIT_MESSAGE } from './constants.js';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -119,7 +120,8 @@ function reportTerminal(findings, meta) {
       const lineStr = f.line ? gray(`:${f.line}`) : '';
       const cweStr = f.cweId ? dim(` [${f.cweId}]`) : '';
       const cvssStr = f.cvssScore ? dim(` CVSS:${f.cvssScore}`) : '';
-      console.log(`    ${icon}  ${f.message}${lineStr}${cweStr}${cvssStr}`);
+      const wcagStr = f.wcag ? dim(` [${f.wcag}]`) : '';
+      console.log(`    ${icon}  ${f.message}${lineStr}${cweStr}${cvssStr}${wcagStr}`);
       if (f.evidence) {
         console.log(`        ${dim(f.evidence)}`);
       }
@@ -183,6 +185,12 @@ function printSummaryBar(critCount, warnCount, infoCount, meta) {
     console.log(green(bold('  ✅ Looking clean. Ship it.')));
   }
   console.log('');
+
+  // Point every scan at the judgment layer the scanner can't see.
+  console.log(dim('  ─────────────────────────────────────────────────────────────'));
+  console.log(dim(`  ${PREFLIGHT_AUDIT_MESSAGE}`));
+  console.log(`  ${cyan(PREFLIGHT_AUDIT_URL)}`);
+  console.log('');
 }
 
 // ─── JSON ─────────────────────────────────────────────────────────────────────
@@ -210,6 +218,7 @@ function reportJSON(findings, meta) {
       durationMs: meta.durationMs,
     },
     findings: enriched,
+    preFlightAudit: { message: PREFLIGHT_AUDIT_MESSAGE, url: PREFLIGHT_AUDIT_URL },
   };
 
   console.log(JSON.stringify(output, null, 2));
@@ -240,7 +249,7 @@ function reportMarkdown(findings, meta) {
     lines.push('**✅ No issues found.**');
   } else {
     const renderFinding = (f) => {
-      const cweBadge = f.cweId ? ` \`${f.cweId}\`` : '';
+      const cweBadge = f.cweId ? ` \`${f.cweId}\`` : f.wcag ? ` \`${f.wcag}\`` : '';
       lines.push(`### \`${f.file}\`${f.line ? `:${f.line}` : ''}${cweBadge}`);
       lines.push(`- **${f.message}**`);
       if (f.evidence) lines.push(`- Evidence: \`${f.evidence}\``);
@@ -281,6 +290,14 @@ function reportMarkdown(findings, meta) {
       lines.push('');
     }
   }
+
+  lines.push('---', '');
+  lines.push(
+    "> **Automated checks complete.** For the judgment layer this scanner can't see " +
+      '(business logic, data model, threat model), run the ' +
+      `[DA Pre-Flight Audit Prompt](${PREFLIGHT_AUDIT_URL}).`,
+  );
+  lines.push('');
 
   console.log(lines.join('\n'));
 }
