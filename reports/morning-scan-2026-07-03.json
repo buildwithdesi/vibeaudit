@@ -1,0 +1,659 @@
+{
+  "date": "2026-07-03",
+  "results": [
+    {
+      "repo": "jackdog668/vibeaudit",
+      "grade": "A",
+      "criticals": 0,
+      "warnings": 0,
+      "infos": 0,
+      "total": 0,
+      "findings": []
+    }
+  ],
+  "errors": [
+    {
+      "repo": "jackdog668/sierra-baker-starter",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/screenshot-pools",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/generator20x",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/a-silly-idea",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/second-brain-system",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/digitalalchemy-dev",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/Storefront",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/sierrabakerconsulting",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/epic-meitner",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/content-drop",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/homiedex",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/Skool-Forge",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/vibe-vocab",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/transformersgenerator",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/shownotes2",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/shownotes1",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/runofshow",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/shownotes3",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/shownotes4",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/shownotes5",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/Digital-Alchemy-Skool",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/tonightlesson2",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/shownotes6",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/percolator-class-guide",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/thisone2",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/thisone",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/joyful-tesla",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/meet-corekind-digital-alchemy",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/curious-labs-vol1",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/chromatic-illusion-weaponizer",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/outputs",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/digital-alchemy-freebies",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/da-video-tool",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/Digital-Alchemy-Command-Center",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/file-manager",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/myfirstdeploy",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/da-tonight-video",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/landingpage",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/ericananton",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/Digital-Alchemy",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/Agent-Factory",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/magic-erase",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/photo-organizer-da",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/prototype",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/content-idea-generator34",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/vibe-tracker",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/content-idea-generator342",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/Digital-Alchemy-Tracker",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/chatgpt-data-analysis",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/lovepixel-sticker-studio",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/blazing-schrodinger",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/stitch-alchemy",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/firecrawl-site-insight",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/video-alchemy",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/groundwork-collective",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/digital-alchemy-bot",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/234",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/qr-forge-pro",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/DESI",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/the-77",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/digital-alchemy-lab",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/100-day-app-challenge",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/video-analyzer-70",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/sticker-banner-lab",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/brand-verticals-studio",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/jazz-roots-explorer",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/sec-context",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/collab-connect",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/Siftly",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/Jiggle-Room",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/IdeaToPRD-with-Gemini",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/reddit-analyzer",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/vibeshot2",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/VIDEOANALYZERGOOGLE",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/video2",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/chibi-forge",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/vibeshot",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/panther-chicago-legacy",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/lucky-leaf-finder",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/carver-s-garden-companion",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/harriet-s-path",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/new-folder-portfolio",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/htmlchange",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/jackdog668.github.io",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/my-twitter-export",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/digitalalchemy-vibecode",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/ineeditall",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/Petty-Translator",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/catdog",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/fuzzy-octo-fishstick",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/literate-garbanzo",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/reimagined-octo-funicular",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/educational-resources",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/ansel",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/revenue-cat-contest",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/new-folder-docs",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/new-app",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/cursing-woman",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/1code-main",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/day-6-bloodbank-charles-drew",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/alchemic-generator-v2",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/day-5-toothfairy-ai",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/day-3-stackroller",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/100-day-redo",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/biz-agent",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/remotion-cinematic",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/digital-alchemy-os",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/100DayAppChallenge",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/permission-to-play",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/reminderapp",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/vvprivacypolicy",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/This-Day-in-Black-Excellence",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/ai-agent-configs",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/digital-alchemy-app",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/Content-Hook-Generator",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/grainrad-bulk",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/video-analyzer",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/social-media-scraping-apis",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/LovePixel-Final",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/chroma-flow",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/my-daily-yes",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/Love-Pixel-Stickers",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/melanin-patch-app",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/da-forge-x7k9m2",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/ui-forge-command-center",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/node-banana",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/node-banana-bear",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/telegram-clipboard",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/ruby-feynman",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/ruby-magnetosphere",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/resonant-halley",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/demo-carousel",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/exo-spirit",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/infrared-hypernova",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/promptdatabasev3",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/deep-radiation",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/stream-gamify",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/portfolio-website-v2",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/hackspark",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/midjourney-agent",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/echoos",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/app-replay-forge",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/alchemic-generator",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/new-genny",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/ShadowPlay",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/sref-scanner",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/electric-plasma-portfolio",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/AetherExWork",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/digital-alchemy-dashboard",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/crypto-101",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/CreatorColorLine",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/notebooklm-mcp",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/Chromatic-Illusion-Weaponizerr",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/saas-starter",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/awesome-nanobanana-pro",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/Super-Banana",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/chromtic-weaponizer",
+      "error": "Rate limited"
+    },
+    {
+      "repo": "jackdog668/stitch-alchemy",
+      "error": "Rate limited"
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "gradeA": 1,
+    "gradeB": 0,
+    "gradeC": 0,
+    "gradeD": 0,
+    "gradeF": 0,
+    "totalCriticals": 0,
+    "totalWarnings": 0,
+    "skipped": 158
+  }
+}
