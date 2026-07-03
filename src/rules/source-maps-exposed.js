@@ -2,8 +2,10 @@
  * Rule: source-maps-exposed
  * Detects source map configuration that ships .map files to production.
  *
- * The DevTools attack: Sources tab → see your ENTIRE original source code,
- * comments, variable names, everything. Like handing someone your GitHub repo.
+ * Framing matters: this is NOT a "hide your code" control. Minification is hygiene,
+ * not security — minified JS is still reversible, and obscurity is not a boundary.
+ * The reason to drop prod source maps is to stop shipping dev artifacts that hand
+ * over original comments, variable names, and file structure for free reconnaissance.
  */
 
 /** @typedef {import('./types.js').Rule} Rule */
@@ -70,7 +72,7 @@ export const sourceMapsExposed = {
               file: file.relativePath,
               line: i + 1,
               evidence: trimmed.slice(0, 120),
-              fix: `Disable source maps for production builds, or use "hidden-source-map" which generates maps but doesn't reference them in the bundle. Source maps let anyone see your full original code, comments, and variable names in DevTools → Sources.`,
+              fix: `Drop source maps from production builds, or use "hidden-source-map" (maps are generated for error tools but not referenced in the bundle). Framing matters: minification is hygiene, not a security control — a determined attacker can still read minified JS, so this isn't about "hiding" logic. The point is to stop shipping dev artifacts that expose original comments, names, and structure for free reconnaissance. Never rely on minification to protect a secret — keep secrets server-side.`,
             });
           }
         }

@@ -8,7 +8,7 @@ Vibe coding is fast. Shipping insecure code is faster. Vibe Audit catches the se
 npx @jackdog668/vibeaudit
 ```
 
-No config required. **79 rules** across 14 attack surfaces. Two production dependencies. Runs in seconds.
+No config required. **88 rules** across 16 attack surfaces (now including accessibility/WCAG and scale/performance). Two production dependencies. Runs in seconds.
 
 > Every finding ships with a CWE ID, a CVSS v3.1 score, an OWASP Top 10 mapping, a plain-English explanation, **and** a copy-paste fix prompt for your AI coding tool.
 
@@ -77,13 +77,13 @@ Requires Node `>=18.3.0`.
 | **Markdown** | `--format markdown` | Dropping into a doc/PR with copy-paste fix prompts |
 | **JSON** | `--format json` | CI pipelines and automation |
 
-Every finding in every format carries its **CWE ID, CVSS v3.1 score, and OWASP Top 10 (2021) category.**
+Every **security** finding carries its **CWE ID, CVSS v3.1 score, and OWASP Top 10 (2021) category.** Accessibility findings carry a **WCAG success criterion** instead; scale/performance findings are quality checks with no security taxonomy.
 
 ---
 
 ## What It Checks
 
-**79 rules** across 14 categories, plus dependency scanning (SCA). Severity is as reported by Vibe Audit: 🔴 **CRIT** · 🟡 **WARN** · ⚪ **INFO**. CVSS is the v3.1 base score.
+**88 rules** across 16 categories, plus dependency scanning (SCA). Severity is as reported by Vibe Audit: 🔴 **CRIT** · 🟡 **WARN** · ⚪ **INFO**. CVSS is the v3.1 base score.
 
 ### 🔑 Secrets & Credentials
 
@@ -234,9 +234,31 @@ Every finding in every format carries its **CWE ID, CVSS v3.1 score, and OWASP T
 | `docker-root-user` | 🟡 | 6.5 | CWE-250 | Dockerfiles running containers as `root` |
 | `exposed-database-port` | 🟡 | 5.3 | CWE-284 | Database ports exposed to the host in compose files |
 
+### ♿ Accessibility / WCAG
+
+Level A checks that the automated scanners lawyers run (PowerMapper, axe, WAVE) flag. These carry a **WCAG success criterion**, not a CWE — accessibility is conformance, not a security weakness. An accessibility statement or overlay widget does **not** stop those scanners; real conformance does. Static analysis catches the low-hanging misses — pair with axe-core to verify screen-reader UX.
+
+| Rule | Sev | WCAG | What it catches |
+| --- | --- | --- | --- |
+| `a11y-img-no-alt` | 🟡 | 1.1.1 (A) | `<img>` / `next/image` with no `alt` |
+| `a11y-form-no-label` | 🟡 | 1.3.1 (A) | Inputs with no associated label or `aria-label` |
+| `a11y-no-lang` | 🟡 | 3.1.1 (A) | `<html>` with no `lang` attribute |
+| `a11y-button-no-name` | 🟡 | 4.1.2 (A) | Buttons with no text and no `aria-label` |
+| `a11y-positive-tabindex` | 🟡 | 2.4.3 (A) | `tabindex` > 0 — breaks the keyboard tab order |
+| `a11y-click-no-keyboard` | 🟡 | 2.1.1 (A) | `onClick` on a non-interactive element with no keyboard handler |
+
+### ⚡ Scale / Performance
+
+The real culprits behind the "$50k server bill" — named, not vibed. Quality/scale checks, not security findings, so they carry no CWE/OWASP. Missing DB indexes, caching, and connection pooling are **not** statically detectable — that judgment lives in the DA Pre-Flight Audit Prompt, not the scanner.
+
+| Rule | Sev | What it catches |
+| --- | --- | --- |
+| `perf-n-plus-one` | 🟡 | A DB/network query inside a loop or `.map`/`.forEach` (the N+1 pattern) |
+| `perf-no-await-parallel` | 🟡 | Sequential `await` in a loop that should run in parallel with `Promise.all` |
+
 ### 📦 Dependencies (SCA)
 
-Beyond the 79 rules above, Vibe Audit runs **software composition analysis** via `npm audit` to flag **known-vulnerable dependencies** (`vulnerable-dependency`, CWE-1035). Skip it with `--skip-sca`.
+Beyond the 88 rules above, Vibe Audit runs **software composition analysis** via `npm audit` to flag **known-vulnerable dependencies** (`vulnerable-dependency`, CWE-1035). Skip it with `--skip-sca`.
 
 > Run `vibeaudit --list-rules` for the complete, always-current list.
 
@@ -384,11 +406,11 @@ console.log(`Found ${findings.length} issues`);
 
 ## Design Principles
 
-**AST-powered analysis.** The highest-impact rules (IDOR, mass assignment, missing auth) use [acorn](https://github.com/acornjs/acorn) to parse your code into an Abstract Syntax Tree and analyze it per-function. This means we can tell the difference between "this function checks ownership" and "some other function in the file does" — a distinction regex alone can't make.
+**AST-powered analysis.** The highest-impact rules (IDOR, mass assignment, missing auth, N+1 queries) use [acorn](https://github.com/acornjs/acorn) to parse your code into an Abstract Syntax Tree and analyze it per-function. This means we can tell the difference between "this function checks ownership" and "some other function in the file does" — a distinction regex alone can't make.
 
 **Minimal dependencies.** Two production dependencies: `acorn` (the parser behind ESLint and webpack) and `acorn-loose` (tolerant parsing for AI-generated code that may have syntax quirks). No bloated dependency tree.
 
-**Industry-standard metadata.** Every rule is mapped to a CWE ID, a CVSS v3.1 base score, and an OWASP Top 10 (2021) category — surfaced in every output format.
+**Industry-standard metadata.** Every **security** rule is mapped to a CWE ID, a CVSS v3.1 base score, and an OWASP Top 10 (2021) category. Accessibility rules carry a WCAG success criterion, and scale/performance rules are quality checks — all surfaced in every output format.
 
 **Zero false positives over catching everything.** A rule that cries wolf gets disabled. Every pattern is tuned to minimize noise. Clean code triggers zero findings (verified by regression tests on a fully-secured fixture).
 
