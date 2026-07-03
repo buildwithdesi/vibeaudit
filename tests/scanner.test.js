@@ -35,4 +35,14 @@ describe('scanner', () => {
     const apiFiles = files.filter((f) => f.relativePath.includes('api/'));
     assert.equal(apiFiles.length, 0, 'Should skip ignored directories');
   });
+
+  it('respects ignore patterns with a trailing slash (e.g. "api/" from .vibe-audit.json)', async () => {
+    const files = [];
+    for await (const file of discoverFiles(FIXTURES_DIR, ['api/'])) {
+      files.push(file);
+    }
+
+    const apiFiles = files.filter((f) => f.relativePath.includes('api/'));
+    assert.equal(apiFiles.length, 0, 'A trailing slash on a config ignore entry should still match the directory');
+  });
 });

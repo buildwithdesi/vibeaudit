@@ -88,6 +88,14 @@ describe('FP fix: nextjs-server-action-exposure', () => {
     const f = nextjsServerActionExposure.check(file);
     assert.ok(f.some((x) => x.ruleId === 'nextjs-server-action-exposure'));
   });
+
+  it('does NOT flag a file that merely mentions "use server" in a comment or string literal, not as a real directive', () => {
+    // Mirrors src/context.js: a helper module that documents/detects the
+    // directive by name, without actually being a "use server" file itself.
+    const file = mk('src/lib/directive-helpers.js',
+      `/**\n * Checks for the 'use server' directive.\n */\nexport function hasUseServer(content) {\n  return /^['"]use server['"]/.test(content);\n}\nexport function checkIt(x) {\n  return hasUseServer(x, 'use server');\n}`);
+    assert.equal(nextjsServerActionExposure.check(file).length, 0);
+  });
 });
 
 describe('FP fix: no-input-validation (innerHTML)', () => {

@@ -84,7 +84,9 @@ const MAX_FILE_SIZE = 2 * 1024 * 1024;
  * @returns {AsyncGenerator<{path: string, relativePath: string, content: string, lines: string[]}>}
  */
 export async function* discoverFiles(root, extraIgnore = []) {
-  const ignoreSet = new Set([...ALWAYS_IGNORE, ...extraIgnore]);
+  // Tolerate a trailing slash in config entries (e.g. "legacy/") — directory
+  // names never include one, so without stripping it the entry silently never matches.
+  const ignoreSet = new Set([...ALWAYS_IGNORE, ...extraIgnore.map((p) => p.replace(/\/$/, ''))]);
 
   async function* walk(dir) {
     let entries;

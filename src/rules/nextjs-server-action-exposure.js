@@ -11,8 +11,13 @@
 /** @typedef {import('./types.js').Rule} Rule */
 
 import { parseSource, isParseable, findExportedFunctions, collectImportedNames, callsAuthGuard } from '../ast.js';
+import { hasUseServer } from '../context.js';
 
-const USE_SERVER = /['"]use server['"]/;
+// Used only to locate a display line once hasUseServer() has already confirmed
+// a real directive exists — never to decide whether one exists. A naive
+// content-wide regex would also match "use server" mentioned inside comments
+// or string literals (e.g. context.js's own JSDoc and its hasDirective() helper).
+const USE_SERVER_LINE = /['"]use server['"]/;
 const SERVER_ACTION_FILE = /(?:actions|server-actions?)\.(js|ts|jsx|tsx)$/i;
 const SKIP = /(?:\.test\.|\.spec\.|__tests__|node_modules|fixtures\/|src\/rules\/)/i;
 const FILE_LEVEL_AUTH = /(?:getServerSession|getSession|auth\(\)|require\w*auth\w*|currentUser|getUser|session\.user|clerkClient|verify\w*token)/i;
@@ -26,7 +31,7 @@ export const nextjsServerActionExposure = {
 
   check(file) {
     if (SKIP.test(file.relativePath)) return [];
-    const hasDirective = USE_SERVER.test(file.content);
+    const hasDirective = hasUseServer(file);
     const isActionFile = SERVER_ACTION_FILE.test(file.relativePath);
     if (!hasDirective && !isActionFile) return [];
     if (!isParseable(file.relativePath)) return [];
@@ -59,7 +64,7 @@ export const nextjsServerActionExposure = {
 
     // Fallback: a "use server" file we couldn't resolve into exports, with no auth anywhere.
     if (hasDirective && !FILE_LEVEL_AUTH.test(file.content)) {
-      const lineIdx = file.lines.findIndex((l) => USE_SERVER.test(l));
+      const lineIdx = file.lines.findIndex((l) => USE_SERVER_LINE.test(l));
       findings.push({
         ruleId: 'nextjs-server-action-exposure',
         ruleName: 'Next.js Server Action Exposure',
