@@ -113,6 +113,8 @@ Detects weak JWT secrets (short strings, common words like "secret", "password")
 
 `client-only-auth` catches frontend-only guards (`if (!user) redirect`). `missing-auth` uses AST to check every exported API handler for auth calls.
 
+> **Name it right:** swapping `/dashboard` → `/admin` to reach a function you shouldn't is **Broken Function Level Authorization (BFLA)**, not IDOR. It's covered here by `missing-auth` and `nextjs-middleware-bypass`. IDOR/BOLA is the *object-reference* swap (`/invoice/1001` → `/1002`) — see item 16. Both are broken access control; different checks.
+
 **What to do:** Every API route must verify auth server-side. Frontend guards are UX, not security.
 
 ---
@@ -203,6 +205,8 @@ Scans `docker-compose.yml` for `ports:` mappings on known database ports (Postgr
 
 AST-enhanced rule that detects when `params.id` or `req.params.id` is used to query data without an ownership check (e.g., `WHERE userId = session.user.id`) in the same function scope.
 
+> **IDOR ≠ BFLA:** IDOR/BOLA is swapping an *object reference* (`/invoice/1001` → `/1002`) to read someone else's record — what this rule checks. Swapping a *route/function* (`/dashboard` → `/admin`) is Broken Function Level Authorization (item 7). Both are broken access control; different checks.
+
 **What to do:** Always verify ownership server-side. `findById(params.id)` must also check the resource belongs to the authenticated user.
 
 ---
@@ -250,9 +254,18 @@ Detects `res.redirect(req.query.*)` and similar patterns where redirect URLs com
 ## Coverage Summary
 
 - **20/20 items covered** by Vibe Audit
-- **79 total rules** (including these + 59 additional security checks)
+- **93 total rules** across 17 categories (these + 73 more, now including accessibility/WCAG, scale/performance, and observability packs)
 - **Zero configuration** — just run `npx vibe-audit .`
 - **Copy-paste fixes** — use `--fix` flag to get AI-ready fix prompts
+- **Beyond the code** — every scan points you to the DA Pre-Flight Audit Prompt for the judgment layer a static scanner can't see (business logic, data model, threat model)
+
+## Beyond the 20: v1.2 additions
+
+The viral checklist is security-only. Two things that wreck vibe-coded apps aren't on it:
+
+**Accessibility (the ADA-lawsuit lane).** An accessibility statement or an overlay widget does not stop a lawsuit — lawyers run automated scanners (PowerMapper, axe) against real WCAG conformance. Vibe Audit ships six Level A checks (`a11y-img-no-alt`, `a11y-form-no-label`, `a11y-no-lang`, `a11y-button-no-name`, `a11y-positive-tabindex`, `a11y-click-no-keyboard`) tuned to get you under the automated-scanner radar. Static analysis catches the low-hanging Level A misses; pair with axe-core for screen-reader depth.
+
+**Scale (the "$50k server bill" lane).** "The AI made it sequential" is a fuzzy diagnosis. The real culprits are **N+1 queries**, **per-request DB connections**, **ephemeral-disk writes**, **missing indexes**, and **no caching**. Vibe Audit statically catches the ones that live in code — `perf-n-plus-one` (a query inside a loop or `.map`), `perf-no-await-parallel` (sequential `await` that should be `Promise.all`), `perf-db-client-per-request` (`new PrismaClient()` created per request → connection-pool exhaustion), and `serverless-fs-write` (writing to a serverless disk that gets wiped between requests). The rest — index design, cache strategy, sharding, load balancing — is architecture judgment, not static patterns, and belongs to the Pre-Flight Audit Prompt, not the scanner. We say so plainly.
 
 ## For Educators
 

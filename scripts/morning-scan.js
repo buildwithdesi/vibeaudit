@@ -37,6 +37,12 @@ const discover = hasFlag('discover');
 const owner = flag('owner', 'jackdog668');
 const concurrency = parseInt(flag('concurrency', '3'), 10);
 
+// Directories that are never production attack surface: test fixtures (often deliberately
+// vulnerable) and generated scan reports. Excluded from every repo's grade so the dashboard
+// reflects real risk — not the scanner grading its own test data. Passed as a hard baseline
+// so a grade never silently depends on fetchRemoteConfig() landing the repo's ignore list.
+const BASELINE_IGNORE = ['reports', 'tests', 'fixtures', '__tests__', '__fixtures__'];
+
 async function discoverRepos(owner) {
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
   const headers = { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'vibe-audit' };
@@ -46,9 +52,9 @@ async function discoverRepos(owner) {
   let page = 1;
   while (true) {
     const url = `https://api.github.com/users/${owner}/repos?per_page=100&page=${page}&sort=updated&direction=desc`;
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { headers }); // vibe-audit-ignore perf-no-await-parallel  (pagination is inherently sequential — need page N to know if N+1 exists)
     if (!res.ok) throw new Error(`Failed to list repos: ${res.status}`);
-    const batch = await res.json();
+    const batch = await res.json(); // vibe-audit-ignore perf-no-await-parallel  (pagination response, inherently sequential)
     if (batch.length === 0) break;
     for (const r of batch) {
       if (!r.archived && !r.fork) repos.push(r.full_name);
@@ -72,6 +78,7 @@ async function scanRepo(name) {
       format: 'json',
       skipSca: true,
       fileSource,
+      extraIgnore: BASELINE_IGNORE,
     });
 
     const criticals = findings.filter((f) => f.severity === 'critical').length;
@@ -134,7 +141,7 @@ async function main() {
   while (i < repos.length) {
     if (rateLimitBackoff > 0) {
       console.log(`   Rate limited — waiting ${rateLimitBackoff}s...`);
-      await sleep(rateLimitBackoff * 1000);
+      await sleep(rateLimitBackoff * 1000); // vibe-audit-ignore perf-no-await-parallel  (intentional rate-limit backoff between batches)
       rateLimitBackoff = 0;
     }
 
@@ -232,7 +239,6 @@ function generateReport(results, errors, totalRepos, durationSec) {
     md += `| Repo | Grade | Critical | Warning | Info |\n`;
     md += `|------|-------|----------|---------|------|\n`;
     for (const r of results) {
-      const icon = r.criticals > 0 ? 'F' : r.warnings > 0 ? r.grade : 'A';
       md += `| ${r.repo} | ${r.grade} | ${r.criticals} | ${r.warnings} | ${r.infos} |\n`;
     }
     md += `\n`;

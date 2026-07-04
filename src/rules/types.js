@@ -23,6 +23,7 @@
  * @property {string} [cweId] - CWE identifier (e.g., "CWE-89")
  * @property {number} [cvssScore] - CVSS v3.1 base score (0-10)
  * @property {string} [owaspCategory] - OWASP Top 10 2021 category (e.g., "A03:2021")
+ * @property {string} [wcag] - WCAG success criterion for accessibility findings (e.g., "WCAG 1.1.1 (Level A)"). Set instead of cweId/owaspCategory for a11y rules.
  */
 
 /**

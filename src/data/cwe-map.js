@@ -34,6 +34,8 @@ export const CWE_MAP = {
   'unsafe-file-upload':         { cweId: 'CWE-434', cvssScore: 8.1, owaspCategory: 'A04:2021' },
   'path-traversal':             { cweId: 'CWE-22',  cvssScore: 8.6, owaspCategory: 'A01:2021' },
   'prototype-pollution':        { cweId: 'CWE-1321', cvssScore: 8.1, owaspCategory: 'A03:2021' },
+  'command-injection':          { cweId: 'CWE-78',  cvssScore: 9.8, owaspCategory: 'A03:2021' },
+  'unsafe-deserialization':     { cweId: 'CWE-502', cvssScore: 9.8, owaspCategory: 'A08:2021' },
 
   // ── Server-Side Exploits ───────────────────────────────────────────────────
   'ssrf-vulnerability':         { cweId: 'CWE-918', cvssScore: 8.6, owaspCategory: 'A10:2021' },
