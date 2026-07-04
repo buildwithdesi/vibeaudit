@@ -367,7 +367,7 @@ describe('cwe-metadata', () => {
       // Accessibility (a11y-), scale/performance (perf-), and production-readiness
       // (serverless-fs-write) rules are not security weaknesses: a11y classifies with a
       // WCAG success criterion, the rest are quality/scale/ops checks with no CWE taxonomy.
-      if (rule.id.startsWith('a11y-') || rule.id.startsWith('perf-') || rule.id === 'serverless-fs-write') continue;
+      if (rule.id.startsWith('a11y-') || rule.id.startsWith('perf-') || rule.id === 'serverless-fs-write' || rule.id === 'no-error-monitoring') continue;
       assert.ok(CWE_MAP[rule.id], `Rule ${rule.id} missing CWE mapping`);
     }
   });
@@ -412,8 +412,8 @@ describe('cwe-metadata', () => {
 // ── Rule Registry ────────────────────────────────────────────────────────────
 
 describe('v2-rule-registry', () => {
-  it('has 90 rules', () => {
-    assert.equal(ALL_RULES.length, 90, `Expected 90 rules, got ${ALL_RULES.length}`);
+  it('has 93 rules', () => {
+    assert.equal(ALL_RULES.length, 93, `Expected 93 rules, got ${ALL_RULES.length}`);
   });
 
   it('all new rules have fix prompts', async () => {

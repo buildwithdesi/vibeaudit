@@ -106,6 +106,10 @@ import { a11yClickNoKeyboard } from './a11y-click-no-keyboard.js';
 import { perfNPlusOne } from './perf-n-plus-one.js';
 import { perfNoAwaitParallel } from './perf-no-await-parallel.js';
 import { perfDbClientPerRequest } from './perf-db-client-per-request.js';
+// Injection & observability (v1.2)
+import { commandInjection } from './command-injection.js';
+import { unsafeDeserialization } from './unsafe-deserialization.js';
+import { noErrorMonitoring } from './no-error-monitoring.js';
 
 /** @type {import('./types.js').Rule[]} */
 export const ALL_RULES = [
@@ -213,6 +217,10 @@ export const ALL_RULES = [
   perfNPlusOne,
   perfNoAwaitParallel,
   perfDbClientPerRequest,
+  // Injection & observability (v1.2)
+  commandInjection,
+  unsafeDeserialization,
+  noErrorMonitoring,
 ];
 
 /**
