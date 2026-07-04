@@ -4,14 +4,14 @@ The "20 things / 50 things that get your vibe-coded app hacked" lists are real, 
 incomplete. Here's the **next 50** — the layer a production audit actually covers — mapped
 against Vibe Audit.
 
-**The headline: Vibe Audit already catches 36 of these 50 that the viral list never mentioned.**
+**The headline: Vibe Audit already catches 37 of these 50 that the viral list never mentioned.**
 The tool doesn't play catch-up to the meme; it laps it.
 
 - ✅ **covered** by a Vibe Audit rule
 - 🟨 **partial** (an adjacent rule catches some of it)
 - 🆕 **gap** (not yet a rule — mostly judgment/infra that belongs to the Pre-Flight Audit Prompt)
 
-**Tally: 36 ✅ · 3 🟨 · 11 🆕**
+**Tally: 37 ✅ · 3 🟨 · 10 🆕**
 
 ---
 
@@ -59,7 +59,7 @@ The tool doesn't play catch-up to the meme; it laps it.
 35. Insecure deploy config (vercel/netlify) — ✅ `deployment-config-insecure`
 36. Lockfile missing / deps unpinned — 🟨 `unpinned-dependencies` *(shipped — catches `*`/`latest`; lockfile-missing still open)*
 37. Untrusted `postinstall` scripts (supply chain) — 🆕
-38. Hardcoded secrets in CI/CD workflow files — 🆕
+38. Hardcoded secrets / script injection in CI/CD workflows — ✅ `exposed-secrets` + `github-actions-injection` *(shipped)*
 39. `.git` / `.env` reachable at web root — 🆕
 40. Vulnerable / outdated deps — ✅ SCA (`vulnerable-dependency`)
 
@@ -82,8 +82,7 @@ The tool doesn't play catch-up to the meme; it laps it.
 ## Remaining gaps → roadmap vs judgment lane
 
 **Buildable next (static rules):** guessable webhook path (28), fingerprinting headers (30),
-untrusted postinstall (37), CI/CD secrets / Actions script injection (38), `.git` exposed (39),
-password policy (8), system-prompt leak (43).
+untrusted postinstall (37), `.git` exposed (39), password policy (8), system-prompt leak (43).
 
 **Not rules — Pre-Flight Audit Prompt / process:** breached-password (9), email-verification
 enforcement (10), GDPR erasure (47), AI tool guardrails (45), consent-for-PII (46). These need

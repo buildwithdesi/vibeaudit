@@ -114,6 +114,9 @@ import { noErrorMonitoring } from './no-error-monitoring.js';
 import { templateInjection } from './template-injection.js';
 import { missingSri } from './missing-sri.js';
 import { unpinnedDependencies } from './unpinned-dependencies.js';
+// CI/CD & storage (v1.2)
+import { githubActionsInjection } from './github-actions-injection.js';
+import { supabasePublicBucket } from './supabase-public-bucket.js';
 
 /** @type {import('./types.js').Rule[]} */
 export const ALL_RULES = [
@@ -229,6 +232,9 @@ export const ALL_RULES = [
   templateInjection,
   missingSri,
   unpinnedDependencies,
+  // CI/CD & storage (v1.2)
+  githubActionsInjection,
+  supabasePublicBucket,
 ];
 
 /**

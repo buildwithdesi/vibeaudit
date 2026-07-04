@@ -13,6 +13,8 @@ import { noErrorMonitoring } from '../../src/rules/no-error-monitoring.js';
 import { unpinnedDependencies } from '../../src/rules/unpinned-dependencies.js';
 import { missingSri } from '../../src/rules/missing-sri.js';
 import { templateInjection } from '../../src/rules/template-injection.js';
+import { githubActionsInjection } from '../../src/rules/github-actions-injection.js';
+import { supabasePublicBucket } from '../../src/rules/supabase-public-bucket.js';
 
 function mk(relativePath, content) {
   return { path: `/project/${relativePath}`, relativePath, content, lines: content.split('\n') };
@@ -102,5 +104,38 @@ describe('template-injection', () => {
   it('does NOT flag a static template or a non-engine .compile()', () => {
     assert.ok(clean(templateInjection, 'api/mail.js', "Handlebars.compile('<h1>{{name}}</h1>');"));
     assert.ok(clean(templateInjection, 'api/mail.js', 'myThing.compile(userInput);'));
+  });
+});
+
+// ─── github-actions-injection ─────────────────────────────────────────────────
+describe('github-actions-injection', () => {
+  it('flags attacker-controlled ${{ github.event.* }} inside a run: block', () => {
+    assert.ok(fires(githubActionsInjection, '.github/workflows/ci.yml',
+      'steps:\n  - run: echo "${{ github.event.pull_request.title }}"'));
+    assert.ok(fires(githubActionsInjection, '.github/workflows/pr.yml',
+      'steps:\n  - run: |\n      echo "${{ github.event.issue.body }}"'));
+  });
+  it('does NOT flag the safe env: pattern, safe contexts, or non-workflow files', () => {
+    assert.ok(clean(githubActionsInjection, '.github/workflows/ci.yml',
+      'steps:\n  - env:\n      TITLE: ${{ github.event.pull_request.title }}\n    run: echo "$TITLE"'));
+    assert.ok(clean(githubActionsInjection, '.github/workflows/ci.yml',
+      'steps:\n  - run: echo "${{ github.sha }}"'));
+    assert.ok(clean(githubActionsInjection, 'src/config.yml',
+      'run: echo "${{ github.event.pull_request.title }}"'));
+  });
+});
+
+// ─── supabase-public-bucket ───────────────────────────────────────────────────
+describe('supabase-public-bucket', () => {
+  it('flags a Storage bucket created public: true', () => {
+    assert.ok(fires(supabasePublicBucket, 'lib/storage.ts',
+      "await supabase.storage.createBucket('avatars', { public: true });"));
+    assert.ok(fires(supabasePublicBucket, 'lib/storage.ts',
+      "createBucket('uploads', { public: true, fileSizeLimit: '5MB' });"));
+  });
+  it('does NOT flag a private bucket or a bucket with no options', () => {
+    assert.ok(clean(supabasePublicBucket, 'lib/storage.ts',
+      "await supabase.storage.createBucket('avatars', { public: false });"));
+    assert.ok(clean(supabasePublicBucket, 'lib/storage.ts', "createBucket('avatars');"));
   });
 });

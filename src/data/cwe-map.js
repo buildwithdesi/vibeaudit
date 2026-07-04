@@ -39,6 +39,8 @@ export const CWE_MAP = {
   'template-injection':         { cweId: 'CWE-1336', cvssScore: 9.8, owaspCategory: 'A03:2021' },
   'missing-sri':                { cweId: 'CWE-353', cvssScore: 4.3, owaspCategory: 'A08:2021' },
   'unpinned-dependencies':      { cweId: 'CWE-829', cvssScore: 5.3, owaspCategory: 'A08:2021' },
+  'github-actions-injection':   { cweId: 'CWE-94',  cvssScore: 9.8, owaspCategory: 'A08:2021' },
+  'supabase-public-bucket':     { cweId: 'CWE-284', cvssScore: 5.3, owaspCategory: 'A01:2021' },
 
   // ── Server-Side Exploits ───────────────────────────────────────────────────
   'ssrf-vulnerability':         { cweId: 'CWE-918', cvssScore: 8.6, owaspCategory: 'A10:2021' },

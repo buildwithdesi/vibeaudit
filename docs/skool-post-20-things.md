@@ -24,7 +24,7 @@ One command. Zero setup. Takes about 2 seconds.
 npx vibe-audit .
 ```
 
-That's it. It reads every file in your project, runs 96 checks, and tells you exactly what's broken and how to fix it.
+That's it. It reads every file in your project, runs 98 checks, and tells you exactly what's broken and how to fix it.
 
 ---
 
@@ -94,7 +94,7 @@ Detects `res.redirect(req.query.returnUrl)` — where attackers use your trusted
 
 **20 out of 20. Full coverage.**
 
-And Vibe Audit has **76 more rules** beyond this list — AI prompt injection, payment amount manipulation, GraphQL introspection, Supabase RLS, Firebase admin key exposure, plus two new packs: **accessibility/WCAG** (the Level A checks that trip ADA-lawsuit scanners) and **scale/performance** (the N+1 queries behind surprise server bills). Every scan also points you to the Pre-Flight Audit Prompt for the judgment calls a scanner can't make.
+And Vibe Audit has **78 more rules** beyond this list — AI prompt injection, payment amount manipulation, GraphQL introspection, Supabase RLS, Firebase admin key exposure, plus two new packs: **accessibility/WCAG** (the Level A checks that trip ADA-lawsuit scanners) and **scale/performance** (the N+1 queries behind surprise server bills). Every scan also points you to the Pre-Flight Audit Prompt for the judgment calls a scanner can't make.
 
 ---
 

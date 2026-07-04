@@ -254,7 +254,7 @@ Detects `res.redirect(req.query.*)` and similar patterns where redirect URLs com
 ## Coverage Summary
 
 - **20/20 items covered** by Vibe Audit
-- **96 total rules** across 17 categories (these + 76 more, now including accessibility/WCAG, scale/performance, and observability packs)
+- **98 total rules** across 17 categories (these + 78 more, now including accessibility/WCAG, scale/performance, and observability packs)
 - **Zero configuration** — just run `npx vibe-audit .`
 - **Copy-paste fixes** — use `--fix` flag to get AI-ready fix prompts
 - **Beyond the code** — every scan points you to the DA Pre-Flight Audit Prompt for the judgment layer a static scanner can't see (business logic, data model, threat model)
