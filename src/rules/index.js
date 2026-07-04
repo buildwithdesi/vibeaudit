@@ -110,6 +110,10 @@ import { perfDbClientPerRequest } from './perf-db-client-per-request.js';
 import { commandInjection } from './command-injection.js';
 import { unsafeDeserialization } from './unsafe-deserialization.js';
 import { noErrorMonitoring } from './no-error-monitoring.js';
+// Supply chain & template injection (v1.2)
+import { templateInjection } from './template-injection.js';
+import { missingSri } from './missing-sri.js';
+import { unpinnedDependencies } from './unpinned-dependencies.js';
 
 /** @type {import('./types.js').Rule[]} */
 export const ALL_RULES = [
@@ -221,6 +225,10 @@ export const ALL_RULES = [
   commandInjection,
   unsafeDeserialization,
   noErrorMonitoring,
+  // Supply chain & template injection (v1.2)
+  templateInjection,
+  missingSri,
+  unpinnedDependencies,
 ];
 
 /**

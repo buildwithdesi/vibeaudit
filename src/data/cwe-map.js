@@ -36,6 +36,9 @@ export const CWE_MAP = {
   'prototype-pollution':        { cweId: 'CWE-1321', cvssScore: 8.1, owaspCategory: 'A03:2021' },
   'command-injection':          { cweId: 'CWE-78',  cvssScore: 9.8, owaspCategory: 'A03:2021' },
   'unsafe-deserialization':     { cweId: 'CWE-502', cvssScore: 9.8, owaspCategory: 'A08:2021' },
+  'template-injection':         { cweId: 'CWE-1336', cvssScore: 9.8, owaspCategory: 'A03:2021' },
+  'missing-sri':                { cweId: 'CWE-353', cvssScore: 4.3, owaspCategory: 'A08:2021' },
+  'unpinned-dependencies':      { cweId: 'CWE-829', cvssScore: 5.3, owaspCategory: 'A08:2021' },
 
   // ── Server-Side Exploits ───────────────────────────────────────────────────
   'ssrf-vulnerability':         { cweId: 'CWE-918', cvssScore: 8.6, owaspCategory: 'A10:2021' },

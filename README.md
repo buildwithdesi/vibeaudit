@@ -8,7 +8,7 @@ Vibe coding is fast. Shipping insecure code is faster. Vibe Audit catches the se
 npx @jackdog668/vibeaudit
 ```
 
-No config required. **93 rules** across 17 attack surfaces (now including accessibility/WCAG, scale/performance, and observability). Two production dependencies. Runs in seconds.
+No config required. **96 rules** across 17 attack surfaces (now including accessibility/WCAG, scale/performance, and observability). Two production dependencies. Runs in seconds.
 
 > Every finding ships with a CWE ID, a CVSS v3.1 score, an OWASP Top 10 mapping, a plain-English explanation, **and** a copy-paste fix prompt for your AI coding tool.
 
@@ -83,7 +83,7 @@ Every **security** finding carries its **CWE ID, CVSS v3.1 score, and OWASP Top 
 
 ## What It Checks
 
-**93 rules** across 17 categories, plus dependency scanning (SCA). Severity is as reported by Vibe Audit: 🔴 **CRIT** · 🟡 **WARN** · ⚪ **INFO**. CVSS is the v3.1 base score.
+**96 rules** across 17 categories, plus dependency scanning (SCA). Severity is as reported by Vibe Audit: 🔴 **CRIT** · 🟡 **WARN** · ⚪ **INFO**. CVSS is the v3.1 base score.
 
 ### 🔑 Secrets & Credentials
 
@@ -221,6 +221,9 @@ Every **security** finding carries its **CWE ID, CVSS v3.1 score, and OWASP Top 
 | `eval-usage` | 🔴 | 8.6 | CWE-95 | `eval()` / `new Function()` with dynamic args |
 | `command-injection` | 🔴 | 9.8 | CWE-78 | `exec()`/`spawn()` command built from interpolated input — RCE |
 | `unsafe-deserialization` | 🔴 | 9.8 | CWE-502 | `unserialize()` / `vm.runIn*` on untrusted input — RCE |
+| `template-injection` | 🔴 | 9.8 | CWE-1336 | Template engine compiling a template built from dynamic input — SSTI/RCE |
+| `missing-sri` | 🟡 | 4.3 | CWE-353 | External CDN `<script>`/`<link>` with no Subresource Integrity hash |
+| `unpinned-dependencies` | 🟡 | 5.3 | CWE-829 | Deps pinned to `*` / `latest` — npm pulls any version, no review |
 | `race-condition` | 🔴 | 8.1 | CWE-362 | Check-then-act without atomicity (TOCTOU) |
 | `dangerously-set-inner-html` | 🔴 | 6.1 | CWE-79 | React `dangerouslySetInnerHTML` with user content |
 | `header-injection` | 🟡 | 5.3 | CWE-113 | User input in HTTP response headers (CRLF) |
@@ -268,7 +271,7 @@ The real culprits behind the "$50k server bill" — named, not vibed. Quality/sc
 
 ### 📦 Dependencies (SCA)
 
-Beyond the 93 rules above, Vibe Audit runs **software composition analysis** via `npm audit` to flag **known-vulnerable dependencies** (`vulnerable-dependency`, CWE-1035). Skip it with `--skip-sca`.
+Beyond the 96 rules above, Vibe Audit runs **software composition analysis** via `npm audit` to flag **known-vulnerable dependencies** (`vulnerable-dependency`, CWE-1035). Skip it with `--skip-sca`.
 
 > Run `vibeaudit --list-rules` for the complete, always-current list.
 

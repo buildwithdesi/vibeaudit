@@ -10,6 +10,9 @@ import assert from 'node:assert/strict';
 import { commandInjection } from '../../src/rules/command-injection.js';
 import { unsafeDeserialization } from '../../src/rules/unsafe-deserialization.js';
 import { noErrorMonitoring } from '../../src/rules/no-error-monitoring.js';
+import { unpinnedDependencies } from '../../src/rules/unpinned-dependencies.js';
+import { missingSri } from '../../src/rules/missing-sri.js';
+import { templateInjection } from '../../src/rules/template-injection.js';
 
 function mk(relativePath, content) {
   return { path: `/project/${relativePath}`, relativePath, content, lines: content.split('\n') };
@@ -58,5 +61,46 @@ describe('no-error-monitoring', () => {
     assert.ok(clean(noErrorMonitoring, 'package.json',
       JSON.stringify({ dependencies: { acorn: '8.0.0' } })));
     assert.ok(clean(noErrorMonitoring, 'src/app.js', 'export const x = 1;'));
+  });
+});
+
+// ─── unpinned-dependencies ────────────────────────────────────────────────────
+describe('unpinned-dependencies', () => {
+  it('flags deps pinned to * / latest', () => {
+    assert.ok(fires(unpinnedDependencies, 'package.json',
+      JSON.stringify({ dependencies: { react: 'latest' } }, null, 2)));
+    assert.ok(fires(unpinnedDependencies, 'package.json',
+      JSON.stringify({ dependencies: { lodash: '*' } }, null, 2)));
+  });
+  it('does NOT flag caret/tilde/exact pins or non-package.json', () => {
+    assert.ok(clean(unpinnedDependencies, 'package.json',
+      JSON.stringify({ dependencies: { react: '^18.0.0', lodash: '~4.17.0', next: '14.0.0' } }, null, 2)));
+    assert.ok(clean(unpinnedDependencies, 'src/app.js', 'const react = "latest";'));
+  });
+});
+
+// ─── missing-sri ──────────────────────────────────────────────────────────────
+describe('missing-sri', () => {
+  it('flags external CDN script/stylesheet with no integrity', () => {
+    assert.ok(fires(missingSri, 'public/index.html', '<script src="https://cdn.jsdelivr.net/npm/lib.js"></script>'));
+    assert.ok(fires(missingSri, 'public/index.html', '<link rel="stylesheet" href="https://cdn.example.com/s.css">'));
+  });
+  it('does NOT flag SRI-protected, relative, or non-stylesheet links', () => {
+    assert.ok(clean(missingSri, 'public/index.html',
+      '<script src="https://cdn/lib.js" integrity="sha384-abc" crossorigin="anonymous"></script>'));
+    assert.ok(clean(missingSri, 'public/index.html', '<script src="/local/app.js"></script>'));
+    assert.ok(clean(missingSri, 'public/index.html', '<link rel="preconnect" href="https://fonts.gstatic.com">'));
+  });
+});
+
+// ─── template-injection ───────────────────────────────────────────────────────
+describe('template-injection', () => {
+  it('flags a template compiled from dynamic input', () => {
+    assert.ok(fires(templateInjection, 'api/mail.js', 'Handlebars.compile(`<h1>${userInput}</h1>`);'));
+    assert.ok(fires(templateInjection, 'api/mail.js', "ejs.render('Hello ' + name);"));
+  });
+  it('does NOT flag a static template or a non-engine .compile()', () => {
+    assert.ok(clean(templateInjection, 'api/mail.js', "Handlebars.compile('<h1>{{name}}</h1>');"));
+    assert.ok(clean(templateInjection, 'api/mail.js', 'myThing.compile(userInput);'));
   });
 });
