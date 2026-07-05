@@ -44,3 +44,6 @@ next-env.d.ts
 *.sublime-workspace
 .eslintcache
 *.pem
+
+# Claude Code local settings — machine-specific overrides, keep out of git
+.claude/settings.local.json
