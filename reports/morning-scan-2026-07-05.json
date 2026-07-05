@@ -1,0 +1,653 @@
+{
+  "date": "2026-07-05",
+  "results": [],
+  "errors": [
+    {
+      "repo": "jackdog668/sierra-baker-starter",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/screenshot-pools",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/second-brain-system",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/a-silly-idea",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/generator20x",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/digitalalchemy-dev",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/sierrabakerconsulting",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/epic-meitner",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/Storefront",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/content-drop",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/Skool-Forge",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/vibeaudit",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/homiedex",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/transformersgenerator",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/vibe-vocab",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/shownotes1",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/runofshow",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/shownotes2",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/shownotes4",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/shownotes3",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/shownotes6",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/shownotes5",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/percolator-class-guide",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/tonightlesson2",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/Digital-Alchemy-Skool",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/thisone2",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/meet-corekind-digital-alchemy",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/thisone",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/curious-labs-vol1",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/joyful-tesla",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/chromatic-illusion-weaponizer",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/outputs",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/digital-alchemy-freebies",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/da-video-tool",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/file-manager",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/landingpage",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/myfirstdeploy",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/Digital-Alchemy-Command-Center",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/da-tonight-video",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/Agent-Factory",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/ericananton",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/Digital-Alchemy",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/prototype",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/magic-erase",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/photo-organizer-da",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/content-idea-generator342",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/lovepixel-sticker-studio",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/Digital-Alchemy-Tracker",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/vibe-tracker",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/content-idea-generator34",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/firecrawl-site-insight",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/chatgpt-data-analysis",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/stitch-alchemy",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/blazing-schrodinger",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/video-alchemy",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/qr-forge-pro",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/234",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/digital-alchemy-bot",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/groundwork-collective",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/DESI",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/100-day-app-challenge",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/digital-alchemy-lab",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/brand-verticals-studio",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/sticker-banner-lab",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/the-77",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/jazz-roots-explorer",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/video-analyzer-70",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/Jiggle-Room",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/sec-context",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/collab-connect",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/IdeaToPRD-with-Gemini",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/vibeshot2",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/reddit-analyzer",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/VIDEOANALYZERGOOGLE",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/Siftly",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/vibeshot",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/video2",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/chibi-forge",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/lucky-leaf-finder",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/carver-s-garden-companion",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/new-folder-portfolio",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/digitalalchemy-vibecode",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/panther-chicago-legacy",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/harriet-s-path",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/htmlchange",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/jackdog668.github.io",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/my-twitter-export",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/ineeditall",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/catdog",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/Petty-Translator",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/fuzzy-octo-fishstick",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/reimagined-octo-funicular",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/educational-resources",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/literate-garbanzo",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/revenue-cat-contest",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/new-app",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/alchemic-generator-v2",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/ansel",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/cursing-woman",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/new-folder-docs",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/day-6-bloodbank-charles-drew",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/100-day-redo",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/1code-main",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/day-3-stackroller",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/day-5-toothfairy-ai",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/remotion-cinematic",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/permission-to-play",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/biz-agent",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/digital-alchemy-os",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/reminderapp",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/vvprivacypolicy",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/100DayAppChallenge",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/ai-agent-configs",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/Content-Hook-Generator",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/This-Day-in-Black-Excellence",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/grainrad-bulk",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/video-analyzer",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/social-media-scraping-apis",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/LovePixel-Final",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/digital-alchemy-app",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/Love-Pixel-Stickers",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/my-daily-yes",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/da-forge-x7k9m2",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/chroma-flow",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/ui-forge-command-center",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/node-banana",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/node-banana-bear",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/telegram-clipboard",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/melanin-patch-app",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/ruby-magnetosphere",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/demo-carousel",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/exo-spirit",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/infrared-hypernova",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/resonant-halley",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/ruby-feynman",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/deep-radiation",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/promptdatabasev3",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/portfolio-website-v2",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/stream-gamify",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/midjourney-agent",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/echoos",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/app-replay-forge",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/sref-scanner",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/alchemic-generator",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/hackspark",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/ShadowPlay",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/new-genny",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/electric-plasma-portfolio",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/AetherExWork",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/digital-alchemy-dashboard",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/notebooklm-mcp",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/crypto-101",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/awesome-nanobanana-pro",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/saas-starter",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/CreatorColorLine",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/stitch-alchemy",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/chromtic-weaponizer",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/Chromatic-Illusion-Weaponizerr",
+      "error": "Auth required"
+    },
+    {
+      "repo": "jackdog668/Super-Banana",
+      "error": "Auth required"
+    }
+  ],
+  "summary": {
+    "total": 0,
+    "gradeA": 0,
+    "gradeB": 0,
+    "gradeC": 0,
+    "gradeD": 0,
+    "gradeF": 0,
+    "totalCriticals": 0,
+    "totalWarnings": 0,
+    "skipped": 159
+  }
+}
