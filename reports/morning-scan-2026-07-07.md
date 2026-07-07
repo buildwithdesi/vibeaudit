@@ -1,5 +1,5 @@
 # Vibe Audit Morning Scan
-**Tuesday, July 7, 2026** | 8 repos scanned | 151 skipped | 1097.9s
+**Tuesday, July 7, 2026** | 8 repos scanned | 151 skipped | 423.2s
 
 ## Portfolio Health
 
@@ -97,157 +97,157 @@
 
 ## Skipped Repos
 
-- jackdog668/sierra-baker-starter: Not found / empty
-- jackdog668/screenshot-pools: Not found / empty
 - jackdog668/generator20x: Not found / empty
+- jackdog668/screenshot-pools: Not found / empty
+- jackdog668/sierra-baker-starter: Not found / empty
 - jackdog668/digitalalchemy-dev: Not found / empty
-- jackdog668/epic-meitner: Not found / empty
 - jackdog668/Storefront: Not found / empty
 - jackdog668/sierrabakerconsulting: Not found / empty
-- jackdog668/homiedex: Not found / empty
+- jackdog668/epic-meitner: Not found / empty
 - jackdog668/content-drop: Not found / empty
-- jackdog668/Skool-Forge: Not found / empty
+- jackdog668/homiedex: Not found / empty
 - jackdog668/transformersgenerator: Not found / empty
 - jackdog668/vibe-vocab: Not found / empty
-- jackdog668/shownotes1: Not found / empty
-- jackdog668/shownotes2: Not found / empty
+- jackdog668/Skool-Forge: Not found / empty
 - jackdog668/runofshow: Not found / empty
+- jackdog668/shownotes2: Not found / empty
+- jackdog668/shownotes1: Not found / empty
+- jackdog668/shownotes5: Not found / empty
 - jackdog668/shownotes3: Not found / empty
 - jackdog668/shownotes4: Not found / empty
-- jackdog668/shownotes5: Not found / empty
-- jackdog668/Digital-Alchemy-Skool: Not found / empty
-- jackdog668/shownotes6: Not found / empty
 - jackdog668/tonightlesson2: Not found / empty
+- jackdog668/shownotes6: Not found / empty
+- jackdog668/Digital-Alchemy-Skool: Not found / empty
 - jackdog668/thisone2: Not found / empty
 - jackdog668/thisone: Not found / empty
+- jackdog668/meet-corekind-digital-alchemy: Not found / empty
 - jackdog668/joyful-tesla: Not found / empty
 - jackdog668/curious-labs-vol1: Not found / empty
-- jackdog668/meet-corekind-digital-alchemy: Not found / empty
 - jackdog668/digital-alchemy-freebies: Not found / empty
-- jackdog668/chromatic-illusion-weaponizer: Not found / empty
 - jackdog668/outputs: Not found / empty
-- jackdog668/Digital-Alchemy-Command-Center: Not found / empty
+- jackdog668/chromatic-illusion-weaponizer: Not found / empty
 - jackdog668/da-video-tool: Not found / empty
+- jackdog668/Digital-Alchemy-Command-Center: Not found / empty
 - jackdog668/file-manager: Not found / empty
 - jackdog668/da-tonight-video: Not found / empty
 - jackdog668/landingpage: Not found / empty
 - jackdog668/Digital-Alchemy: Not found / empty
 - jackdog668/Agent-Factory: Not found / empty
 - jackdog668/ericananton: Not found / empty
-- jackdog668/prototype: Not found / empty
 - jackdog668/magic-erase: Not found / empty
-- jackdog668/content-idea-generator342: Not found / empty
+- jackdog668/prototype: Not found / empty
 - jackdog668/content-idea-generator34: Not found / empty
+- jackdog668/content-idea-generator342: Not found / empty
 - jackdog668/chatgpt-data-analysis: Not found / empty
 - jackdog668/lovepixel-sticker-studio: Not found / empty
 - jackdog668/Digital-Alchemy-Tracker: Not found / empty
-- jackdog668/firecrawl-site-insight: Not found / empty
 - jackdog668/blazing-schrodinger: Not found / empty
+- jackdog668/firecrawl-site-insight: Not found / empty
 - jackdog668/stitch-alchemy: Not found / empty
 - jackdog668/digital-alchemy-bot: Not found / empty
-- jackdog668/video-alchemy: Not found / empty
 - jackdog668/groundwork-collective: Not found / empty
-- jackdog668/DESI: Rate limited
-- jackdog668/234: Rate limited
-- jackdog668/qr-forge-pro: Rate limited
-- jackdog668/digital-alchemy-lab: Rate limited
+- jackdog668/video-alchemy: Not found / empty
+- jackdog668/qr-forge-pro: Not found / empty
+- jackdog668/234: Not found / empty
+- jackdog668/DESI: Not found / empty
 - jackdog668/100-day-app-challenge: Rate limited
+- jackdog668/digital-alchemy-lab: Rate limited
 - jackdog668/the-77: Rate limited
-- jackdog668/video-analyzer-70: Not found / empty
-- jackdog668/brand-verticals-studio: Not found / empty
-- jackdog668/sticker-banner-lab: Not found / empty
-- jackdog668/sec-context: Not found / empty
+- jackdog668/sticker-banner-lab: Rate limited
+- jackdog668/brand-verticals-studio: Rate limited
+- jackdog668/video-analyzer-70: Rate limited
 - jackdog668/jazz-roots-explorer: Not found / empty
+- jackdog668/sec-context: Not found / empty
 - jackdog668/collab-connect: Not found / empty
 - jackdog668/IdeaToPRD-with-Gemini: Not found / empty
 - jackdog668/Jiggle-Room: Not found / empty
-- jackdog668/VIDEOANALYZERGOOGLE: Rate limited
-- jackdog668/vibeshot2: Rate limited
-- jackdog668/reddit-analyzer: Rate limited
-- jackdog668/vibeshot: Rate limited
-- jackdog668/video2: Rate limited
-- jackdog668/chibi-forge: Rate limited
-- jackdog668/panther-chicago-legacy: Rate limited
-- jackdog668/lucky-leaf-finder: Rate limited
-- jackdog668/carver-s-garden-companion: Rate limited
-- jackdog668/new-folder-portfolio: Not found / empty
-- jackdog668/htmlchange: Not found / empty
+- jackdog668/reddit-analyzer: Not found / empty
+- jackdog668/vibeshot2: Not found / empty
+- jackdog668/VIDEOANALYZERGOOGLE: Not found / empty
+- jackdog668/video2: Not found / empty
+- jackdog668/vibeshot: Not found / empty
+- jackdog668/chibi-forge: Not found / empty
+- jackdog668/panther-chicago-legacy: Not found / empty
+- jackdog668/carver-s-garden-companion: Not found / empty
+- jackdog668/lucky-leaf-finder: Not found / empty
 - jackdog668/harriet-s-path: Not found / empty
+- jackdog668/htmlchange: Not found / empty
+- jackdog668/new-folder-portfolio: Not found / empty
+- jackdog668/jackdog668.github.io: Not found / empty
 - jackdog668/digitalalchemy-vibecode: Not found / empty
 - jackdog668/my-twitter-export: Not found / empty
-- jackdog668/jackdog668.github.io: Not found / empty
 - jackdog668/Petty-Translator: Not found / empty
 - jackdog668/catdog: Not found / empty
 - jackdog668/ineeditall: Not found / empty
-- jackdog668/fuzzy-octo-fishstick: Not found / empty
 - jackdog668/reimagined-octo-funicular: Not found / empty
+- jackdog668/fuzzy-octo-fishstick: Not found / empty
 - jackdog668/literate-garbanzo: Not found / empty
+- jackdog668/revenue-cat-contest: Not found / empty
 - jackdog668/educational-resources: Not found / empty
 - jackdog668/ansel: Not found / empty
-- jackdog668/revenue-cat-contest: Not found / empty
-- jackdog668/cursing-woman: Not found / empty
-- jackdog668/new-app: Not found / empty
 - jackdog668/new-folder-docs: Not found / empty
-- jackdog668/day-6-bloodbank-charles-drew: Not found / empty
-- jackdog668/1code-main: Not found / empty
+- jackdog668/new-app: Not found / empty
+- jackdog668/cursing-woman: Not found / empty
 - jackdog668/alchemic-generator-v2: Not found / empty
-- jackdog668/day-5-toothfairy-ai: Not found / empty
+- jackdog668/1code-main: Not found / empty
+- jackdog668/day-6-bloodbank-charles-drew: Not found / empty
 - jackdog668/day-3-stackroller: Not found / empty
+- jackdog668/day-5-toothfairy-ai: Not found / empty
 - jackdog668/100-day-redo: Not found / empty
-- jackdog668/digital-alchemy-os: Not found / empty
 - jackdog668/biz-agent: Not found / empty
+- jackdog668/digital-alchemy-os: Not found / empty
 - jackdog668/remotion-cinematic: Not found / empty
-- jackdog668/permission-to-play: Not found / empty
 - jackdog668/100DayAppChallenge: Not found / empty
+- jackdog668/permission-to-play: Not found / empty
 - jackdog668/reminderapp: Not found / empty
 - jackdog668/ai-agent-configs: Not found / empty
-- jackdog668/This-Day-in-Black-Excellence: Not found / empty
 - jackdog668/vvprivacypolicy: Not found / empty
-- jackdog668/grainrad-bulk: Not found / empty
+- jackdog668/This-Day-in-Black-Excellence: Not found / empty
 - jackdog668/Content-Hook-Generator: Not found / empty
+- jackdog668/grainrad-bulk: Not found / empty
 - jackdog668/digital-alchemy-app: Not found / empty
-- jackdog668/social-media-scraping-apis: Not found / empty
 - jackdog668/LovePixel-Final: Not found / empty
+- jackdog668/social-media-scraping-apis: Not found / empty
 - jackdog668/video-analyzer: Not found / empty
 - jackdog668/chroma-flow: Not found / empty
-- jackdog668/Love-Pixel-Stickers: Not found / empty
 - jackdog668/my-daily-yes: Not found / empty
-- jackdog668/melanin-patch-app: Not found / empty
-- jackdog668/da-forge-x7k9m2: Not found / empty
+- jackdog668/Love-Pixel-Stickers: Not found / empty
+- jackdog668/da-forge-x7k9m2: Rate limited
 - jackdog668/ui-forge-command-center: Not found / empty
-- jackdog668/telegram-clipboard: Not found / empty
-- jackdog668/node-banana: Not found / empty
-- jackdog668/node-banana-bear: Not found / empty
-- jackdog668/resonant-halley: Not found / empty
-- jackdog668/ruby-magnetosphere: Not found / empty
-- jackdog668/ruby-feynman: Not found / empty
-- jackdog668/exo-spirit: Rate limited
+- jackdog668/melanin-patch-app: Not found / empty
+- jackdog668/telegram-clipboard: Rate limited
+- jackdog668/node-banana: Rate limited
+- jackdog668/node-banana-bear: Rate limited
+- jackdog668/ruby-feynman: Rate limited
+- jackdog668/resonant-halley: Rate limited
+- jackdog668/ruby-magnetosphere: Rate limited
 - jackdog668/infrared-hypernova: Not found / empty
 - jackdog668/demo-carousel: Not found / empty
-- jackdog668/promptdatabasev3: Rate limited
-- jackdog668/deep-radiation: Rate limited
-- jackdog668/stream-gamify: Rate limited
-- jackdog668/portfolio-website-v2: Rate limited
-- jackdog668/hackspark: Rate limited
-- jackdog668/midjourney-agent: Rate limited
-- jackdog668/echoos: Rate limited
-- jackdog668/alchemic-generator: Rate limited
-- jackdog668/app-replay-forge: Rate limited
-- jackdog668/sref-scanner: Rate limited
-- jackdog668/ShadowPlay: Rate limited
-- jackdog668/new-genny: Rate limited
-- jackdog668/digital-alchemy-dashboard: Rate limited
-- jackdog668/electric-plasma-portfolio: Rate limited
-- jackdog668/AetherExWork: Rate limited
-- jackdog668/CreatorColorLine: Rate limited
-- jackdog668/notebooklm-mcp: Rate limited
-- jackdog668/crypto-101: Rate limited
-- jackdog668/saas-starter: Not found / empty
+- jackdog668/exo-spirit: Not found / empty
+- jackdog668/stream-gamify: Not found / empty
+- jackdog668/deep-radiation: Not found / empty
+- jackdog668/promptdatabasev3: Not found / empty
+- jackdog668/portfolio-website-v2: Not found / empty
+- jackdog668/hackspark: Not found / empty
+- jackdog668/midjourney-agent: Not found / empty
+- jackdog668/app-replay-forge: Not found / empty
+- jackdog668/echoos: Not found / empty
+- jackdog668/alchemic-generator: Not found / empty
+- jackdog668/ShadowPlay: Not found / empty
+- jackdog668/new-genny: Not found / empty
+- jackdog668/sref-scanner: Not found / empty
+- jackdog668/electric-plasma-portfolio: Not found / empty
+- jackdog668/AetherExWork: Not found / empty
+- jackdog668/digital-alchemy-dashboard: Not found / empty
+- jackdog668/notebooklm-mcp: Not found / empty
+- jackdog668/crypto-101: Not found / empty
+- jackdog668/CreatorColorLine: Not found / empty
 - jackdog668/awesome-nanobanana-pro: Not found / empty
+- jackdog668/saas-starter: Not found / empty
 - jackdog668/Chromatic-Illusion-Weaponizerr: Not found / empty
+- jackdog668/stitch-alchemy: Not found / empty
 - jackdog668/Super-Banana: Not found / empty
 - jackdog668/chromtic-weaponizer: Not found / empty
-- jackdog668/stitch-alchemy: Not found / empty
 
 ---
-*Generated by Vibe Audit v1.1.0 — 2026-07-07T09:50:44.242Z*
+*Generated by Vibe Audit v1.1.0 — 2026-07-07T14:39:43.099Z*
