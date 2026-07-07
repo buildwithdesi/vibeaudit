@@ -20,6 +20,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { audit } from '../src/index.js';
 import { fetchRepoFiles, parseGitHubTarget } from '../src/github.js';
+import { BASELINE_IGNORE } from '../src/baseline-ignore.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -36,12 +37,6 @@ const topN = parseInt(flag('top', '0'), 10);
 const discover = hasFlag('discover');
 const owner = flag('owner', 'jackdog668');
 const concurrency = parseInt(flag('concurrency', '3'), 10);
-
-// Directories that are never production attack surface: test fixtures (often deliberately
-// vulnerable) and generated scan reports. Excluded from every repo's grade so the dashboard
-// reflects real risk — not the scanner grading its own test data. Passed as a hard baseline
-// so a grade never silently depends on fetchRemoteConfig() landing the repo's ignore list.
-const BASELINE_IGNORE = ['reports', 'tests', 'fixtures', '__tests__', '__fixtures__'];
 
 async function discoverRepos(owner) {
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;

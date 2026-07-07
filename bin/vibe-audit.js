@@ -26,6 +26,7 @@ import { ALL_RULES } from '../src/rules/index.js';
 import { CWE_MAP } from '../src/data/cwe-map.js';
 import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
 import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
+import { BASELINE_IGNORE } from '../src/baseline-ignore.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -145,6 +146,10 @@ const cliOptions = {
   strict: values.strict,
   skipSca: values['skip-sca'],
   deep: values.deep,
+  // Baseline ignore, always applied on top of resolved config — matches scripts/morning-scan.js
+  // so a self-scan never depends on .vibe-audit.json being read/resolved correctly to exclude
+  // reports/ and test fixtures.
+  extraIgnore: BASELINE_IGNORE,
 };
 
 let targetDir;
