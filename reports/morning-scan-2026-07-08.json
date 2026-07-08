@@ -4060,7 +4060,7 @@
           "severity": "warning",
           "message": "Query runs inside a loop — the N+1 pattern: one request becomes one-per-row, and at scale that's the \"$50k server bill\".",
           "file": "src/app/api/admin/backfill-library-hashes/route.ts",
-          "line": 59,
+          "line": 58,
           "evidence": "// Update this specific row by id. (0006's unique index isn't applied",
           "fix": "Batch it into a single query instead of one per iteration: fetch all rows with WHERE id IN (...) (Prisma: findMany({ where: { id: { in: ids } } })), or a JOIN / include. If the calls are genuinely independent network I/O, at minimum run them together with Promise.all."
         },
@@ -4070,7 +4070,7 @@
           "severity": "warning",
           "message": "await inside a loop runs each iteration one-at-a-time. If the iterations are independent, they should run in parallel.",
           "file": "src/app/api/admin/backfill-library-hashes/route.ts",
-          "line": 51,
+          "line": 50,
           "evidence": "let missing = 0;",
           "fix": "If each iteration is independent, collect the promises and await them together: const results = await Promise.all(items.map(async (i) => { ... })). Keep the sequential await only when an iteration truly depends on the previous one."
         },
@@ -4080,7 +4080,7 @@
           "severity": "warning",
           "message": "await inside a loop runs each iteration one-at-a-time. If the iterations are independent, they should run in parallel.",
           "file": "src/app/api/admin/backfill-library-hashes/route.ts",
-          "line": 59,
+          "line": 58,
           "evidence": "// Update this specific row by id. (0006's unique index isn't applied",
           "fix": "If each iteration is independent, collect the promises and await them together: const results = await Promise.all(items.map(async (i) => { ... })). Keep the sequential await only when an iteration truly depends on the previous one."
         },
@@ -4136,7 +4136,7 @@
           "severity": "warning",
           "message": "Mongoose find() with no limit() — returns all matching documents",
           "file": "src/app/api/health/route.ts",
-          "line": 138,
+          "line": 144,
           "evidence": "const match = stderr.split(/\\r?\\n/).find((l) => l.includes(\"PO Token Providers:\"));",
           "fix": "Always add pagination or limits to list endpoints. Use limit/offset, cursor-based pagination, or at minimum a hard cap (e.g., .limit(100)). Without limits: (1) anyone can scrape your entire database in one request, (2) large result sets crash your server or client, (3) it's a trivial DoS vector.",
           "cweId": "CWE-770",
@@ -5482,7 +5482,7 @@
           "severity": "info",
           "message": "Query builder select without limit — may return unbounded results",
           "file": "src/app/api/admin/backfill-library-hashes/route.ts",
-          "line": 44,
+          "line": 43,
           "evidence": ".select({ id: libraryVideos.id, title: libraryVideos.title })",
           "fix": "Always add pagination or limits to list endpoints. Use limit/offset, cursor-based pagination, or at minimum a hard cap (e.g., .limit(100)). Without limits: (1) anyone can scrape your entire database in one request, (2) large result sets crash your server or client, (3) it's a trivial DoS vector.",
           "cweId": "CWE-770",
@@ -5508,7 +5508,7 @@
           "severity": "info",
           "message": "Database query without field selection — consider selecting only needed fields",
           "file": "src/app/api/health/route.ts",
-          "line": 138,
+          "line": 144,
           "evidence": "const match = stderr.split(/\\r?\\n/).find((l) => l.includes(\"PO Token Providers:\"));",
           "fix": "Only return the fields the client actually needs. Use select/projection in your database query, or map the result to a DTO (data transfer object) before sending. Anyone can see the full response in DevTools → Network → click request → Response tab.",
           "cweId": "CWE-200",
@@ -16714,7 +16714,7 @@
       ]
     },
     {
-      "repo": "jackdog668/carver-s-garden-companion",
+      "repo": "jackdog668/panther-chicago-legacy",
       "grade": "F",
       "criticals": 1,
       "warnings": 2,
@@ -16772,7 +16772,7 @@
       ]
     },
     {
-      "repo": "jackdog668/panther-chicago-legacy",
+      "repo": "jackdog668/carver-s-garden-companion",
       "grade": "F",
       "criticals": 1,
       "warnings": 2,
@@ -31146,68 +31146,6 @@
       ]
     },
     {
-      "repo": "jackdog668/da-forge-x7k9m2",
-      "grade": "F",
-      "criticals": 2,
-      "warnings": 2,
-      "infos": 0,
-      "total": 4,
-      "findings": [
-        {
-          "ruleId": "no-input-validation",
-          "ruleName": "No Input Validation",
-          "severity": "critical",
-          "message": "Direct innerHTML assignment with dynamic, unescaped value — potential XSS vector",
-          "file": "index.html",
-          "line": 1179,
-          "evidence": "tag.innerHTML = `<span class=\"time\">${event.time}</span><span class=\"title\">${event.title}</span>`;",
-          "fix": "Escape/sanitize the value before assigning to innerHTML (e.g. an esc()/DOMPurify wrapper), or use textContent for plain text.",
-          "cweId": "CWE-20",
-          "cvssScore": 8.6,
-          "owaspCategory": "A03:2021"
-        },
-        {
-          "ruleId": "no-input-validation",
-          "ruleName": "No Input Validation",
-          "severity": "critical",
-          "message": "Direct innerHTML assignment with dynamic, unescaped value — potential XSS vector",
-          "file": "index.html",
-          "line": 1211,
-          "evidence": "section.innerHTML = `<div class=\"schedule-date\"><span>${monthNames[month]} ${day}</span><span class=\"schedule-date-day\">",
-          "fix": "Escape/sanitize the value before assigning to innerHTML (e.g. an esc()/DOMPurify wrapper), or use textContent for plain text.",
-          "cweId": "CWE-20",
-          "cvssScore": 8.6,
-          "owaspCategory": "A03:2021"
-        },
-        {
-          "ruleId": "insecure-connections",
-          "ruleName": "Insecure Connections",
-          "severity": "warning",
-          "message": "Non-localhost HTTP URL — data sent unencrypted",
-          "file": "index.html",
-          "line": 867,
-          "evidence": "background-image: url(\"data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org",
-          "fix": "Use HTTPS for all external connections. HTTP transmits data in plaintext — anyone on the network can read it.",
-          "cweId": "CWE-319",
-          "cvssScore": 5.3,
-          "owaspCategory": "A02:2021"
-        },
-        {
-          "ruleId": "missing-sri",
-          "ruleName": "Missing Subresource Integrity",
-          "severity": "warning",
-          "message": "External stylesheet loaded from a CDN with no integrity hash — if that CDN is compromised, it runs arbitrary code in your users' browsers and you can't tell.",
-          "file": "index.html",
-          "line": 8,
-          "evidence": "<link",
-          "fix": "Add a Subresource Integrity hash and crossorigin: `<script src=\"https://cdn…/lib.js\" integrity=\"sha384-…\" crossorigin=\"anonymous\">`. Better yet, install the package with npm and bundle it so there's no third-party CDN in the loop at all.",
-          "cweId": "CWE-353",
-          "cvssScore": 4.3,
-          "owaspCategory": "A08:2021"
-        }
-      ]
-    },
-    {
       "repo": "jackdog668/ui-forge-command-center",
       "grade": "F",
       "criticals": 1,
@@ -31272,6 +31210,68 @@
           "message": "External stylesheet loaded from a CDN with no integrity hash — if that CDN is compromised, it runs arbitrary code in your users' browsers and you can't tell.",
           "file": "index.html",
           "line": 10,
+          "evidence": "<link",
+          "fix": "Add a Subresource Integrity hash and crossorigin: `<script src=\"https://cdn…/lib.js\" integrity=\"sha384-…\" crossorigin=\"anonymous\">`. Better yet, install the package with npm and bundle it so there's no third-party CDN in the loop at all.",
+          "cweId": "CWE-353",
+          "cvssScore": 4.3,
+          "owaspCategory": "A08:2021"
+        }
+      ]
+    },
+    {
+      "repo": "jackdog668/da-forge-x7k9m2",
+      "grade": "F",
+      "criticals": 2,
+      "warnings": 2,
+      "infos": 0,
+      "total": 4,
+      "findings": [
+        {
+          "ruleId": "no-input-validation",
+          "ruleName": "No Input Validation",
+          "severity": "critical",
+          "message": "Direct innerHTML assignment with dynamic, unescaped value — potential XSS vector",
+          "file": "index.html",
+          "line": 1179,
+          "evidence": "tag.innerHTML = `<span class=\"time\">${event.time}</span><span class=\"title\">${event.title}</span>`;",
+          "fix": "Escape/sanitize the value before assigning to innerHTML (e.g. an esc()/DOMPurify wrapper), or use textContent for plain text.",
+          "cweId": "CWE-20",
+          "cvssScore": 8.6,
+          "owaspCategory": "A03:2021"
+        },
+        {
+          "ruleId": "no-input-validation",
+          "ruleName": "No Input Validation",
+          "severity": "critical",
+          "message": "Direct innerHTML assignment with dynamic, unescaped value — potential XSS vector",
+          "file": "index.html",
+          "line": 1211,
+          "evidence": "section.innerHTML = `<div class=\"schedule-date\"><span>${monthNames[month]} ${day}</span><span class=\"schedule-date-day\">",
+          "fix": "Escape/sanitize the value before assigning to innerHTML (e.g. an esc()/DOMPurify wrapper), or use textContent for plain text.",
+          "cweId": "CWE-20",
+          "cvssScore": 8.6,
+          "owaspCategory": "A03:2021"
+        },
+        {
+          "ruleId": "insecure-connections",
+          "ruleName": "Insecure Connections",
+          "severity": "warning",
+          "message": "Non-localhost HTTP URL — data sent unencrypted",
+          "file": "index.html",
+          "line": 867,
+          "evidence": "background-image: url(\"data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org",
+          "fix": "Use HTTPS for all external connections. HTTP transmits data in plaintext — anyone on the network can read it.",
+          "cweId": "CWE-319",
+          "cvssScore": 5.3,
+          "owaspCategory": "A02:2021"
+        },
+        {
+          "ruleId": "missing-sri",
+          "ruleName": "Missing Subresource Integrity",
+          "severity": "warning",
+          "message": "External stylesheet loaded from a CDN with no integrity hash — if that CDN is compromised, it runs arbitrary code in your users' browsers and you can't tell.",
+          "file": "index.html",
+          "line": 8,
           "evidence": "<link",
           "fix": "Add a Subresource Integrity hash and crossorigin: `<script src=\"https://cdn…/lib.js\" integrity=\"sha384-…\" crossorigin=\"anonymous\">`. Better yet, install the package with npm and bundle it so there's no third-party CDN in the loop at all.",
           "cweId": "CWE-353",
@@ -35760,106 +35760,6 @@
       ]
     },
     {
-      "repo": "jackdog668/thisone2",
-      "grade": "D",
-      "criticals": 0,
-      "warnings": 8,
-      "infos": 0,
-      "total": 8,
-      "findings": [
-        {
-          "ruleId": "a11y-button-no-name",
-          "ruleName": "Button Has No Accessible Name",
-          "severity": "warning",
-          "message": "Button has no accessible name — no text content and no aria-label, so a screen reader just announces \"button\" (WCAG 4.1.2, Level A).",
-          "file": "index.html",
-          "line": 771,
-          "evidence": "<button class=\"nav-dot active\" data-target=\"slide-1\" data-label=\"You Are Here\"></button>",
-          "fix": "Give the button a name: add visible text, or for an icon-only button add aria-label=\"Close\" (or aria-labelledby pointing at a label element).",
-          "wcag": "WCAG 4.1.2 (Level A)"
-        },
-        {
-          "ruleId": "a11y-button-no-name",
-          "ruleName": "Button Has No Accessible Name",
-          "severity": "warning",
-          "message": "Button has no accessible name — no text content and no aria-label, so a screen reader just announces \"button\" (WCAG 4.1.2, Level A).",
-          "file": "index.html",
-          "line": 772,
-          "evidence": "<button class=\"nav-dot\" data-target=\"slide-2\" data-label=\"Recipe\"></button>",
-          "fix": "Give the button a name: add visible text, or for an icon-only button add aria-label=\"Close\" (or aria-labelledby pointing at a label element).",
-          "wcag": "WCAG 4.1.2 (Level A)"
-        },
-        {
-          "ruleId": "a11y-button-no-name",
-          "ruleName": "Button Has No Accessible Name",
-          "severity": "warning",
-          "message": "Button has no accessible name — no text content and no aria-label, so a screen reader just announces \"button\" (WCAG 4.1.2, Level A).",
-          "file": "index.html",
-          "line": 773,
-          "evidence": "<button class=\"nav-dot\" data-target=\"slide-3\" data-label=\"Template\"></button>",
-          "fix": "Give the button a name: add visible text, or for an icon-only button add aria-label=\"Close\" (or aria-labelledby pointing at a label element).",
-          "wcag": "WCAG 4.1.2 (Level A)"
-        },
-        {
-          "ruleId": "a11y-button-no-name",
-          "ruleName": "Button Has No Accessible Name",
-          "severity": "warning",
-          "message": "Button has no accessible name — no text content and no aria-label, so a screen reader just announces \"button\" (WCAG 4.1.2, Level A).",
-          "file": "index.html",
-          "line": 774,
-          "evidence": "<button class=\"nav-dot\" data-target=\"slide-4\" data-label=\"Example\"></button>",
-          "fix": "Give the button a name: add visible text, or for an icon-only button add aria-label=\"Close\" (or aria-labelledby pointing at a label element).",
-          "wcag": "WCAG 4.1.2 (Level A)"
-        },
-        {
-          "ruleId": "a11y-button-no-name",
-          "ruleName": "Button Has No Accessible Name",
-          "severity": "warning",
-          "message": "Button has no accessible name — no text content and no aria-label, so a screen reader just announces \"button\" (WCAG 4.1.2, Level A).",
-          "file": "index.html",
-          "line": 775,
-          "evidence": "<button class=\"nav-dot\" data-target=\"slide-5\" data-label=\"Rhythm\"></button>",
-          "fix": "Give the button a name: add visible text, or for an icon-only button add aria-label=\"Close\" (or aria-labelledby pointing at a label element).",
-          "wcag": "WCAG 4.1.2 (Level A)"
-        },
-        {
-          "ruleId": "a11y-button-no-name",
-          "ruleName": "Button Has No Accessible Name",
-          "severity": "warning",
-          "message": "Button has no accessible name — no text content and no aria-label, so a screen reader just announces \"button\" (WCAG 4.1.2, Level A).",
-          "file": "index.html",
-          "line": 776,
-          "evidence": "<button class=\"nav-dot\" data-target=\"slide-6\" data-label=\"Make It Real\"></button>",
-          "fix": "Give the button a name: add visible text, or for an icon-only button add aria-label=\"Close\" (or aria-labelledby pointing at a label element).",
-          "wcag": "WCAG 4.1.2 (Level A)"
-        },
-        {
-          "ruleId": "a11y-button-no-name",
-          "ruleName": "Button Has No Accessible Name",
-          "severity": "warning",
-          "message": "Button has no accessible name — no text content and no aria-label, so a screen reader just announces \"button\" (WCAG 4.1.2, Level A).",
-          "file": "index.html",
-          "line": 777,
-          "evidence": "<button class=\"nav-dot\" data-target=\"slide-7\" data-label=\"Close The Loop\"></button>",
-          "fix": "Give the button a name: add visible text, or for an icon-only button add aria-label=\"Close\" (or aria-labelledby pointing at a label element).",
-          "wcag": "WCAG 4.1.2 (Level A)"
-        },
-        {
-          "ruleId": "missing-sri",
-          "ruleName": "Missing Subresource Integrity",
-          "severity": "warning",
-          "message": "External stylesheet loaded from a CDN with no integrity hash — if that CDN is compromised, it runs arbitrary code in your users' browsers and you can't tell.",
-          "file": "index.html",
-          "line": 9,
-          "evidence": "<link href=\"https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Inter:wght@400;500;600&family=Co",
-          "fix": "Add a Subresource Integrity hash and crossorigin: `<script src=\"https://cdn…/lib.js\" integrity=\"sha384-…\" crossorigin=\"anonymous\">`. Better yet, install the package with npm and bundle it so there's no third-party CDN in the loop at all.",
-          "cweId": "CWE-353",
-          "cvssScore": 4.3,
-          "owaspCategory": "A08:2021"
-        }
-      ]
-    },
-    {
       "repo": "jackdog668/thisone",
       "grade": "D",
       "criticals": 0,
@@ -35952,6 +35852,106 @@
           "file": "index.html",
           "line": 9,
           "evidence": "<link href=\"https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;5",
+          "fix": "Add a Subresource Integrity hash and crossorigin: `<script src=\"https://cdn…/lib.js\" integrity=\"sha384-…\" crossorigin=\"anonymous\">`. Better yet, install the package with npm and bundle it so there's no third-party CDN in the loop at all.",
+          "cweId": "CWE-353",
+          "cvssScore": 4.3,
+          "owaspCategory": "A08:2021"
+        }
+      ]
+    },
+    {
+      "repo": "jackdog668/thisone2",
+      "grade": "D",
+      "criticals": 0,
+      "warnings": 8,
+      "infos": 0,
+      "total": 8,
+      "findings": [
+        {
+          "ruleId": "a11y-button-no-name",
+          "ruleName": "Button Has No Accessible Name",
+          "severity": "warning",
+          "message": "Button has no accessible name — no text content and no aria-label, so a screen reader just announces \"button\" (WCAG 4.1.2, Level A).",
+          "file": "index.html",
+          "line": 771,
+          "evidence": "<button class=\"nav-dot active\" data-target=\"slide-1\" data-label=\"You Are Here\"></button>",
+          "fix": "Give the button a name: add visible text, or for an icon-only button add aria-label=\"Close\" (or aria-labelledby pointing at a label element).",
+          "wcag": "WCAG 4.1.2 (Level A)"
+        },
+        {
+          "ruleId": "a11y-button-no-name",
+          "ruleName": "Button Has No Accessible Name",
+          "severity": "warning",
+          "message": "Button has no accessible name — no text content and no aria-label, so a screen reader just announces \"button\" (WCAG 4.1.2, Level A).",
+          "file": "index.html",
+          "line": 772,
+          "evidence": "<button class=\"nav-dot\" data-target=\"slide-2\" data-label=\"Recipe\"></button>",
+          "fix": "Give the button a name: add visible text, or for an icon-only button add aria-label=\"Close\" (or aria-labelledby pointing at a label element).",
+          "wcag": "WCAG 4.1.2 (Level A)"
+        },
+        {
+          "ruleId": "a11y-button-no-name",
+          "ruleName": "Button Has No Accessible Name",
+          "severity": "warning",
+          "message": "Button has no accessible name — no text content and no aria-label, so a screen reader just announces \"button\" (WCAG 4.1.2, Level A).",
+          "file": "index.html",
+          "line": 773,
+          "evidence": "<button class=\"nav-dot\" data-target=\"slide-3\" data-label=\"Template\"></button>",
+          "fix": "Give the button a name: add visible text, or for an icon-only button add aria-label=\"Close\" (or aria-labelledby pointing at a label element).",
+          "wcag": "WCAG 4.1.2 (Level A)"
+        },
+        {
+          "ruleId": "a11y-button-no-name",
+          "ruleName": "Button Has No Accessible Name",
+          "severity": "warning",
+          "message": "Button has no accessible name — no text content and no aria-label, so a screen reader just announces \"button\" (WCAG 4.1.2, Level A).",
+          "file": "index.html",
+          "line": 774,
+          "evidence": "<button class=\"nav-dot\" data-target=\"slide-4\" data-label=\"Example\"></button>",
+          "fix": "Give the button a name: add visible text, or for an icon-only button add aria-label=\"Close\" (or aria-labelledby pointing at a label element).",
+          "wcag": "WCAG 4.1.2 (Level A)"
+        },
+        {
+          "ruleId": "a11y-button-no-name",
+          "ruleName": "Button Has No Accessible Name",
+          "severity": "warning",
+          "message": "Button has no accessible name — no text content and no aria-label, so a screen reader just announces \"button\" (WCAG 4.1.2, Level A).",
+          "file": "index.html",
+          "line": 775,
+          "evidence": "<button class=\"nav-dot\" data-target=\"slide-5\" data-label=\"Rhythm\"></button>",
+          "fix": "Give the button a name: add visible text, or for an icon-only button add aria-label=\"Close\" (or aria-labelledby pointing at a label element).",
+          "wcag": "WCAG 4.1.2 (Level A)"
+        },
+        {
+          "ruleId": "a11y-button-no-name",
+          "ruleName": "Button Has No Accessible Name",
+          "severity": "warning",
+          "message": "Button has no accessible name — no text content and no aria-label, so a screen reader just announces \"button\" (WCAG 4.1.2, Level A).",
+          "file": "index.html",
+          "line": 776,
+          "evidence": "<button class=\"nav-dot\" data-target=\"slide-6\" data-label=\"Make It Real\"></button>",
+          "fix": "Give the button a name: add visible text, or for an icon-only button add aria-label=\"Close\" (or aria-labelledby pointing at a label element).",
+          "wcag": "WCAG 4.1.2 (Level A)"
+        },
+        {
+          "ruleId": "a11y-button-no-name",
+          "ruleName": "Button Has No Accessible Name",
+          "severity": "warning",
+          "message": "Button has no accessible name — no text content and no aria-label, so a screen reader just announces \"button\" (WCAG 4.1.2, Level A).",
+          "file": "index.html",
+          "line": 777,
+          "evidence": "<button class=\"nav-dot\" data-target=\"slide-7\" data-label=\"Close The Loop\"></button>",
+          "fix": "Give the button a name: add visible text, or for an icon-only button add aria-label=\"Close\" (or aria-labelledby pointing at a label element).",
+          "wcag": "WCAG 4.1.2 (Level A)"
+        },
+        {
+          "ruleId": "missing-sri",
+          "ruleName": "Missing Subresource Integrity",
+          "severity": "warning",
+          "message": "External stylesheet loaded from a CDN with no integrity hash — if that CDN is compromised, it runs arbitrary code in your users' browsers and you can't tell.",
+          "file": "index.html",
+          "line": 9,
+          "evidence": "<link href=\"https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@500;600;700&family=Inter:wght@400;500;600&family=Co",
           "fix": "Add a Subresource Integrity hash and crossorigin: `<script src=\"https://cdn…/lib.js\" integrity=\"sha384-…\" crossorigin=\"anonymous\">`. Better yet, install the package with npm and bundle it so there's no third-party CDN in the loop at all.",
           "cweId": "CWE-353",
           "cvssScore": 4.3,
@@ -37515,165 +37515,6 @@
       ]
     },
     {
-      "repo": "jackdog668/vibeshot2",
-      "grade": "D",
-      "criticals": 0,
-      "warnings": 12,
-      "infos": 1,
-      "total": 13,
-      "findings": [
-        {
-          "ruleId": "console-data-leak",
-          "ruleName": "Console Data Leaks",
-          "severity": "warning",
-          "message": "Sensitive data in console.log — visible in DevTools Console",
-          "file": "api/welcome.ts",
-          "line": 21,
-          "evidence": "console.log('[welcome] No GEMINI_API_KEY found, returning fallback');",
-          "fix": "Remove console.log statements that output sensitive data before deploying. Use a proper logging library with log levels and strip debug/info logs in production builds. Anyone can open DevTools → Console and see everything you logged.",
-          "cweId": "CWE-532",
-          "cvssScore": 4.3,
-          "owaspCategory": "A09:2021"
-        },
-        {
-          "ruleId": "a11y-form-no-label",
-          "ruleName": "Form Control Missing Label",
-          "severity": "warning",
-          "message": "Form control has no associated label — no id/<label>, no aria-label, no title. Screen-reader users hear an unlabeled field, and placeholder text does not count (WCAG 1.3.1, Level A).",
-          "file": "src/App.tsx",
-          "line": 444,
-          "evidence": "<input",
-          "fix": "Associate a label: <label for=\"email\">Email</label><input id=\"email\">, wrap the input in a <label>, or add aria-label=\"Email\" for a control with no visible label.",
-          "wcag": "WCAG 1.3.1 (Level A)"
-        },
-        {
-          "ruleId": "a11y-form-no-label",
-          "ruleName": "Form Control Missing Label",
-          "severity": "warning",
-          "message": "Form control has no associated label — no id/<label>, no aria-label, no title. Screen-reader users hear an unlabeled field, and placeholder text does not count (WCAG 1.3.1, Level A).",
-          "file": "src/App.tsx",
-          "line": 542,
-          "evidence": "<input",
-          "fix": "Associate a label: <label for=\"email\">Email</label><input id=\"email\">, wrap the input in a <label>, or add aria-label=\"Email\" for a control with no visible label.",
-          "wcag": "WCAG 1.3.1 (Level A)"
-        },
-        {
-          "ruleId": "a11y-form-no-label",
-          "ruleName": "Form Control Missing Label",
-          "severity": "warning",
-          "message": "Form control has no associated label — no id/<label>, no aria-label, no title. Screen-reader users hear an unlabeled field, and placeholder text does not count (WCAG 1.3.1, Level A).",
-          "file": "src/App.tsx",
-          "line": 569,
-          "evidence": "<textarea",
-          "fix": "Associate a label: <label for=\"email\">Email</label><input id=\"email\">, wrap the input in a <label>, or add aria-label=\"Email\" for a control with no visible label.",
-          "wcag": "WCAG 1.3.1 (Level A)"
-        },
-        {
-          "ruleId": "a11y-click-no-keyboard",
-          "ruleName": "Click Handler Without Keyboard Support",
-          "severity": "warning",
-          "message": "<div> has onClick but no keyboard handler and no role — keyboard and screen-reader users can't activate it (WCAG 2.1.1, Level A).",
-          "file": "src/App.tsx",
-          "line": 380,
-          "evidence": "<div",
-          "fix": "Use a real <button> for click actions. If you must keep this element, add role=\"button\", tabIndex={0}, and an onKeyDown handler that fires on Enter/Space.",
-          "wcag": "WCAG 2.1.1 (Level A)"
-        },
-        {
-          "ruleId": "a11y-click-no-keyboard",
-          "ruleName": "Click Handler Without Keyboard Support",
-          "severity": "warning",
-          "message": "<div> has onClick but no keyboard handler and no role — keyboard and screen-reader users can't activate it (WCAG 2.1.1, Level A).",
-          "file": "src/App.tsx",
-          "line": 440,
-          "evidence": "<div",
-          "fix": "Use a real <button> for click actions. If you must keep this element, add role=\"button\", tabIndex={0}, and an onKeyDown handler that fires on Enter/Space.",
-          "wcag": "WCAG 2.1.1 (Level A)"
-        },
-        {
-          "ruleId": "a11y-click-no-keyboard",
-          "ruleName": "Click Handler Without Keyboard Support",
-          "severity": "warning",
-          "message": "<div> has onClick but no keyboard handler and no role — keyboard and screen-reader users can't activate it (WCAG 2.1.1, Level A).",
-          "file": "src/App.tsx",
-          "line": 538,
-          "evidence": "<div",
-          "fix": "Use a real <button> for click actions. If you must keep this element, add role=\"button\", tabIndex={0}, and an onKeyDown handler that fires on Enter/Space.",
-          "wcag": "WCAG 2.1.1 (Level A)"
-        },
-        {
-          "ruleId": "insecure-connections",
-          "ruleName": "Insecure Connections",
-          "severity": "warning",
-          "message": "Non-localhost HTTP URL — data sent unencrypted",
-          "file": "src/index.css",
-          "line": 12,
-          "evidence": "background-image: url(\"data:image/svg+xml,%3Csvg width='240' height='240' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d",
-          "fix": "Use HTTPS for all external connections. HTTP transmits data in plaintext — anyone on the network can read it.",
-          "cweId": "CWE-319",
-          "cvssScore": 5.3,
-          "owaspCategory": "A02:2021"
-        },
-        {
-          "ruleId": "perf-no-await-parallel",
-          "ruleName": "Sequential Await in Loop",
-          "severity": "warning",
-          "message": "await inside a loop runs each iteration one-at-a-time. If the iterations are independent, they should run in parallel.",
-          "file": "src/lib/gemini.ts",
-          "line": 21,
-          "evidence": "const { done, value } = await reader.read();",
-          "fix": "If each iteration is independent, collect the promises and await them together: const results = await Promise.all(items.map(async (i) => { ... })). Keep the sequential await only when an iteration truly depends on the previous one."
-        },
-        {
-          "ruleId": "missing-security-headers",
-          "ruleName": "Missing Security Headers",
-          "severity": "warning",
-          "message": "Config file is missing security headers: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy",
-          "file": "vercel.json",
-          "line": 1,
-          "evidence": "Missing: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy",
-          "fix": "Add security headers to your deployment config or middleware. At minimum set: Content-Security-Policy, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Strict-Transport-Security, and Referrer-Policy: strict-origin-when-cross-origin.",
-          "cweId": "CWE-693",
-          "cvssScore": 4.3,
-          "owaspCategory": "A05:2021"
-        },
-        {
-          "ruleId": "deployment-config-insecure",
-          "ruleName": "Deployment Config Insecure",
-          "severity": "warning",
-          "message": "vercel.json has no security headers configured.",
-          "file": "vercel.json",
-          "line": 1,
-          "fix": "Add a \"headers\" section with X-Frame-Options, X-Content-Type-Options, Referrer-Policy, and Content-Security-Policy.",
-          "cweId": "CWE-16",
-          "cvssScore": 4.3,
-          "owaspCategory": "A05:2021"
-        },
-        {
-          "ruleId": "missing-security-headers",
-          "ruleName": "Missing Security Headers",
-          "severity": "warning",
-          "message": "Config file is missing security headers: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy",
-          "file": "vite.config.ts",
-          "line": 1,
-          "evidence": "Missing: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy",
-          "fix": "Add security headers to your deployment config or middleware. At minimum set: Content-Security-Policy, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Strict-Transport-Security, and Referrer-Policy: strict-origin-when-cross-origin.",
-          "cweId": "CWE-693",
-          "cvssScore": 4.3,
-          "owaspCategory": "A05:2021"
-        },
-        {
-          "ruleId": "no-error-monitoring",
-          "ruleName": "No Error Monitoring",
-          "severity": "info",
-          "message": "No error monitoring/alerting dependency found (Sentry, Rollbar, Bugsnag, Datadog…). Production errors will fail silently — you won't know the app is broken until a user tells you.",
-          "file": "package.json",
-          "line": 1,
-          "fix": "Add an error monitor: @sentry/nextjs (or @sentry/node), Rollbar, or Bugsnag — wire it to capture unhandled errors and alert you. If your host already provides this, treat this as informational."
-        }
-      ]
-    },
-    {
       "repo": "jackdog668/VIDEOANALYZERGOOGLE",
       "grade": "D",
       "criticals": 0,
@@ -37805,6 +37646,165 @@
           "cweId": "CWE-353",
           "cvssScore": 4.3,
           "owaspCategory": "A08:2021"
+        },
+        {
+          "ruleId": "missing-security-headers",
+          "ruleName": "Missing Security Headers",
+          "severity": "warning",
+          "message": "Config file is missing security headers: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy",
+          "file": "vercel.json",
+          "line": 1,
+          "evidence": "Missing: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy",
+          "fix": "Add security headers to your deployment config or middleware. At minimum set: Content-Security-Policy, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Strict-Transport-Security, and Referrer-Policy: strict-origin-when-cross-origin.",
+          "cweId": "CWE-693",
+          "cvssScore": 4.3,
+          "owaspCategory": "A05:2021"
+        },
+        {
+          "ruleId": "deployment-config-insecure",
+          "ruleName": "Deployment Config Insecure",
+          "severity": "warning",
+          "message": "vercel.json has no security headers configured.",
+          "file": "vercel.json",
+          "line": 1,
+          "fix": "Add a \"headers\" section with X-Frame-Options, X-Content-Type-Options, Referrer-Policy, and Content-Security-Policy.",
+          "cweId": "CWE-16",
+          "cvssScore": 4.3,
+          "owaspCategory": "A05:2021"
+        },
+        {
+          "ruleId": "missing-security-headers",
+          "ruleName": "Missing Security Headers",
+          "severity": "warning",
+          "message": "Config file is missing security headers: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy",
+          "file": "vite.config.ts",
+          "line": 1,
+          "evidence": "Missing: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy",
+          "fix": "Add security headers to your deployment config or middleware. At minimum set: Content-Security-Policy, X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Strict-Transport-Security, and Referrer-Policy: strict-origin-when-cross-origin.",
+          "cweId": "CWE-693",
+          "cvssScore": 4.3,
+          "owaspCategory": "A05:2021"
+        },
+        {
+          "ruleId": "no-error-monitoring",
+          "ruleName": "No Error Monitoring",
+          "severity": "info",
+          "message": "No error monitoring/alerting dependency found (Sentry, Rollbar, Bugsnag, Datadog…). Production errors will fail silently — you won't know the app is broken until a user tells you.",
+          "file": "package.json",
+          "line": 1,
+          "fix": "Add an error monitor: @sentry/nextjs (or @sentry/node), Rollbar, or Bugsnag — wire it to capture unhandled errors and alert you. If your host already provides this, treat this as informational."
+        }
+      ]
+    },
+    {
+      "repo": "jackdog668/vibeshot2",
+      "grade": "D",
+      "criticals": 0,
+      "warnings": 12,
+      "infos": 1,
+      "total": 13,
+      "findings": [
+        {
+          "ruleId": "console-data-leak",
+          "ruleName": "Console Data Leaks",
+          "severity": "warning",
+          "message": "Sensitive data in console.log — visible in DevTools Console",
+          "file": "api/welcome.ts",
+          "line": 21,
+          "evidence": "console.log('[welcome] No GEMINI_API_KEY found, returning fallback');",
+          "fix": "Remove console.log statements that output sensitive data before deploying. Use a proper logging library with log levels and strip debug/info logs in production builds. Anyone can open DevTools → Console and see everything you logged.",
+          "cweId": "CWE-532",
+          "cvssScore": 4.3,
+          "owaspCategory": "A09:2021"
+        },
+        {
+          "ruleId": "a11y-form-no-label",
+          "ruleName": "Form Control Missing Label",
+          "severity": "warning",
+          "message": "Form control has no associated label — no id/<label>, no aria-label, no title. Screen-reader users hear an unlabeled field, and placeholder text does not count (WCAG 1.3.1, Level A).",
+          "file": "src/App.tsx",
+          "line": 444,
+          "evidence": "<input",
+          "fix": "Associate a label: <label for=\"email\">Email</label><input id=\"email\">, wrap the input in a <label>, or add aria-label=\"Email\" for a control with no visible label.",
+          "wcag": "WCAG 1.3.1 (Level A)"
+        },
+        {
+          "ruleId": "a11y-form-no-label",
+          "ruleName": "Form Control Missing Label",
+          "severity": "warning",
+          "message": "Form control has no associated label — no id/<label>, no aria-label, no title. Screen-reader users hear an unlabeled field, and placeholder text does not count (WCAG 1.3.1, Level A).",
+          "file": "src/App.tsx",
+          "line": 542,
+          "evidence": "<input",
+          "fix": "Associate a label: <label for=\"email\">Email</label><input id=\"email\">, wrap the input in a <label>, or add aria-label=\"Email\" for a control with no visible label.",
+          "wcag": "WCAG 1.3.1 (Level A)"
+        },
+        {
+          "ruleId": "a11y-form-no-label",
+          "ruleName": "Form Control Missing Label",
+          "severity": "warning",
+          "message": "Form control has no associated label — no id/<label>, no aria-label, no title. Screen-reader users hear an unlabeled field, and placeholder text does not count (WCAG 1.3.1, Level A).",
+          "file": "src/App.tsx",
+          "line": 569,
+          "evidence": "<textarea",
+          "fix": "Associate a label: <label for=\"email\">Email</label><input id=\"email\">, wrap the input in a <label>, or add aria-label=\"Email\" for a control with no visible label.",
+          "wcag": "WCAG 1.3.1 (Level A)"
+        },
+        {
+          "ruleId": "a11y-click-no-keyboard",
+          "ruleName": "Click Handler Without Keyboard Support",
+          "severity": "warning",
+          "message": "<div> has onClick but no keyboard handler and no role — keyboard and screen-reader users can't activate it (WCAG 2.1.1, Level A).",
+          "file": "src/App.tsx",
+          "line": 380,
+          "evidence": "<div",
+          "fix": "Use a real <button> for click actions. If you must keep this element, add role=\"button\", tabIndex={0}, and an onKeyDown handler that fires on Enter/Space.",
+          "wcag": "WCAG 2.1.1 (Level A)"
+        },
+        {
+          "ruleId": "a11y-click-no-keyboard",
+          "ruleName": "Click Handler Without Keyboard Support",
+          "severity": "warning",
+          "message": "<div> has onClick but no keyboard handler and no role — keyboard and screen-reader users can't activate it (WCAG 2.1.1, Level A).",
+          "file": "src/App.tsx",
+          "line": 440,
+          "evidence": "<div",
+          "fix": "Use a real <button> for click actions. If you must keep this element, add role=\"button\", tabIndex={0}, and an onKeyDown handler that fires on Enter/Space.",
+          "wcag": "WCAG 2.1.1 (Level A)"
+        },
+        {
+          "ruleId": "a11y-click-no-keyboard",
+          "ruleName": "Click Handler Without Keyboard Support",
+          "severity": "warning",
+          "message": "<div> has onClick but no keyboard handler and no role — keyboard and screen-reader users can't activate it (WCAG 2.1.1, Level A).",
+          "file": "src/App.tsx",
+          "line": 538,
+          "evidence": "<div",
+          "fix": "Use a real <button> for click actions. If you must keep this element, add role=\"button\", tabIndex={0}, and an onKeyDown handler that fires on Enter/Space.",
+          "wcag": "WCAG 2.1.1 (Level A)"
+        },
+        {
+          "ruleId": "insecure-connections",
+          "ruleName": "Insecure Connections",
+          "severity": "warning",
+          "message": "Non-localhost HTTP URL — data sent unencrypted",
+          "file": "src/index.css",
+          "line": 12,
+          "evidence": "background-image: url(\"data:image/svg+xml,%3Csvg width='240' height='240' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d",
+          "fix": "Use HTTPS for all external connections. HTTP transmits data in plaintext — anyone on the network can read it.",
+          "cweId": "CWE-319",
+          "cvssScore": 5.3,
+          "owaspCategory": "A02:2021"
+        },
+        {
+          "ruleId": "perf-no-await-parallel",
+          "ruleName": "Sequential Await in Loop",
+          "severity": "warning",
+          "message": "await inside a loop runs each iteration one-at-a-time. If the iterations are independent, they should run in parallel.",
+          "file": "src/lib/gemini.ts",
+          "line": 21,
+          "evidence": "const { done, value } = await reader.read();",
+          "fix": "If each iteration is independent, collect the promises and await them together: const results = await Promise.all(items.map(async (i) => { ... })). Keep the sequential await only when an iteration truly depends on the previous one."
         },
         {
           "ruleId": "missing-security-headers",
@@ -42388,7 +42388,7 @@
       "findings": []
     },
     {
-      "repo": "jackdog668/curious-labs-vol1",
+      "repo": "jackdog668/meet-corekind-digital-alchemy",
       "grade": "A",
       "criticals": 0,
       "warnings": 0,
@@ -42397,7 +42397,7 @@
       "findings": []
     },
     {
-      "repo": "jackdog668/meet-corekind-digital-alchemy",
+      "repo": "jackdog668/curious-labs-vol1",
       "grade": "A",
       "criticals": 0,
       "warnings": 0,
@@ -42478,7 +42478,7 @@
       "findings": []
     },
     {
-      "repo": "jackdog668/reimagined-octo-funicular",
+      "repo": "jackdog668/fuzzy-octo-fishstick",
       "grade": "A",
       "criticals": 0,
       "warnings": 0,
@@ -42487,7 +42487,7 @@
       "findings": []
     },
     {
-      "repo": "jackdog668/fuzzy-octo-fishstick",
+      "repo": "jackdog668/reimagined-octo-funicular",
       "grade": "A",
       "criticals": 0,
       "warnings": 0,
@@ -42505,7 +42505,7 @@
       "findings": []
     },
     {
-      "repo": "jackdog668/revenue-cat-contest",
+      "repo": "jackdog668/ansel",
       "grade": "A",
       "criticals": 0,
       "warnings": 0,
@@ -42514,7 +42514,7 @@
       "findings": []
     },
     {
-      "repo": "jackdog668/ansel",
+      "repo": "jackdog668/revenue-cat-contest",
       "grade": "A",
       "criticals": 0,
       "warnings": 0,

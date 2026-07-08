@@ -1,5 +1,5 @@
 # Vibe Audit Morning Scan
-**Wednesday, July 8, 2026** | 153 repos scanned | 6 skipped | 696.5s
+**Wednesday, July 8, 2026** | 153 repos scanned | 6 skipped | 702.8s
 
 ## Portfolio Health
 
@@ -49,8 +49,8 @@
 | jackdog668/Siftly | F | 34 | 141 | 2 |
 | jackdog668/reddit-analyzer | F | 2 | 9 | 0 |
 | jackdog668/chibi-forge | F | 3 | 14 | 2 |
-| jackdog668/carver-s-garden-companion | F | 1 | 2 | 1 |
 | jackdog668/panther-chicago-legacy | F | 1 | 2 | 1 |
+| jackdog668/carver-s-garden-companion | F | 1 | 2 | 1 |
 | jackdog668/lucky-leaf-finder | F | 1 | 6 | 1 |
 | jackdog668/htmlchange | F | 6 | 3 | 1 |
 | jackdog668/harriet-s-path | F | 1 | 2 | 1 |
@@ -65,8 +65,8 @@
 | jackdog668/digital-alchemy-app | F | 4 | 23 | 2 |
 | jackdog668/social-media-scraping-apis | F | 2 | 3 | 0 |
 | jackdog668/my-daily-yes | F | 1 | 2 | 1 |
-| jackdog668/da-forge-x7k9m2 | F | 2 | 2 | 0 |
 | jackdog668/ui-forge-command-center | F | 1 | 4 | 0 |
+| jackdog668/da-forge-x7k9m2 | F | 2 | 2 | 0 |
 | jackdog668/node-banana-bear | F | 9 | 69 | 1 |
 | jackdog668/node-banana | F | 7 | 65 | 1 |
 | jackdog668/ruby-feynman | F | 2 | 5 | 1 |
@@ -82,8 +82,8 @@
 | jackdog668/a-silly-idea | D | 0 | 13 | 0 |
 | jackdog668/sierrabakerconsulting | D | 0 | 5 | 0 |
 | jackdog668/vibe-vocab | D | 0 | 5 | 1 |
-| jackdog668/thisone2 | D | 0 | 8 | 0 |
 | jackdog668/thisone | D | 0 | 8 | 0 |
+| jackdog668/thisone2 | D | 0 | 8 | 0 |
 | jackdog668/da-video-tool | D | 0 | 6 | 1 |
 | jackdog668/file-manager | D | 0 | 22 | 1 |
 | jackdog668/da-tonight-video | D | 0 | 16 | 0 |
@@ -91,8 +91,8 @@
 | jackdog668/prototype | D | 0 | 21 | 2 |
 | jackdog668/digital-alchemy-bot | D | 0 | 32 | 0 |
 | jackdog668/brand-verticals-studio | D | 0 | 17 | 1 |
-| jackdog668/vibeshot2 | D | 0 | 12 | 1 |
 | jackdog668/VIDEOANALYZERGOOGLE | D | 0 | 14 | 1 |
+| jackdog668/vibeshot2 | D | 0 | 12 | 1 |
 | jackdog668/vibeshot | D | 0 | 4 | 1 |
 | jackdog668/Petty-Translator | D | 0 | 8 | 1 |
 | jackdog668/cursing-woman | D | 0 | 7 | 0 |
@@ -147,8 +147,8 @@
 | jackdog668/shownotes4 | A | 0 | 0 | 0 |
 | jackdog668/shownotes6 | A | 0 | 0 | 0 |
 | jackdog668/Digital-Alchemy-Skool | A | 0 | 0 | 0 |
-| jackdog668/curious-labs-vol1 | A | 0 | 0 | 0 |
 | jackdog668/meet-corekind-digital-alchemy | A | 0 | 0 | 0 |
+| jackdog668/curious-labs-vol1 | A | 0 | 0 | 0 |
 | jackdog668/outputs | A | 0 | 0 | 0 |
 | jackdog668/digital-alchemy-freebies | A | 0 | 0 | 0 |
 | jackdog668/ericananton | A | 0 | 0 | 0 |
@@ -157,11 +157,11 @@
 | jackdog668/chatgpt-data-analysis | A | 0 | 0 | 0 |
 | jackdog668/jackdog668.github.io | A | 0 | 0 | 0 |
 | jackdog668/catdog | A | 0 | 0 | 0 |
-| jackdog668/reimagined-octo-funicular | A | 0 | 0 | 0 |
 | jackdog668/fuzzy-octo-fishstick | A | 0 | 0 | 0 |
+| jackdog668/reimagined-octo-funicular | A | 0 | 0 | 0 |
 | jackdog668/literate-garbanzo | A | 0 | 0 | 0 |
-| jackdog668/revenue-cat-contest | A | 0 | 0 | 0 |
 | jackdog668/ansel | A | 0 | 0 | 0 |
+| jackdog668/revenue-cat-contest | A | 0 | 0 | 0 |
 | jackdog668/new-app | A | 0 | 0 | 0 |
 | jackdog668/alchemic-generator-v2 | A | 0 | 0 | 0 |
 | jackdog668/100-day-redo | A | 0 | 0 | 0 |
@@ -528,10 +528,10 @@
 - **firebase-admin-client**: Firebase Admin SDK used in client-side code — grants full database/auth access. (src/lib/firebaseAdmin.js:1)
 - **firebase-admin-client**: Firebase Admin SDK used in client-side code — grants full database/auth access. (src/lib/firebaseAdmin.js:10)
 
-### jackdog668/carver-s-garden-companion — Grade F
+### jackdog668/panther-chicago-legacy — Grade F
 - **dangerously-set-inner-html**: dangerouslySetInnerHTML used without sanitization — XSS vulnerability. (src/components/ui/chart.tsx:70)
 
-### jackdog668/panther-chicago-legacy — Grade F
+### jackdog668/carver-s-garden-companion — Grade F
 - **dangerously-set-inner-html**: dangerouslySetInnerHTML used without sanitization — XSS vulnerability. (src/components/ui/chart.tsx:70)
 
 ### jackdog668/lucky-leaf-finder — Grade F
@@ -622,12 +622,12 @@
 ### jackdog668/my-daily-yes — Grade F
 - **dangerously-set-inner-html**: dangerouslySetInnerHTML used without sanitization — XSS vulnerability. (src/components/ui/chart.tsx:70)
 
+### jackdog668/ui-forge-command-center — Grade F
+- **no-input-validation**: Direct innerHTML assignment with dynamic, unescaped value — potential XSS vector (index.html:116)
+
 ### jackdog668/da-forge-x7k9m2 — Grade F
 - **no-input-validation**: Direct innerHTML assignment with dynamic, unescaped value — potential XSS vector (index.html:1179)
 - **no-input-validation**: Direct innerHTML assignment with dynamic, unescaped value — potential XSS vector (index.html:1211)
-
-### jackdog668/ui-forge-command-center — Grade F
-- **no-input-validation**: Direct innerHTML assignment with dynamic, unescaped value — potential XSS vector (index.html:116)
 
 ### jackdog668/node-banana-bear — Grade F
 - **missing-auth**: Exported GET handler has no authentication check. (src/app/api/browse-directory/route.ts:11)
@@ -762,16 +762,6 @@
 - **a11y-form-no-label**: Form control has no associated label — no id/<label>, no aria-label, no title. Screen-reader users hear an unlabeled field, and placeholder text does not count (WCAG 1.3.1, Level A). (src/components/SearchBar.tsx:82)
 - **missing-security-headers**: Config file is missing security headers: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy (vite.config.ts:1)
 
-### jackdog668/thisone2 — Grade D
-- **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:771)
-- **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:772)
-- **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:773)
-- **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:774)
-- **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:775)
-- **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:776)
-- **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:777)
-- **missing-sri**: External stylesheet loaded from a CDN with no integrity hash — if that CDN is compromised, it runs arbitrary code in your users' browsers and you can't tell. (index.html:9)
-
 ### jackdog668/thisone — Grade D
 - **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:623)
 - **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:624)
@@ -780,6 +770,16 @@
 - **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:627)
 - **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:628)
 - **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:629)
+- **missing-sri**: External stylesheet loaded from a CDN with no integrity hash — if that CDN is compromised, it runs arbitrary code in your users' browsers and you can't tell. (index.html:9)
+
+### jackdog668/thisone2 — Grade D
+- **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:771)
+- **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:772)
+- **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:773)
+- **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:774)
+- **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:775)
+- **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:776)
+- **a11y-button-no-name**: Button has no accessible name — no text content and no aria-label, so a screen reader just announces "button" (WCAG 4.1.2, Level A). (index.html:777)
 - **missing-sri**: External stylesheet loaded from a CDN with no integrity hash — if that CDN is compromised, it runs arbitrary code in your users' browsers and you can't tell. (index.html:9)
 
 ### jackdog668/da-video-tool — Grade D
@@ -927,20 +927,6 @@
 - **perf-no-await-parallel**: await inside a loop runs each iteration one-at-a-time. If the iterations are independent, they should run in parallel. (src/services/geminiService.ts:122)
 - **missing-security-headers**: Config file is missing security headers: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy (vite.config.ts:1)
 
-### jackdog668/vibeshot2 — Grade D
-- **console-data-leak**: Sensitive data in console.log — visible in DevTools Console (api/welcome.ts:21)
-- **a11y-form-no-label**: Form control has no associated label — no id/<label>, no aria-label, no title. Screen-reader users hear an unlabeled field, and placeholder text does not count (WCAG 1.3.1, Level A). (src/App.tsx:444)
-- **a11y-form-no-label**: Form control has no associated label — no id/<label>, no aria-label, no title. Screen-reader users hear an unlabeled field, and placeholder text does not count (WCAG 1.3.1, Level A). (src/App.tsx:542)
-- **a11y-form-no-label**: Form control has no associated label — no id/<label>, no aria-label, no title. Screen-reader users hear an unlabeled field, and placeholder text does not count (WCAG 1.3.1, Level A). (src/App.tsx:569)
-- **a11y-click-no-keyboard**: <div> has onClick but no keyboard handler and no role — keyboard and screen-reader users can't activate it (WCAG 2.1.1, Level A). (src/App.tsx:380)
-- **a11y-click-no-keyboard**: <div> has onClick but no keyboard handler and no role — keyboard and screen-reader users can't activate it (WCAG 2.1.1, Level A). (src/App.tsx:440)
-- **a11y-click-no-keyboard**: <div> has onClick but no keyboard handler and no role — keyboard and screen-reader users can't activate it (WCAG 2.1.1, Level A). (src/App.tsx:538)
-- **insecure-connections**: Non-localhost HTTP URL — data sent unencrypted (src/index.css:12)
-- **perf-no-await-parallel**: await inside a loop runs each iteration one-at-a-time. If the iterations are independent, they should run in parallel. (src/lib/gemini.ts:21)
-- **missing-security-headers**: Config file is missing security headers: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy (vercel.json:1)
-- **deployment-config-insecure**: vercel.json has no security headers configured. (vercel.json:1)
-- **missing-security-headers**: Config file is missing security headers: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy (vite.config.ts:1)
-
 ### jackdog668/VIDEOANALYZERGOOGLE — Grade D
 - **a11y-form-no-label**: Form control has no associated label — no id/<label>, no aria-label, no title. Screen-reader users hear an unlabeled field, and placeholder text does not count (WCAG 1.3.1, Level A). (App.tsx:135)
 - **a11y-form-no-label**: Form control has no associated label — no id/<label>, no aria-label, no title. Screen-reader users hear an unlabeled field, and placeholder text does not count (WCAG 1.3.1, Level A). (App.tsx:164)
@@ -953,6 +939,20 @@
 - **perf-no-await-parallel**: await inside a loop runs each iteration one-at-a-time. If the iterations are independent, they should run in parallel. (api/lib/gemini.ts:152)
 - **a11y-no-lang**: The <html> element has no lang attribute — screen readers can't determine the language and may mispronounce the whole page (WCAG 3.1.1, Level A). (index.html:2)
 - **missing-sri**: External stylesheet loaded from a CDN with no integrity hash — if that CDN is compromised, it runs arbitrary code in your users' browsers and you can't tell. (index.html:4)
+- **missing-security-headers**: Config file is missing security headers: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy (vercel.json:1)
+- **deployment-config-insecure**: vercel.json has no security headers configured. (vercel.json:1)
+- **missing-security-headers**: Config file is missing security headers: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy (vite.config.ts:1)
+
+### jackdog668/vibeshot2 — Grade D
+- **console-data-leak**: Sensitive data in console.log — visible in DevTools Console (api/welcome.ts:21)
+- **a11y-form-no-label**: Form control has no associated label — no id/<label>, no aria-label, no title. Screen-reader users hear an unlabeled field, and placeholder text does not count (WCAG 1.3.1, Level A). (src/App.tsx:444)
+- **a11y-form-no-label**: Form control has no associated label — no id/<label>, no aria-label, no title. Screen-reader users hear an unlabeled field, and placeholder text does not count (WCAG 1.3.1, Level A). (src/App.tsx:542)
+- **a11y-form-no-label**: Form control has no associated label — no id/<label>, no aria-label, no title. Screen-reader users hear an unlabeled field, and placeholder text does not count (WCAG 1.3.1, Level A). (src/App.tsx:569)
+- **a11y-click-no-keyboard**: <div> has onClick but no keyboard handler and no role — keyboard and screen-reader users can't activate it (WCAG 2.1.1, Level A). (src/App.tsx:380)
+- **a11y-click-no-keyboard**: <div> has onClick but no keyboard handler and no role — keyboard and screen-reader users can't activate it (WCAG 2.1.1, Level A). (src/App.tsx:440)
+- **a11y-click-no-keyboard**: <div> has onClick but no keyboard handler and no role — keyboard and screen-reader users can't activate it (WCAG 2.1.1, Level A). (src/App.tsx:538)
+- **insecure-connections**: Non-localhost HTTP URL — data sent unencrypted (src/index.css:12)
+- **perf-no-await-parallel**: await inside a loop runs each iteration one-at-a-time. If the iterations are independent, they should run in parallel. (src/lib/gemini.ts:21)
 - **missing-security-headers**: Config file is missing security headers: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy (vercel.json:1)
 - **deployment-config-insecure**: vercel.json has no security headers configured. (vercel.json:1)
 - **missing-security-headers**: Config file is missing security headers: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy (vite.config.ts:1)
@@ -1376,8 +1376,8 @@
 - jackdog668/shownotes4
 - jackdog668/shownotes6
 - jackdog668/Digital-Alchemy-Skool
-- jackdog668/curious-labs-vol1
 - jackdog668/meet-corekind-digital-alchemy
+- jackdog668/curious-labs-vol1
 - jackdog668/outputs
 - jackdog668/digital-alchemy-freebies
 - jackdog668/ericananton
@@ -1386,11 +1386,11 @@
 - jackdog668/chatgpt-data-analysis
 - jackdog668/jackdog668.github.io
 - jackdog668/catdog
-- jackdog668/reimagined-octo-funicular
 - jackdog668/fuzzy-octo-fishstick
+- jackdog668/reimagined-octo-funicular
 - jackdog668/literate-garbanzo
-- jackdog668/revenue-cat-contest
 - jackdog668/ansel
+- jackdog668/revenue-cat-contest
 - jackdog668/new-app
 - jackdog668/alchemic-generator-v2
 - jackdog668/100-day-redo
@@ -1410,4 +1410,4 @@
 - jackdog668/AetherExWork: Empty repo
 
 ---
-*Generated by Vibe Audit v1.1.0 — 2026-07-08T10:42:52.304Z*
+*Generated by Vibe Audit v1.1.0 — 2026-07-08T14:17:04.698Z*
