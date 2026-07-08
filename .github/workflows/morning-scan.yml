@@ -12,7 +12,7 @@ on:
         default: "0"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   scan:
@@ -36,16 +36,9 @@ jobs:
             --top "${{ github.event.inputs.top || '0' }}" \
             --format markdown || true
 
-      - name: Commit report
-        run: |
-          git config user.name "Vibe Audit Bot"
-          git config user.email "bot@vibeaudit.dev"
-          DATE=$(date +%Y-%m-%d)
-          git add reports/
-          git diff --cached --quiet || \
-            git commit -m "morning scan: ${DATE}" && \
-            git push
-
+      # Reports enumerate security findings across many repos, so they are NOT
+      # committed to this public repo. They are retained only as a private
+      # GitHub Actions artifact (visible to repo collaborators, not the public).
       - name: Upload report artifact
         uses: actions/upload-artifact@v4
         with:
