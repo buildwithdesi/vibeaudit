@@ -1,0 +1,82 @@
+{
+  "date": "2026-07-08",
+  "mode": "hybrid",
+  "note": "Full batch scan blocked by egress policy. Local self-scan + cross-repo GitHub code search.",
+  "results": [
+    {
+      "repo": "jackdog668/vibeaudit",
+      "grade": "B",
+      "criticals": 1,
+      "warnings": 2,
+      "infos": 0,
+      "total": 3,
+      "findings": [
+        {
+          "ruleId": "vulnerable-dependency",
+          "severity": "critical",
+          "message": "flatted@<=3.4.1: Prototype Pollution via parse() in NodeJS flatted vulnerability.",
+          "file": "package.json"
+        },
+        {
+          "ruleId": "vulnerable-dependency",
+          "severity": "warning",
+          "message": "brace-expansion@<1.1.13: brace-expansion: Zero-step sequence causes process hang and memory exhaustion vulnerability.",
+          "file": "package.json"
+        },
+        {
+          "ruleId": "vulnerable-dependency",
+          "severity": "warning",
+          "message": "js-yaml@4.0.0 - 4.1.1: JS-YAML: Quadratic-complexity DoS in merge key handling via repeated aliases vulnerability.",
+          "file": "package.json"
+        }
+      ]
+    }
+  ],
+  "crossRepoSearch": {
+    "reposSearched": 163,
+    "checks": {
+      "hardcoded-secrets": { "status": "clean", "details": "No sk_live, sk_test, AIza, ghp_, glpat- found" },
+      "committed-env-files": { "status": "clean", "details": "Only .env.example files" },
+      "open-database-rules": { "status": "clean", "details": "No allow read/write: if true in production" },
+      "eval-usage": { "status": "clean", "details": "No eval()/new Function() in user code" },
+      "command-injection": { "status": "clean", "details": "No exec()/child_process patterns" },
+      "stripe-webhook": { "status": "clean", "details": "saas-starter verifies signatures correctly" },
+      "supabase-service-key-leak": { "status": "clean", "details": "No service-role key in client code" }
+    },
+    "issues": [
+      {
+        "repo": "jackdog668/Chromatic-Illusion-Weaponizerr",
+        "issue": "CORS wildcard",
+        "severity": "warning",
+        "file": "server.js",
+        "details": "Access-Control-Allow-Origin: * — any website can call the API"
+      },
+      {
+        "repo": "jackdog668/sref-scanner",
+        "issue": "Open CORS",
+        "severity": "warning",
+        "file": "backend/server.js",
+        "details": "cors() with no origin restriction"
+      },
+      {
+        "repo": "jackdog668/blazing-schrodinger",
+        "issue": "Open CORS",
+        "severity": "warning",
+        "file": "server/server.js",
+        "details": "cors() with no origin restriction"
+      }
+    ]
+  },
+  "summary": {
+    "total": 1,
+    "gradeA": 0,
+    "gradeB": 1,
+    "gradeC": 0,
+    "gradeD": 0,
+    "gradeF": 0,
+    "totalCriticals": 1,
+    "totalWarnings": 2,
+    "skipped": 0,
+    "crossRepoIssues": 3
+  }
+}
