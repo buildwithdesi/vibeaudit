@@ -8,7 +8,7 @@ Vibe coding is fast. Shipping insecure code is faster. Vibe Audit catches the se
 npx @jackdog668/vibeaudit
 ```
 
-No config required. **98 rules** across 17 attack surfaces (now including accessibility/WCAG, scale/performance, and observability). Two production dependencies. Runs in seconds.
+No config required. **101 rules** across 17 attack surfaces (now including accessibility/WCAG, scale/performance, and observability). Two production dependencies. Runs in seconds.
 
 > Every finding ships with a CWE ID, a CVSS v3.1 score, an OWASP Top 10 mapping, a plain-English explanation, **and** a copy-paste fix prompt for your AI coding tool.
 
@@ -83,7 +83,7 @@ Every **security** finding carries its **CWE ID, CVSS v3.1 score, and OWASP Top 
 
 ## What It Checks
 
-**98 rules** across 17 categories, plus dependency scanning (SCA). Severity is as reported by Vibe Audit: 🔴 **CRIT** · 🟡 **WARN** · ⚪ **INFO**. CVSS is the v3.1 base score.
+**101 rules** across 17 categories, plus dependency scanning (SCA). Severity is as reported by Vibe Audit: 🔴 **CRIT** · 🟡 **WARN** · ⚪ **INFO**. CVSS is the v3.1 base score.
 
 ### 🔑 Secrets & Credentials
 
@@ -114,6 +114,7 @@ Every **security** finding carries its **CWE ID, CVSS v3.1 score, and OWASP Top 
 
 | Rule | Sev | CVSS | CWE | What it catches |
 | --- | --- | --- | --- | --- |
+| `sql-injection` | 🔴 | 9.8 | CWE-89 | SQL built with string concatenation / template interpolation instead of parameters |
 | `no-input-validation` | 🔴 | 8.6 | CWE-20 | User input used unsafely without validation/sanitization |
 | `path-traversal` | 🔴 | 8.6 | CWE-22 | File ops with user input — read any file via `../` |
 | `mass-assignment` | 🔴 | 8.1 | CWE-915 | Raw request body to DB — inject `role` / `isAdmin` |
@@ -232,6 +233,8 @@ Every **security** finding carries its **CWE ID, CVSS v3.1 score, and OWASP Top 
 | `subdomain-takeover` | 🟡 | 5.3 | CWE-284 | CNAME/subdomain refs vulnerable to takeover |
 | `regex-dos` | 🟡 | 5.3 | CWE-1333 | Regex vulnerable to catastrophic backtracking |
 | `clickjacking` | 🟡 | 4.3 | CWE-1021 | Missing `X-Frame-Options` / CSP `frame-ancestors` |
+| `weak-hashing` | 🟡 | 5.3 | CWE-328 | Broken hash algorithms (MD5, SHA-1) used for hashing |
+| `insecure-cipher` | 🟡 | 5.9 | CWE-327 | Deprecated `createCipher` or broken ciphers/modes (DES, RC4, ECB) |
 | `hardcoded-ip` | ⚪ | 2.0 | CWE-547 | Hardcoded IPs that belong in env vars |
 
 ### 🏗️ Infrastructure
@@ -273,7 +276,7 @@ The real culprits behind the "$50k server bill" — named, not vibed. Quality/sc
 
 ### 📦 Dependencies (SCA)
 
-Beyond the 98 rules above, Vibe Audit runs **software composition analysis** via `npm audit` to flag **known-vulnerable dependencies** (`vulnerable-dependency`, CWE-1035). Skip it with `--skip-sca`.
+Beyond the 101 rules above, Vibe Audit runs **software composition analysis** via `npm audit` to flag **known-vulnerable dependencies** (`vulnerable-dependency`, CWE-1035). Skip it with `--skip-sca`.
 
 > Run `vibeaudit --list-rules` for the complete, always-current list.
 

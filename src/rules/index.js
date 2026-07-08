@@ -117,6 +117,10 @@ import { unpinnedDependencies } from './unpinned-dependencies.js';
 // CI/CD & storage (v1.2)
 import { githubActionsInjection } from './github-actions-injection.js';
 import { supabasePublicBucket } from './supabase-public-bucket.js';
+// Injection & cryptography (v1.3)
+import { sqlInjection } from './sql-injection.js';
+import { weakHashing } from './weak-hashing.js';
+import { insecureCipher } from './insecure-cipher.js';
 
 /** @type {import('./types.js').Rule[]} */
 export const ALL_RULES = [
@@ -235,6 +239,10 @@ export const ALL_RULES = [
   // CI/CD & storage (v1.2)
   githubActionsInjection,
   supabasePublicBucket,
+  // Injection & cryptography (v1.3)
+  sqlInjection,
+  weakHashing,
+  insecureCipher,
 ];
 
 /**
