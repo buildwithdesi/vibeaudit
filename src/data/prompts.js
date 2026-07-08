@@ -462,6 +462,23 @@ export const FIX_PROMPTS = {
     prompt: `SECURITY FIX: Direct database access (Supabase, Firebase, or query builders like Drizzle/Prisma) was detected in client-side code. This exposes database credentials, table structures, and allows clients to bypass backend security constraints. Fix: Move database queries into server-side functions (Server Actions, API routes, or server controllers). Call those server endpoints from the client. Never query the database directly from files that run in the browser.`,
     platformNotes: `All platforms. Supabase/Firebase anon queries must be secured with RLS if used, but direct query builder connections (like Drizzle/Prisma) must never be client-side.`,
   },
+
+  // ─── INJECTION & CRYPTOGRAPHY (v1.3) ─────────────────────────────────────────
+
+  'sql-injection': {
+    prompt: `SECURITY FIX: I'm building SQL queries by concatenating strings or interpolating variables with template literals — this is SQL injection. Find every query that uses "+" or \${} to insert a value into the SQL text. Rewrite each one to use parameterized queries / prepared statements: pass the SQL string with placeholders and the values as a separate array. Examples: pg — client.query("SELECT * FROM users WHERE id = $1", [id]); mysql2 — conn.execute("... WHERE email = ?", [email]); Prisma — use the query builder or the sql\`\` tagged template. Never build a query string from user input.`,
+    platformNotes: `All platforms. If you use an ORM (Prisma, Drizzle, Sequelize), prefer its query builder — it parameterizes automatically. Only drop to raw SQL with bound parameters.`,
+  },
+
+  'weak-hashing': {
+    prompt: `SECURITY FIX: I'm using a broken hash algorithm (MD5 or SHA-1). Find every crypto.createHash('md5') / createHash('sha1') call. If it's for data integrity or fingerprints, switch to 'sha256' or stronger. If it's for passwords, replace the hash entirely with bcrypt, scrypt, or argon2 (with a per-user salt). MD5 and SHA-1 are collision-broken and unfit for any security use.`,
+    platformNotes: `All platforms. For password hashing prefer a maintained library (bcryptjs, @node-rs/argon2) over hand-rolled crypto.`,
+  },
+
+  'insecure-cipher': {
+    prompt: `SECURITY FIX: I'm using insecure encryption. Find every crypto.createCipher/createDecipher call (the deprecated no-IV API) and every cipher using DES, 3DES, RC4, Blowfish, or ECB mode. Replace them with crypto.createCipheriv('aes-256-gcm', key, iv) using a random 12-byte IV from crypto.randomBytes(12); store the IV (and GCM auth tag) alongside the ciphertext so you can decrypt. Never reuse an IV and never use ECB mode.`,
+    platformNotes: `All platforms. AES-256-GCM is authenticated encryption — prefer it over CBC so tampering is detected.`,
+  },
 };
 
 /**
