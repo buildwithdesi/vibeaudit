@@ -37,7 +37,7 @@
 #
 set -euo pipefail
 
-REMOTE_URL="${REMOTE_URL:-https://github.com/jackdog668/vibeaudit}"
+REMOTE_URL="${REMOTE_URL:-https://github.com/buildwithdesi/vibeaudit}"
 PURGE_PATH="reports"
 WORKDIR="$(mktemp -d -t vibeaudit-purge-XXXXXX)"
 MIRROR="${WORKDIR}/repo.git"

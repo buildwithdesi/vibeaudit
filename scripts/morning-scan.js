@@ -10,7 +10,7 @@
  *   --repos <file>      Repo list JSON (default: scripts/repos.json)
  *   --top <N>           Only scan the first N repos (0 = all)
  *   --discover          Auto-discover repos from GitHub (ignores --repos)
- *   --owner <name>      GitHub owner for --discover (default: jackdog668)
+ *   --owner <name>      GitHub owner for --discover (default: buildwithdesi)
  *   --concurrency <N>   Parallel scans (default: 3)
  *   --format <fmt>      Report format (default: markdown)
  */
@@ -34,7 +34,7 @@ const hasFlag = (name) => argv.includes(`--${name}`);
 const reposFile = flag('repos', join(ROOT, 'scripts', 'repos.json'));
 const topN = parseInt(flag('top', '0'), 10);
 const discover = hasFlag('discover');
-const owner = flag('owner', 'jackdog668');
+const owner = flag('owner', 'buildwithdesi');
 const concurrency = parseInt(flag('concurrency', '3'), 10);
 
 // Directories that are never production attack surface: test fixtures (often deliberately
