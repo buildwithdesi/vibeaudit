@@ -64,7 +64,7 @@ npm install -g @jackdog668/vibeaudit
 vibeaudit            # then just call it directly
 ```
 
-Requires Node `>=18.3.0`.
+Requires Node `>=18.19.0`.
 
 ---
 
@@ -431,9 +431,8 @@ console.log(`Found ${findings.length} issues`);
 
 **Every finding includes a fix AND a prompt.** Plain-English explanation for understanding PLUS a copy-paste prompt for action. No "go read the OWASP docs."
 
-**It audits itself.** `npm run audit:self` — Vibe Audit passes its own checks in strict mode. 174+ tests, all passing.
+**It audits itself.** `npm run audit:self` — Vibe Audit passes its own checks in strict mode. 299+ tests, all passing.
 
----
 
 ## Roadmap
 
