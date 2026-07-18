@@ -6,6 +6,7 @@ import { CWE_MAP } from './data/cwe-map.js';
 import { runSCA } from './sca/index.js';
 import { isSuppressed, pathDisabledFor } from './suppress.js';
 import { parseGitHubTarget, fetchRemoteConfig } from './github.js';
+import { yellow, dim } from './colors.js';
 
 /**
  * Check whether a relative path has any path segment matching one of the ignore
@@ -93,6 +94,10 @@ export async function audit(targetDir, cliOptions = {}) {
     const target = parseGitHubTarget(targetDir.replace(/^github:\/\//, '')) || parseGitHubTarget(targetDir);
     const remoteConfig = target ? await fetchRemoteConfig(target.owner, target.repo) : null;
     config = remoteConfig || getDefaultConfig();
+    if (remoteConfig) {
+      // stderr, not stdout — must not corrupt --format json output for CI pipelines
+      console.error(yellow(dim('  Remote .vibe-audit.json applied — the scanned repo controls its own ignore/list settings.')));
+    }
   } else {
     config = await loadConfig(targetDir);
   }

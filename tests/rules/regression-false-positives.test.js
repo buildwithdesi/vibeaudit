@@ -188,8 +188,8 @@ describe('suppression', () => {
     assert.equal(isSuppressed(file, { line: 2, ruleId: 'r' }), false);
   });
 
-  it('pathDisabledFor honors per-rule path patterns', () => {
-    const config = { disableForPaths: { 'missing-auth': ['^public/'] } };
+  it('pathDisabledFor honors per-rule path substring patterns', () => {
+    const config = { disableForPaths: { 'missing-auth': ['public/'] } };
     assert.equal(pathDisabledFor(config, 'missing-auth', 'public/api.js'), true);
     assert.equal(pathDisabledFor(config, 'missing-auth', 'src/api.js'), false);
     assert.equal(pathDisabledFor(config, 'other', 'public/api.js'), false);

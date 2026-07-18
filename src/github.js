@@ -40,6 +40,95 @@ const IGNORE_DIRS = new Set([
 ]);
 
 /**
+ * Build an error from a failed GitHub API response, tagging whether it's a real
+ * rate-limit (primary or secondary) vs. a plain auth/not-found failure. A bare
+ * `status === 403` is ambiguous — GitHub returns 403 for both "rate limited" and
+ * "token lacks access" — so we disambiguate off the X-RateLimit-Remaining header
+ * and the "secondary rate limit" message text, since callers need to retry one
+ * and skip the other.
+ *
+ * Body is truncated to 500 chars to avoid leaking HTML/JSON from error pages
+ * into terminal scrollback or error logs.
+ * @param {Response} res
+ * @param {string} body
+ * @returns {Error & { status: number, rateLimited: boolean, retryAfterMs: number|null }}
+ */
+export function makeApiError(res, body) {
+  const truncated = String(body ?? '').slice(0, 500);
+  const err = new Error(`GitHub API error (${res.status}): ${truncated}`);
+  err.status = res.status;
+
+  const remaining = res.headers.get('x-ratelimit-remaining');
+  const retryAfterHeader = res.headers.get('retry-after');
+  const resetHeader = res.headers.get('x-ratelimit-reset');
+
+  err.rateLimited =
+    res.status === 429 ||
+    (res.status === 403 &&
+      (remaining === '0' || /rate limit|secondary rate limit/i.test(body)));
+
+  err.retryAfterMs = retryAfterHeader
+    ? parseInt(retryAfterHeader, 10) * 1000
+    : resetHeader
+      ? Math.max(0, parseInt(resetHeader, 10) * 1000 - Date.now())
+      : null;
+
+  return err;
+}
+
+/**
+ * Verify a token actually works and report remaining quota before a bulk scan starts,
+ * so a bad/expired/under-scoped token fails loud with one clear message instead of
+ * silently producing 150+ "Not found" rows that all look like deleted repos.
+ * @returns {Promise<{ ok: boolean, authenticated: boolean, remaining: number, limit: number, login?: string, message: string }>}
+ */
+export async function verifyToken() {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  const headers = { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'vibe-audit' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch('https://api.github.com/rate_limit', { headers });
+  const data = await res.json().catch(() => ({}));
+  const core = data.resources?.core ?? { remaining: 0, limit: 0 };
+
+  if (!token) {
+    return {
+      ok: false,
+      authenticated: false,
+      remaining: core.remaining,
+      limit: core.limit,
+      message: 'No GITHUB_TOKEN/GH_TOKEN set — running unauthenticated (60 req/hr, public repos only).',
+    };
+  }
+  if (!res.ok) {
+    return {
+      ok: false,
+      authenticated: false,
+      remaining: 0,
+      limit: 0,
+      message: `Token rejected by GitHub API (${res.status}) — it's expired, revoked, or malformed.`,
+    };
+  }
+
+  let login;
+  try {
+    const userRes = await fetch('https://api.github.com/user', { headers });
+    if (userRes.ok) login = (await userRes.json()).login;
+  } catch {
+    // Non-fatal — quota check above already confirmed the token works.
+  }
+
+  return {
+    ok: true,
+    authenticated: true,
+    remaining: core.remaining,
+    limit: core.limit,
+    login,
+    message: `Token OK${login ? ` (${login})` : ''} — ${core.remaining}/${core.limit} API requests remaining this hour.`,
+  };
+}
+
+/**
  * Check whether a target string looks like a GitHub repo reference.
  * @param {string} target
  * @returns {{ owner: string, repo: string } | null}
@@ -89,7 +178,7 @@ export async function* fetchRepoFiles(owner, repo, { branch = 'HEAD' } = {}) {
   const treeRes = await fetch(treeUrl, { headers });
   if (!treeRes.ok) {
     const body = await treeRes.text();
-    throw new Error(`GitHub API error (${treeRes.status}): ${body}`);
+    throw makeApiError(treeRes, body);
   }
   const treeData = await treeRes.json();
 
@@ -109,9 +198,22 @@ export async function* fetchRepoFiles(owner, repo, { branch = 'HEAD' } = {}) {
   for (const file of files) {
     try {
       // Use the raw content endpoint for simplicity.
+      // Note: the Authorization header (GITHUB_TOKEN) is sent to
+      // raw.githubusercontent.com as well, since private repos require it.
+      // For public repos this is harmless; for private ones it's necessary.
+      // Node's undici (since 5.28.3) strips Authorization on cross-origin
+      // redirect, but engines >= 18.19 is recommended.
       const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${file.path}`;
       const fileRes = await fetch(rawUrl, { headers }); // vibe-audit-ignore perf-no-await-parallel  (sequential fetch avoids GitHub secondary rate limits)
-      if (!fileRes.ok) continue;
+      if (!fileRes.ok) {
+        // raw.githubusercontent.com rate-limits separately from api.github.com — surface it
+        // instead of silently dropping the file, so a mid-repo throttle doesn't masquerade
+        // as "file just didn't exist."
+        if (fileRes.status === 429 || fileRes.status === 403) {
+          throw makeApiError(fileRes, await fileRes.text()); // vibe-audit-ignore perf-no-await-parallel  (sequential fetch avoids GitHub secondary rate limits)
+        }
+        continue;
+      }
 
       const content = await fileRes.text(); // vibe-audit-ignore perf-no-await-parallel  (part of the same intentional sequential fetch)
       // Skip huge files (> 2 MB).
@@ -124,8 +226,10 @@ export async function* fetchRepoFiles(owner, repo, { branch = 'HEAD' } = {}) {
         content,
         lines,
       };
-    } catch {
-      // Skip files we can't fetch.
+    } catch (err) {
+      // Rate limits abort the whole repo scan so the caller can back off and retry;
+      // everything else (network blip, one bad file) just skips that file.
+      if (err.rateLimited) throw err;
       continue;
     }
   }

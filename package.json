@@ -4,7 +4,7 @@
   "description": "Security audit CLI for AI-generated codebases. Find the time bombs before they blow.",
   "type": "module",
   "engines": {
-    "node": ">=18.3.0"
+    "node": ">=18.19.0"
   },
   "bin": {
     "vibeaudit": "./bin/vibe-audit.js"
@@ -44,6 +44,10 @@
     "url": "https://github.com/jackdog668/vibeaudit"
   },
   "homepage": "https://digitalalchemy.dev/vibe-audit",
+  "publishConfig": {
+    "provenance": true,
+    "access": "public"
+  },
   "dependencies": {
     "acorn": "^8.16.0",
     "acorn-loose": "^8.5.2"

@@ -6,6 +6,26 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 /**
+ * Strip ANSI escape sequences and terminal control characters from a string.
+ * Prevents terminal injection when printing untrusted scanned content.
+ * ANSI patterns stripped: SGR codes (\x1B[...m), OSC sequences (\x1B]...BEL/ST),
+ * hyperlink escapes (OSC 8), and all C0 control chars except \n and \t.
+ */
+// C0 controls (minus \n \t) + DEL + C1 range (U+0080-U+009F — legacy terminal
+// control codes, never legit in source-code evidence)
+const CONTROL_RE = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g;
+const ANSI_ESC_RE = /\x1B(?:\[[0-9;]*[A-Za-z]|\].*?(?:\x1B\\|\x07))/g;
+const OSC8_LINK_RE = /\x1B\]8;[^;]*;[^\x1B]*\x1B\\/g;
+
+function sanitizeTerminal(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(OSC8_LINK_RE, '')
+    .replace(ANSI_ESC_RE, '')
+    .replace(CONTROL_RE, '');
+}
+
+/**
  * @typedef {import('./rules/types.js').Finding} Finding
  */
 
@@ -113,7 +133,7 @@ function reportTerminal(findings, meta) {
     if (fileWarn > 0) counts.push(yellow(`${fileWarn}W`));
     if (fileInfo > 0) counts.push(cyan(`${fileInfo}I`));
 
-    console.log(`  ${bold(cyan(file))} ${dim('(')}${counts.join(dim(','))}${dim(')')}`);
+    console.log(`  ${bold(cyan(sanitizeTerminal(file)))} ${dim('(')}${counts.join(dim(','))}${dim(')')}`);
 
     for (const f of fileFindings) {
       const icon = severityIcon(f.severity);
@@ -121,11 +141,11 @@ function reportTerminal(findings, meta) {
       const cweStr = f.cweId ? dim(` [${f.cweId}]`) : '';
       const cvssStr = f.cvssScore ? dim(` CVSS:${f.cvssScore}`) : '';
       const wcagStr = f.wcag ? dim(` [${f.wcag}]`) : '';
-      console.log(`    ${icon}  ${f.message}${lineStr}${cweStr}${cvssStr}${wcagStr}`);
+      console.log(`    ${icon}  ${sanitizeTerminal(f.message)}${lineStr}${cweStr}${cvssStr}${wcagStr}`);
       if (f.evidence) {
-        console.log(`        ${dim(f.evidence)}`);
+        console.log(`        ${dim(sanitizeTerminal(f.evidence))}`);
       }
-      console.log(`        ${dim('Fix:')} ${gray(f.fix)}`);
+      console.log(`        ${dim('Fix:')} ${gray(sanitizeTerminal(f.fix))}`);
       console.log('');
     }
   }
@@ -250,10 +270,10 @@ function reportMarkdown(findings, meta) {
   } else {
     const renderFinding = (f) => {
       const cweBadge = f.cweId ? ` \`${f.cweId}\`` : f.wcag ? ` \`${f.wcag}\`` : '';
-      lines.push(`### \`${f.file}\`${f.line ? `:${f.line}` : ''}${cweBadge}`);
-      lines.push(`- **${f.message}**`);
-      if (f.evidence) lines.push(`- Evidence: \`${f.evidence}\``);
-      lines.push(`- Fix: ${f.fix}`);
+      lines.push(`### \`${sanitizeTerminal(f.file)}\`${f.line ? `:${f.line}` : ''}${cweBadge}`);
+      lines.push(`- **${sanitizeTerminal(f.message)}**`);
+      if (f.evidence) lines.push(`- Evidence: \`${sanitizeTerminal(f.evidence)}\``);
+      lines.push(`- Fix: ${sanitizeTerminal(f.fix)}`);
       const promptData = getFixPrompt(f.ruleId);
       if (promptData) {
         lines.push('');
@@ -285,7 +305,7 @@ function reportMarkdown(findings, meta) {
     if (infos.length > 0) {
       lines.push('## ℹ️ Info', '');
       for (const f of infos) {
-        lines.push(`- \`${f.file}\`${f.line ? `:${f.line}` : ''} — ${f.message}`);
+        lines.push(`- \`${sanitizeTerminal(f.file)}\`${f.line ? `:${f.line}` : ''} — ${sanitizeTerminal(f.message)}`);
       }
       lines.push('');
     }
@@ -306,7 +326,10 @@ function reportMarkdown(findings, meta) {
 
 async function reportHTMLFile(findings, meta) {
   const html = generateHTML(findings, meta);
-  const targetDir = meta.targetDir || process.cwd();
+  // github:// targets are display labels, not real paths — writing there would
+  // create a literal "github:" directory in the user's cwd. Use cwd instead.
+  const rawDir = meta.targetDir || process.cwd();
+  const targetDir = rawDir.startsWith('github://') ? process.cwd() : rawDir;
   const filePath = join(targetDir, 'vibe-audit-report.html');
 
   try {
@@ -327,7 +350,8 @@ async function reportHTMLFile(findings, meta) {
     console.log(dim('  Open in your browser to view the interactive dashboard.'));
     console.log('');
   } catch {
-    // Fall back to stdout if we can't write the file
-    console.log(html);
+    // Fall back to stdout if we can't write the file — sanitize since the HTML
+    // embeds scanned content (evidence is HTML-escaped, but ANSI survives esc())
+    console.log(sanitizeTerminal(html));
   }
 }

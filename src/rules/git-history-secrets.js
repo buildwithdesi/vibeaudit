@@ -10,7 +10,7 @@
 
 /** @typedef {import('./types.js').Rule} Rule */
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { dirname } from 'node:path';
 
 const SECRET_INDICATORS = [
@@ -49,13 +49,15 @@ export const gitHistorySecrets = {
     try {
       const projectDir = dirname(file.path);
       // Search recent git history for secret patterns (limit to last 50 commits for speed)
-      const gitLog = execSync(
-        'git log --all -n 50 --diff-filter=D -p -- "*.env" "*.json" "*.js" "*.ts" "*.yaml" "*.yml" 2>/dev/null | head -500',
+      const gitLog = execFileSync(
+        'git',
+        ['log', '--all', '-n', '50', '--diff-filter=D', '-p', '--', '*.env', '*.json', '*.js', '*.ts', '*.yaml', '*.yml'],
         { cwd: projectDir, encoding: 'utf-8', timeout: 10000 }
       );
+      const truncatedLines = gitLog.split('\n').slice(0, 500).join('\n');
 
       for (const pattern of SECRET_INDICATORS) {
-        const match = gitLog.match(pattern);
+        const match = truncatedLines.match(pattern);
         if (match) {
           findings.push({
             ruleId: 'git-history-secrets',

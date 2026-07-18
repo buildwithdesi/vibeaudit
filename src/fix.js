@@ -28,6 +28,14 @@ export async function generateFixes(findings, targetDir, mode = 'all') {
     return;
   }
 
+  // Don't write fix files for remote scans (github:// has no real local directory)
+  if (targetDir && targetDir.startsWith('github://') && mode === 'file') {
+    mode = 'prompt';
+  } else if (targetDir && targetDir.startsWith('github://') && mode === 'all') {
+    console.log(dim('\n  Remote scan — showing prompts only (no local directory to write to).\n'));
+    mode = 'prompt';
+  }
+
   // Deduplicate by ruleId — one prompt per rule type, not per finding.
   const byRule = new Map();
   for (const f of findings) {

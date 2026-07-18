@@ -161,7 +161,8 @@ try {
   if (gh) {
     // GitHub mode — fetch files directly via API, no clone needed.
     const label = `${gh.owner}/${gh.repo}`;
-    console.log(cyan(`\n  ⚗️  Scanning GitHub repo: ${label}\n`));
+    // stderr — keep stdout clean for --format json pipelines
+    console.error(cyan(`\n  ⚗️  Scanning GitHub repo: ${label}\n`));
     targetDir = `github://${label}`;
     cliOptions.fileSource = fetchRepoFiles(gh.owner, gh.repo);
     cliOptions.skipSca = true; // SCA needs local package-lock.json, skip for remote
