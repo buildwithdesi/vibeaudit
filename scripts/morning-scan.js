@@ -38,16 +38,47 @@ const discover = hasFlag('discover');
 const owner = flag('owner', 'buildwithdesi');
 const concurrency = parseInt(flag('concurrency', '3'), 10);
 
-async function discoverRepos(owner) {
+/**
+ * Decide whether a discovery result is safe to persist over the saved list.
+ * A discovery that lost more than a quarter of the portfolio is treated as a
+ * partial result (bad token scope, truncated pagination) rather than a real
+ * shrink, because persisting it would silently narrow every future scan.
+ */
+export function shouldAcceptDiscovery(discoveredCount, savedCount, force = false) {
+  if (force) return true;
+  if (!savedCount) return true;
+  return discoveredCount >= savedCount * 0.75;
+}
+
+export async function discoverRepos(owner, { fetchImpl = fetch } = {}) {
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
   const headers = { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'vibe-audit' };
   if (token) headers.Authorization = `Bearer ${token}`;
 
+  // /users/{owner}/repos only ever returns PUBLIC repos, even with a token that
+  // can see private ones. Scanning your own account through it silently drops
+  // every private repo — the exact repos most likely to hold live secrets. When
+  // the token belongs to the owner we're discovering, use /user/repos instead,
+  // which includes private repos the token can read.
+  let listUrl = `https://api.github.com/users/${owner}/repos`;
+  let scope = 'public only';
+  if (token) {
+    const meRes = await fetchImpl('https://api.github.com/user', { headers });
+    if (meRes.ok) {
+      const me = await meRes.json();
+      if (me.login && me.login.toLowerCase() === owner.toLowerCase()) {
+        listUrl = 'https://api.github.com/user/repos?affiliation=owner';
+        scope = 'public + private';
+      }
+    }
+  }
+
   const repos = [];
   let page = 1;
   while (true) {
-    const url = `https://api.github.com/users/${owner}/repos?per_page=100&page=${page}&sort=updated&direction=desc`;
-    const res = await fetch(url, { headers }); // vibe-audit-ignore perf-no-await-parallel  (pagination is inherently sequential — need page N to know if N+1 exists)
+    const sep = listUrl.includes('?') ? '&' : '?';
+    const url = `${listUrl}${sep}per_page=100&page=${page}&sort=updated&direction=desc`;
+    const res = await fetchImpl(url, { headers }); // vibe-audit-ignore perf-no-await-parallel  (pagination is inherently sequential — need page N to know if N+1 exists)
     if (!res.ok) throw new Error(`Failed to list repos: ${res.status}`);
     const batch = await res.json(); // vibe-audit-ignore perf-no-await-parallel  (pagination response, inherently sequential)
     if (batch.length === 0) break;
@@ -56,7 +87,7 @@ async function discoverRepos(owner) {
     }
     page++;
   }
-  return repos;
+  return { repos, scope };
 }
 
 async function sleep(ms) {
@@ -110,10 +141,27 @@ async function main() {
   let repos;
   if (discover) {
     console.log(`\n   Discovering repos for ${owner}...`);
-    repos = await discoverRepos(owner);
-    console.log(`   Found ${repos.length} repos.`);
-    // Save discovered list for next time
-    await writeFile(join(ROOT, 'scripts', 'repos.json'), JSON.stringify(repos, null, 2));
+    const discovered = await discoverRepos(owner);
+    repos = discovered.repos;
+    console.log(`   Found ${repos.length} repos (${discovered.scope}).`);
+
+    // Discovery feeds the saved list, so a partial result (bad token scope,
+    // truncated pagination) would quietly shrink every future scan. Refuse to
+    // shrink the list by more than a quarter without --force-discover.
+    const previous = await readFile(reposFile, 'utf8')
+      .then((raw) => JSON.parse(raw))
+      .catch(() => []);
+    if (!shouldAcceptDiscovery(repos.length, previous.length, hasFlag('force-discover'))) {
+      console.error(
+        `\n   Refusing to overwrite ${reposFile}: discovery returned ${repos.length} repos ` +
+          `but the saved list has ${previous.length}.\n` +
+          `   This usually means the token can't see private repos. Scanning the saved list instead.\n` +
+          `   Re-run with --force-discover if the shrink is intentional.\n`,
+      );
+      repos = previous;
+    } else {
+      await writeFile(reposFile, JSON.stringify(repos, null, 2));
+    }
   } else {
     const raw = await readFile(reposFile, 'utf8');
     repos = JSON.parse(raw);
@@ -295,7 +343,11 @@ function generateReport(results, errors, totalRepos, durationSec) {
   return md;
 }
 
-main().catch((err) => {
-  console.error('Fatal error:', err);
-  process.exit(2);
-});
+// Only run the scan when invoked as a CLI — tests import this module for the
+// discovery helpers and must not kick off a portfolio-wide scan on import.
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main().catch((err) => {
+    console.error('Fatal error:', err);
+    process.exit(2);
+  });
+}
