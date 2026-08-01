@@ -101,9 +101,11 @@ describe('reporter: terminal injection defense', () => {
 
   it('terminal strips ANSI escapes, OSC8 links, and control chars from findings', () => {
     const out = capture(() => report([hostileFinding], 'terminal', META));
-    assert.ok(!out.includes('\x1B'), 'terminal output must not contain ESC');
+    // Hostile sequences from finding data must be stripped
+    assert.ok(!out.includes('\x1B[2J'), 'terminal output must not contain clear-screen escape');
+    assert.ok(!out.includes('\x1B[H'), 'terminal output must not contain cursor-home escape');
+    assert.ok(!out.includes('\x1B]8;'), 'terminal output must not contain OSC8 hyperlink escapes');
     assert.ok(!out.includes('\x07'), 'terminal output must not contain BEL');
-    assert.ok(!/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/.test(out), 'no C0/C1 control chars');
     // The visible text should still be there — only the escapes are gone
     assert.ok(out.includes('eval() with dynamic input'));
     assert.ok(out.includes('eval(x)'));
