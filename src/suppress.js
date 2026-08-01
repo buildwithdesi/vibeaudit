@@ -46,7 +46,10 @@ export function isSuppressed(file, finding) {
 
 /**
  * Is a rule disabled for this path via `.vibe-audit.json` `disableForPaths`?
- * Shape: { "rule-id": ["regex-or-substring", ...] }
+ * Shape: { "rule-id": ["substring", ...] }
+ *
+ * Uses substring matching (not regex) to prevent ReDoS from adversarial configs,
+ * since a remote repo can supply its own .vibe-audit.json.
  *
  * @param {{disableForPaths?: Record<string, string[]>}} config
  * @param {string} ruleId
@@ -58,11 +61,5 @@ export function pathDisabledFor(config, ruleId, relativePath) {
   if (!map || typeof map !== 'object') return false;
   const patterns = map[ruleId];
   if (!Array.isArray(patterns)) return false;
-  return patterns.some((p) => {
-    try {
-      return new RegExp(p).test(relativePath);
-    } catch {
-      return relativePath.includes(p);
-    }
-  });
+  return patterns.some((p) => relativePath.includes(p));
 }

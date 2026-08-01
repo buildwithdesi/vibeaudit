@@ -2,5 +2,9 @@
   "ignore": ["tests", "legacy/", "vendor/", "rules", "data", "sca", "dast", "reports"],
   "exclude": [],
   "format": "terminal",
-  "strict": true
+  "strict": true,
+  "disableForPaths": {
+    "exposed-secrets": ["^reports/"],
+    "exposed-env-vars": ["^reports/"]
+  }
 }

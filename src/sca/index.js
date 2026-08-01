@@ -41,28 +41,13 @@ export async function runSCA(targetDir) {
 }
 
 /**
- * Run npm audit and convert results to findings.
+ * Parse npm audit JSON output into findings.
+ * Shared by the success and error paths so there's no duplication.
  */
-async function auditNpm(targetDir, pkgPath) {
+function parseNpmAudit(raw) {
   const findings = [];
-  const hasLockfile = existsSync(join(targetDir, 'package-lock.json')) ||
-                      existsSync(join(targetDir, 'yarn.lock')) ||
-                      existsSync(join(targetDir, 'pnpm-lock.yaml'));
-
-  if (!hasLockfile) {
-    // Without a lockfile, we can only check for obviously outdated patterns
-    return checkPackageJsonDirect(pkgPath);
-  }
-
   try {
-    const result = execSync('npm audit --json 2>/dev/null', {
-      cwd: targetDir,
-      encoding: 'utf-8',
-      timeout: 30000,
-    });
-
-    const audit = JSON.parse(result);
-
+    const audit = JSON.parse(raw);
     if (audit.vulnerabilities) {
       for (const [name, vuln] of Object.entries(audit.vulnerabilities)) {
         const severity = mapNpmSeverity(vuln.severity);
@@ -82,38 +67,51 @@ async function auditNpm(targetDir, pkgPath) {
         });
       }
     }
-  } catch (err) {
-    // npm audit returns exit code 1 when vulnerabilities are found
-    if (err.stdout) {
-      try {
-        const audit = JSON.parse(err.stdout);
-        if (audit.vulnerabilities) {
-          for (const [name, vuln] of Object.entries(audit.vulnerabilities)) {
-            const severity = mapNpmSeverity(vuln.severity);
-            const via = Array.isArray(vuln.via)
-              ? vuln.via.filter((v) => typeof v === 'object').map((v) => v.title || v.name).join(', ')
-              : String(vuln.via);
+  } catch {
+    // JSON parse failure — skip
+  }
+  return findings;
+}
 
-            findings.push({
-              ruleId: 'vulnerable-dependency',
-              ruleName: 'Vulnerable Dependency',
-              severity,
-              message: `${name}@${vuln.range || 'unknown'}: ${via || vuln.severity} vulnerability.`,
-              file: 'package.json',
-              fix: vuln.fixAvailable
-                ? `Run: npm audit fix (or npm install ${name}@latest for a major update).`
-                : `No automatic fix available. Check https://www.npmjs.com/advisories for manual remediation.`,
-            });
-          }
-        }
-      } catch {
-        // JSON parse failed — npm audit format issue, skip
-      }
-    }
-    // If npm audit isn't available, fail silently
+/**
+ * Run npm audit and convert results to findings.
+ *
+ * Uses execSync with a STATIC command string (no interpolation → no injection
+ * surface). execFileSync is NOT an option here: npm resolves to npm.cmd on
+ * Windows, and since the CVE-2024-27980 hardening Node refuses to spawn
+ * .bat/.cmd via execFile (ENOENT/EINVAL), which would silently kill SCA on
+ * Windows. stderr is dropped via stdio config (portable) instead of a
+ * Unix-only `2>/dev/null` redirect.
+ *
+ * Residual: npm reads .npmrc from cwd, so a hostile scanned repo could point
+ * the audit request at a malicious registry. Response flows into findings,
+ * which are sanitized at the reporter layer — accepted risk.
+ */
+async function auditNpm(targetDir, pkgPath) {
+  const hasLockfile = existsSync(join(targetDir, 'package-lock.json')) ||
+                      existsSync(join(targetDir, 'yarn.lock')) ||
+                      existsSync(join(targetDir, 'pnpm-lock.yaml'));
+
+  if (!hasLockfile) {
+    return checkPackageJsonDirect(pkgPath);
   }
 
-  return findings;
+  try {
+    const result = execSync('npm audit --json', {
+      cwd: targetDir,
+      encoding: 'utf-8',
+      timeout: 30000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    // Exit 0 — no vulnerabilities or empty output
+    return parseNpmAudit(result);
+  } catch (err) {
+    // npm audit exits 1 when it finds vulnerabilities — stdout still has the data
+    if (err.stdout) {
+      return parseNpmAudit(err.stdout);
+    }
+    return [];
+  }
 }
 
 /**

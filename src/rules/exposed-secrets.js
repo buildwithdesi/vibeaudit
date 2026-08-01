@@ -61,7 +61,7 @@ const SECRET_PATTERNS = [
 const IGNORE_FILES = /\.(env\.example|env\.sample|env\.template)$/;
 
 /** Test/spec files and fixtures intentionally contain fake secrets to exercise this rule. */
-const SKIP = /(?:\.test\.|\.spec\.|__tests__|fixtures\/|src\/rules\/)/i;
+const SKIP = /(?:\.test\.|\.spec\.|__tests__|fixtures\/|src\/rules\/|reports\/)/i;
 
 /** Lines that are clearly commented out or documentation. */
 function isCommentOrDoc(line) {

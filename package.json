@@ -1,10 +1,10 @@
 {
   "name": "@jackdog668/vibeaudit",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Security audit CLI for AI-generated codebases. Find the time bombs before they blow.",
   "type": "module",
   "engines": {
-    "node": ">=18.3.0"
+    "node": ">=18.19.0"
   },
   "bin": {
     "vibeaudit": "./bin/vibe-audit.js"
@@ -20,7 +20,7 @@
     "README.md"
   ],
   "scripts": {
-    "test": "node --test tests/**/*.test.js tests/**/**/*.test.js",
+    "test": "node --test tests/*.test.js tests/rules/*.test.js",
     "lint": "eslint src/ bin/ tests/",
     "audit:self": "node bin/vibe-audit.js .",
     "ui": "node src/web/server.js",
@@ -41,9 +41,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/buildwithdesi/vibeaudit"
+    "url": "git+https://github.com/buildwithdesi/vibeaudit.git"
   },
   "homepage": "https://digitalalchemy.dev/vibe-audit",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "acorn": "^8.16.0",
     "acorn-loose": "^8.5.2"
