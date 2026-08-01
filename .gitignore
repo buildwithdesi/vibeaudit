@@ -8,10 +8,12 @@ Thumbs.db
 !.env.example
 VIBE-AUDIT-FIXES.md
 
-# Morning-scan output is committed for history: the .md summary AND the .json
-# detail (per-repo findings with file:line). Do NOT ignore reports/ — only
-# transient scratch files.
-reports/*.tmp
+# Morning-scan output is NOT committed. These reports enumerate security
+# findings (file:line) across many repos — publishing them in a public repo
+# hands attackers a map of exploitable weaknesses. The CI workflow still
+# uploads them as private GitHub Actions artifacts for history. Keep them local.
+reports/
+!reports/.gitkeep
 
 # ===== Added by vibe-audit fix =====
 .pnp/

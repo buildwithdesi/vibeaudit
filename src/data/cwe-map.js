@@ -120,6 +120,11 @@ export const CWE_MAP = {
   'regex-dos':                    { cweId: 'CWE-1333', cvssScore: 5.3, owaspCategory: 'A04:2021' },
   'hardcoded-ip':                 { cweId: 'CWE-547', cvssScore: 2.0, owaspCategory: 'A05:2021' },
 
+  // ── Injection & Cryptography (v1.3) ────────────────────────────────────────
+  'sql-injection':                { cweId: 'CWE-89',  cvssScore: 9.8, owaspCategory: 'A03:2021' },
+  'weak-hashing':                 { cweId: 'CWE-328', cvssScore: 5.3, owaspCategory: 'A02:2021' },
+  'insecure-cipher':              { cweId: 'CWE-327', cvssScore: 5.9, owaspCategory: 'A02:2021' },
+
   // ── Infrastructure (v3) ─────────────────────────────────────────────────────
   'docker-root-user':             { cweId: 'CWE-250', cvssScore: 6.5, owaspCategory: 'A05:2021' },
   'exposed-database-port':        { cweId: 'CWE-284', cvssScore: 5.3, owaspCategory: 'A05:2021' },

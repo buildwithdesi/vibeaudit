@@ -41,7 +41,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jackdog668/vibeaudit.git"
+    "url": "git+https://github.com/buildwithdesi/vibeaudit.git"
   },
   "homepage": "https://digitalalchemy.dev/vibe-audit",
   "publishConfig": {
