@@ -112,6 +112,7 @@ import { unsafeDeserialization } from './unsafe-deserialization.js';
 import { noErrorMonitoring } from './no-error-monitoring.js';
 // Supply chain & template injection (v1.2)
 import { templateInjection } from './template-injection.js';
+import { mdxUntrustedSource } from './mdx-untrusted-source.js';
 import { missingSri } from './missing-sri.js';
 import { unpinnedDependencies } from './unpinned-dependencies.js';
 // CI/CD & storage (v1.2)
@@ -234,6 +235,7 @@ export const ALL_RULES = [
   noErrorMonitoring,
   // Supply chain & template injection (v1.2)
   templateInjection,
+  mdxUntrustedSource,
   missingSri,
   unpinnedDependencies,
   // CI/CD & storage (v1.2)

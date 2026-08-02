@@ -412,8 +412,8 @@ describe('cwe-metadata', () => {
 // ── Rule Registry ────────────────────────────────────────────────────────────
 
 describe('v2-rule-registry', () => {
-  it('has 101 rules', () => {
-    assert.equal(ALL_RULES.length, 101, `Expected 101 rules, got ${ALL_RULES.length}`);
+  it('has 102 rules', () => {
+    assert.equal(ALL_RULES.length, 102, `Expected 102 rules, got ${ALL_RULES.length}`);
   });
 
   it('all new rules have fix prompts', async () => {
