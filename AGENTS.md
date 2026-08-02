@@ -10,7 +10,7 @@ scans a codebase for security issues. There is no long-running server or GUI —
 - Requires Node `>=18.3.0` (CI uses Node 20; this VM runs Node 22 — both work).
 - Standard commands live in `package.json` scripts:
   - Lint: `npm run lint`
-  - Tests: `npm test` (Node's built-in test runner, ~292 tests)
+  - Tests: `npm test` (Node's built-in test runner, ~328 tests)
   - Self-audit: `npm run audit:self` (runs the scanner on this repo)
 - Run the CLI directly with `node bin/vibe-audit.js <target> [options]`, e.g.
   `node bin/vibe-audit.js . --skip-sca`. Target can be a local dir or a GitHub `owner/repo`.
