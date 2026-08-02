@@ -37,6 +37,7 @@ export const CWE_MAP = {
   'command-injection':          { cweId: 'CWE-78',  cvssScore: 9.8, owaspCategory: 'A03:2021' },
   'unsafe-deserialization':     { cweId: 'CWE-502', cvssScore: 9.8, owaspCategory: 'A08:2021' },
   'template-injection':         { cweId: 'CWE-1336', cvssScore: 9.8, owaspCategory: 'A03:2021' },
+  'mdx-untrusted-source':       { cweId: 'CWE-1336', cvssScore: 9.8, owaspCategory: 'A03:2021' },
   'missing-sri':                { cweId: 'CWE-353', cvssScore: 4.3, owaspCategory: 'A08:2021' },
   'unpinned-dependencies':      { cweId: 'CWE-829', cvssScore: 5.3, owaspCategory: 'A08:2021' },
   'github-actions-injection':   { cweId: 'CWE-94',  cvssScore: 9.8, owaspCategory: 'A08:2021' },
