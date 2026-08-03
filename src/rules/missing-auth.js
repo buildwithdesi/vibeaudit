@@ -12,7 +12,14 @@
 
 /** @typedef {import('./types.js').Rule} Rule */
 
-import { parseSource, isParseable, walk, callsAuthGuard, collectImportedNames } from '../ast.js';
+import {
+  parseSource,
+  isParseable,
+  walk,
+  callsAuthGuard,
+  collectImportedNames,
+  collectLocalFunctionNames,
+} from '../ast.js';
 import { PUBLIC_ROUTE_CONVENTION } from '../context.js';
 
 const HTTP_METHOD = /^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/;
@@ -86,12 +93,13 @@ export const missingAuth = {
       const ast = parseSource(file.content);
       if (ast) {
         const imported = collectImportedNames(ast);
+        const localFns = collectLocalFunctionNames(ast);
         const handlers = findExportedHandlers(ast);
 
         if (handlers.length > 0) {
           const findings = [];
           for (const handler of handlers) {
-            if (callsAuthGuard(handler.body, imported, file._config?.customAuthGuards)) continue;
+            if (callsAuthGuard(handler.body, imported, file._config?.customAuthGuards, localFns)) continue;
 
             const line = handler.loc?.start?.line || 1;
             const message = isDemoRoute

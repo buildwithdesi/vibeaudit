@@ -42,8 +42,20 @@ export const nextjsMiddlewareBypass = {
       }
     }
 
-    // Check for conditional logic that might skip auth
-    const hasAuth = /(?:getToken|getSession|auth\(\)|NextResponse\.redirect.*login|NextResponse\.redirect.*sign-in)/i.test(file.content);
+    // Check for conditional logic that might skip auth.
+    //
+    // The original list predated the current generation of middleware helpers,
+    // so a Clerk app — where `clerkMiddleware()` IS the entire auth layer —
+    // reported "contains no authentication logic" as a critical. Requires a
+    // CALL, not just an import: a file that imports Clerk and never invokes it
+    // is genuinely protecting nothing.
+    const hasAuth =
+      /(?:getToken|getSession|auth\(\)|NextResponse\.redirect.*login|NextResponse\.redirect.*sign-in)/i.test(
+        file.content,
+      ) ||
+      /\b(?:clerkMiddleware|authMiddleware|withClerkMiddleware|withAuth|NextAuth|updateSession|createMiddlewareClient|createServerClient)\s*\(/.test(
+        file.content,
+      );
     if (!hasAuth) {
       findings.push({
         ruleId: 'nextjs-middleware-bypass',

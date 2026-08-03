@@ -4,7 +4,7 @@
   "format": "terminal",
   "strict": true,
   "disableForPaths": {
-    "exposed-secrets": ["^reports/"],
-    "exposed-env-vars": ["^reports/"]
+    "exposed-secrets": ["reports/"],
+    "exposed-env-vars": ["reports/"]
   }
 }

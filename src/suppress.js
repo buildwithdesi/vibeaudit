@@ -61,5 +61,21 @@ export function pathDisabledFor(config, ruleId, relativePath) {
   if (!map || typeof map !== 'object') return false;
   const patterns = map[ruleId];
   if (!Array.isArray(patterns)) return false;
-  return patterns.some((p) => relativePath.includes(p));
+  return patterns.some((p) => relativePath.includes(stripAnchors(p)));
+}
+
+/**
+ * Tolerate regex-style anchors in a substring pattern.
+ *
+ * The README's own example used `"^public/"` and this repo's `.vibe-audit.json`
+ * used `"^reports/"`, but matching is deliberately substring-only (see above),
+ * so every anchored entry silently matched nothing. Rather than switch to regex
+ * and hand an arbitrary scanned repo a ReDoS vector, strip the anchors — no
+ * regex is compiled and configs already in the wild start working.
+ *
+ * @param {string} pattern
+ * @returns {string}
+ */
+function stripAnchors(pattern) {
+  return String(pattern).replace(/^\^/, '').replace(/\$$/, '');
 }

@@ -5,6 +5,7 @@ import { loadConfig, getDefaultConfig } from './config.js';
 import { CWE_MAP } from './data/cwe-map.js';
 import { runSCA } from './sca/index.js';
 import { isSuppressed, pathDisabledFor } from './suppress.js';
+import { createProjectContext, collectProjectFact, applyProjectContext } from './project-context.js';
 import { parseGitHubTarget, fetchRemoteConfig } from './github.js';
 import { yellow, dim } from './colors.js';
 
@@ -40,11 +41,21 @@ async function runRules(fileSource, rules, deep, config = {}) {
   const findings = [];
   let filesScanned = 0;
 
+  const projectContext = createProjectContext();
+
   for await (const file of fileSource) {
     if (isIgnoredPath(file.relativePath, config.ignore)) continue;
     filesScanned++;
     if (deep) file._deepMode = true;
     file._config = config;
+
+    // Cheap, and the stream is one-shot: record project-wide facts now so
+    // findings can be re-scored after the loop without buffering every file.
+    try {
+      collectProjectFact(file, projectContext);
+    } catch {
+      // Never let context collection break a scan.
+    }
     for (const rule of rules) {
       if (pathDisabledFor(config, rule.id, file.relativePath)) continue;
       try {
@@ -58,7 +69,7 @@ async function runRules(fileSource, rules, deep, config = {}) {
     }
   }
 
-  return { findings, filesScanned };
+  return { findings: applyProjectContext(findings, projectContext), filesScanned };
 }
 
 /**

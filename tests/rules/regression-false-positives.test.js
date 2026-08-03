@@ -351,3 +351,155 @@ describe('FP fix: SQL is owned by sql-injection only (no double-count)', () => {
     assert.ok(sqlInjection.check(mk('api/u.js', sqlish)).length > 0, 'signal must survive the de-duplication');
   });
 });
+
+describe('FP fix: missing-auth resolves a guard declared in the same file', () => {
+  const guardedRoute = `async function isCookieRouteAuthorized(req) {
+  return Boolean(req.headers.get('x-admin'));
+}
+export async function GET(req) {
+  if (!(await isCookieRouteAuthorized(req))) return new Response('no', { status: 401 });
+  return Response.json({ ok: true });
+}`;
+
+  it('does NOT flag a route guarded by a local auth helper', () => {
+    assert.equal(missingAuth.check(mk('app/api/cookies/route.ts', guardedRoute)).length, 0);
+  });
+
+  it('MUST STILL flag a route whose local helper is not a guard', () => {
+    const content = `function formatRow(r) { return r; }
+export async function DELETE(req) {
+  const { id } = await req.json();
+  await db.delete(id);
+  return Response.json({ ok: true });
+}`;
+    assert.ok(missingAuth.check(mk('app/api/rows/route.ts', content)).length > 0);
+  });
+
+  it('MUST STILL flag when the local helper only looks data-shaped', () => {
+    const content = `function parseBody(req) { return req.json(); }
+export async function POST(req) {
+  const body = await parseBody(req);
+  return Response.json(body);
+}`;
+    assert.ok(
+      missingAuth.check(mk('app/api/echo/route.ts', content)).length > 0,
+      'a non-guard local helper must not rescue an unauthenticated route',
+    );
+  });
+});
+
+describe('FP fix: nextjs-middleware-bypass recognises modern helpers', () => {
+  const withMatcher = `export const config = { matcher: ['/((?!_next/static).*)'] };`;
+
+  it('does NOT flag clerkMiddleware() as having no auth logic', async () => {
+    const { nextjsMiddlewareBypass } = await import('../../src/rules/nextjs-middleware-bypass.js');
+    const content = `import { clerkMiddleware } from '@clerk/nextjs/server';\nexport default clerkMiddleware();\n${withMatcher}`;
+    const noAuthFinding = nextjsMiddlewareBypass
+      .check(mk('middleware.ts', content))
+      .find((f) => /no authentication/i.test(f.message));
+    assert.equal(noAuthFinding, undefined);
+  });
+
+  it('MUST STILL flag middleware that only sets headers', async () => {
+    const { nextjsMiddlewareBypass } = await import('../../src/rules/nextjs-middleware-bypass.js');
+    const content = `import { NextResponse } from 'next/server';
+export function middleware() {
+  const res = NextResponse.next();
+  res.headers.set('x-app', '1');
+  return res;
+}
+${withMatcher}`;
+    const noAuthFinding = nextjsMiddlewareBypass
+      .check(mk('middleware.ts', content))
+      .find((f) => /no authentication/i.test(f.message));
+    assert.ok(noAuthFinding, 'header-only middleware really is unprotected');
+  });
+
+  it('MUST STILL flag an import with no call', async () => {
+    const { nextjsMiddlewareBypass } = await import('../../src/rules/nextjs-middleware-bypass.js');
+    const content = `import { clerkMiddleware } from '@clerk/nextjs/server';
+export function middleware() { return NextResponse.next(); }
+${withMatcher}`;
+    const noAuthFinding = nextjsMiddlewareBypass
+      .check(mk('middleware.ts', content))
+      .find((f) => /no authentication/i.test(f.message));
+    assert.ok(noAuthFinding, 'importing Clerk without calling it protects nothing');
+  });
+});
+
+describe('project-context: middleware-aware missing-auth scoring', () => {
+  const route = `export async function GET(req) { return Response.json({ ok: true }); }`;
+
+  async function scan(middlewareContent, matcher) {
+    const files = [
+      mk('middleware.ts', `${middlewareContent}\nexport const config = { matcher: ${matcher} };`),
+      mk('app/api/things/route.ts', route),
+    ];
+    async function* source() { for (const f of files) yield f; }
+    const { findings } = await audit('proj', {
+      fileSource: source(),
+      skipSca: true,
+      rules: ['missing-auth'],
+      config: { ignore: [], rules: [], exclude: [], format: 'json', strict: false },
+    });
+    return findings.filter((f) => f.ruleId === 'missing-auth');
+  }
+
+  const clerk = `import { clerkMiddleware } from '@clerk/nextjs/server';\nexport default clerkMiddleware();`;
+
+  it('downgrades to warning when a guarded matcher covers the route', async () => {
+    const found = await scan(clerk, `['/api/:path*']`);
+    assert.equal(found.length, 1, 'finding stays visible — downgraded, never deleted');
+    assert.equal(found[0].severity, 'warning');
+    assert.match(found[0].message, /enforced by middleware/i);
+  });
+
+  it('MUST STILL be critical when the matcher does not cover the route', async () => {
+    const found = await scan(clerk, `['/dashboard/:path*']`);
+    assert.equal(found[0].severity, 'critical');
+  });
+
+  it('MUST STILL be critical when middleware does not authenticate', async () => {
+    const headersOnly = `import { NextResponse } from 'next/server';\nexport function middleware() { return NextResponse.next(); }`;
+    const found = await scan(headersOnly, `['/api/:path*']`);
+    assert.equal(found[0].severity, 'critical');
+  });
+});
+
+describe('project-context: helpers', () => {
+  it('normalizeMatcher reduces Next matcher syntax to a prefix', async () => {
+    const { normalizeMatcher } = await import('../../src/project-context.js');
+    assert.equal(normalizeMatcher('/api/:path*'), '/api');
+    assert.equal(normalizeMatcher('/api/(.*)'), '/api');
+    assert.equal(normalizeMatcher('/((?!_next/static).*)'), '/');
+    assert.equal(normalizeMatcher('relative/path'), null);
+  });
+
+  it('routeUrlFor maps route files to URLs, ignoring route groups', async () => {
+    const { routeUrlFor } = await import('../../src/project-context.js');
+    assert.equal(routeUrlFor('src/app/api/things/route.ts'), '/api/things');
+    assert.equal(routeUrlFor('app/(marketing)/api/x/route.js'), '/api/x');
+    assert.equal(routeUrlFor('pages/api/legacy.ts'), '/api/legacy');
+    assert.equal(routeUrlFor('src/lib/util.ts'), null);
+  });
+});
+
+describe('FP fix: disableForPaths tolerates regex-style anchors', () => {
+  const cfg = (patterns) => ({ disableForPaths: { 'missing-auth': patterns } });
+
+  it('an anchored pattern now matches (README taught this form)', () => {
+    assert.equal(pathDisabledFor(cfg(['^public/']), 'missing-auth', 'public/app.js'), true);
+  });
+
+  it('a plain substring pattern still matches', () => {
+    assert.equal(pathDisabledFor(cfg(['reports/']), 'missing-auth', 'reports/a.json'), true);
+  });
+
+  it('stripping the anchor MUST NOT create a spurious match', () => {
+    assert.equal(pathDisabledFor(cfg(['^public/']), 'missing-auth', 'src/publicUtils.ts'), false);
+  });
+
+  it('does not leak across rules', () => {
+    assert.equal(pathDisabledFor(cfg(['^public/']), 'sql-injection', 'public/app.js'), false);
+  });
+});
