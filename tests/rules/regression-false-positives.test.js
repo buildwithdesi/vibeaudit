@@ -562,3 +562,99 @@ describe('FP fix: stripe-webhook-no-verify requires an actual handler', () => {
     assert.ok(rule.check(mk('server/routes.js', content)).length > 0);
   });
 });
+
+describe('FP fix: dangerously-set-inner-html resolves values file-wide', () => {
+  it('does NOT flag the identifier appearing in a comment', () => {
+    // Real findings: three repos had comments stating they AVOID this API.
+    const a = `// We avoid dangerouslySetInnerHTML and rely on React escaping.\nexport const A = () => <div>hi</div>;`;
+    assert.equal(dangerouslySetInnerHtml.check(mk('src/A.tsx', a)).length, 0);
+
+    const b = `// eslint-disable-next-line react/no-danger -- dangerouslySetInnerHTML is intentional\nexport const B = () => <div />;`;
+    assert.equal(dangerouslySetInnerHtml.check(mk('src/B.tsx', b)).length, 0);
+  });
+
+  it('does NOT flag a const holding a static template literal', () => {
+    // Real finding: content-drop's inline theme script.
+    const content = `const themeScript = \`(function(){try{var t=localStorage.getItem('t');}catch(e){}})();\`;
+export default function Layout() {
+  return <script dangerouslySetInnerHTML={{ __html: themeScript }} />;
+}`;
+    assert.equal(dangerouslySetInnerHtml.check(mk('src/app/layout.tsx', content)).length, 0);
+  });
+
+  it('does NOT flag a locally-defined escape-then-decorate helper', () => {
+    // Real finding: highlight() declared ~580 lines above its use, far outside
+    // the old byte window. It escapes first, then swaps sentinels for <mark>.
+    const content = `function highlight(snippet: string): string {
+  const esc = snippet.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return esc.replaceAll("\u27ea", '<mark>').replaceAll("\u27eb", "</mark>");
+}
+${'\n'.repeat(40)}
+export function Results({ h }) {
+  return <p dangerouslySetInnerHTML={{ __html: highlight(h.snippet) }} />;
+}`;
+    assert.equal(dangerouslySetInnerHtml.check(mk('src/library-browser.tsx', content)).length, 0);
+  });
+
+  it('MUST STILL flag a raw user value', () => {
+    const content = `export const D = ({ userHtml }) => <div dangerouslySetInnerHTML={{ __html: userHtml }} />;`;
+    const found = dangerouslySetInnerHtml.check(mk('src/D.tsx', content));
+    assert.ok(found.length > 0, 'an unresolvable value is still a sink');
+    assert.equal(found[0].severity, 'critical');
+  });
+
+  it('MUST STILL flag a variable reassigned unsanitized after sanitizing', () => {
+    const content = `export function E({ raw }) {
+  let clean = DOMPurify.sanitize(raw);
+  clean = raw;
+  return <div dangerouslySetInnerHTML={{ __html: clean }} />;
+}`;
+    assert.ok(
+      dangerouslySetInnerHtml.check(mk('src/E.tsx', content)).length > 0,
+      'two bindings means the single-binding guard must refuse to clear it',
+    );
+  });
+
+  it('MUST STILL flag a local helper that does NOT escape', () => {
+    const content = `function wrap(s) { return '<b>' + s + '</b>'; }
+${'\n'.repeat(40)}
+export const F = ({ q }) => <p dangerouslySetInnerHTML={{ __html: wrap(q) }} />;`;
+    assert.ok(
+      dangerouslySetInnerHtml.check(mk('src/F.tsx', content)).length > 0,
+      'a local helper is only safe if it actually escapes',
+    );
+  });
+
+  it('MUST STILL flag an interpolated template literal', () => {
+    const content = 'export const G = ({ q }) => <p dangerouslySetInnerHTML={{ __html: `<b>${q}</b>` }} />;';
+    assert.ok(dangerouslySetInnerHtml.check(mk('src/G.tsx', content)).length > 0);
+  });
+});
+
+describe('FP fix: dangerously-set-inner-html understands JSON-LD script escaping', () => {
+  // Real pair. homiedex hardens its JSON-LD against a `</script>` breakout;
+  // content-drop stringifies straight in. The rule must tell them apart.
+  const hardened = `function escapeJsonForScriptTag(json: string): string {
+  let out = json.replace(/<\/(script)/gi, "<\\/$1").replace(/<!--/g, "<\\!--");
+  return out;
+}
+export function JsonLd({ data }) {
+  const safe = escapeJsonForScriptTag(JSON.stringify(data));
+  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safe }} />;
+}`;
+
+  const unhardened = `export function Faq({ c }) {
+  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema(c)) }} />;
+}`;
+
+  it('does NOT flag JSON-LD escaped for script context', () => {
+    assert.equal(dangerouslySetInnerHtml.check(mk('src/json-ld.tsx', hardened)).length, 0);
+  });
+
+  it('MUST STILL flag a bare JSON.stringify into a script tag', () => {
+    assert.ok(
+      dangerouslySetInnerHtml.check(mk('src/faq.tsx', unhardened)).length > 0,
+      'an unescaped value containing </script> closes the tag early',
+    );
+  });
+});
