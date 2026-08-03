@@ -322,9 +322,11 @@ Drop a `.vibe-audit.json` in your project root:
   "strict": false,
   "customEscapers": ["myEscapeHtml"],
   "customAuthGuards": ["requireAuthedApiFromReq"],
-  "disableForPaths": { "missing-auth": ["^public/"] }
+  "disableForPaths": { "missing-auth": ["public/"] }
 }
 ```
+
+`disableForPaths` patterns are matched as plain **substrings** against the file path, not as regexes. That is deliberate: a scanned repo supplies its own `.vibe-audit.json`, and compiling a regex from untrusted input is a denial-of-service vector. Leading `^` and trailing `$` are stripped for compatibility, so an anchored pattern still works, but no regex is ever compiled.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |

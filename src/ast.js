@@ -294,6 +294,33 @@ export function collectImportedNames(ast) {
 }
 
 /**
+ * Names of functions DECLARED in this module (not imported).
+ *
+ * `callsAuthGuard` could already resolve an imported guard by name, but a guard
+ * defined in the same file was invisible — so a route doing
+ * `if (!(await isCookieRouteAuthorized(req)))` read as unauthenticated purely
+ * because the helper lived next to it instead of in another module.
+ *
+ * @param {import('acorn').Node} ast
+ * @returns {Set<string>}
+ */
+export function collectLocalFunctionNames(ast) {
+  const names = new Set();
+  walk(ast, (node) => {
+    if (node.type === 'FunctionDeclaration' && node.id?.name) {
+      names.add(node.id.name);
+      return;
+    }
+    if (node.type !== 'VariableDeclarator') return;
+    const init = node.init;
+    if (!init) return;
+    if (init.type !== 'ArrowFunctionExpression' && init.type !== 'FunctionExpression') return;
+    if (node.id?.type === 'Identifier') names.add(node.id.name);
+  });
+  return names;
+}
+
+/**
  * Find functions that are actually EXPORTED (and therefore client-callable as
  * server actions / route handlers). Covers `export function X`,
  * `export const X = () => {}`, `export const X = async function () {}`, and
@@ -351,9 +378,11 @@ const IMPORTED_GUARD_HINT = /(?:auth|session|guard|protect|require|ensure|verify
  *
  * @param {import('acorn').Node} body
  * @param {Set<string>} [importedNames]
+ * @param {string[]} [extraGuards]
+ * @param {Set<string>} [localNames] guard-shaped functions declared in this file
  * @returns {boolean}
  */
-export function callsAuthGuard(body, importedNames, extraGuards) {
+export function callsAuthGuard(body, importedNames, extraGuards, localNames) {
   if (!body) return false;
 
   if (Array.isArray(extraGuards) && extraGuards.length) {
@@ -380,6 +409,17 @@ export function callsAuthGuard(body, importedNames, extraGuards) {
       if (callee.type === 'Identifier') name = callee.name;
       else if (callee.type === 'MemberExpression' && callee.object?.type === 'Identifier') name = callee.object.name;
       return name && importedNames.has(name) && IMPORTED_GUARD_HINT.test(name);
+    })) return true;
+  }
+
+  // Same test for a guard declared in this file. Gated by the same hint regex,
+  // so an ordinary local helper (`formatRow`, `parseBody`) still does not count.
+  if (localNames && localNames.size) {
+    if (containsNode(body, (node) => {
+      if (node.type !== 'CallExpression') return false;
+      const callee = node.callee;
+      const name = callee.type === 'Identifier' ? callee.name : null;
+      return name && localNames.has(name) && IMPORTED_GUARD_HINT.test(name);
     })) return true;
   }
 
