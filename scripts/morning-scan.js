@@ -39,6 +39,28 @@ const owner = flag('owner', 'buildwithdesi');
 const concurrency = parseInt(flag('concurrency', '3'), 10);
 
 /**
+ * Repos that hold this scanner's own output rather than an application.
+ *
+ * The report archive stores every past scan as JSON, and those files quote the
+ * findings they recorded — `NEXT_PUBLIC_...`, service-role keys, `allow read,
+ * write: if true`. Scanning it re-flags that quoted evidence as though it were
+ * live source, so the archive reports thousands of criticals that describe
+ * nothing deployable. On the 2026-08-03 run it produced 2,677 of 3,244 total
+ * criticals (82%) — entirely from `scans/morning-scan-*.json` — which buried
+ * the ~567 real findings across the rest of the portfolio.
+ *
+ * Excluded by repo name rather than by ignoring a `scans/` path globally: this
+ * repo contains no application code at all, so skipping it cannot hide a real
+ * finding, whereas a blanket `scans` ignore could mask one in a normal repo.
+ */
+export const SCAN_OUTPUT_REPOS = new Set(['vibeaudit-reports']);
+
+/** Drop report-archive repos from a scan list. Matches on the repo name, any owner. */
+export function excludeScanOutputRepos(repos) {
+  return repos.filter((full) => !SCAN_OUTPUT_REPOS.has(String(full).split('/').pop()));
+}
+
+/**
  * Decide whether a discovery result is safe to persist over the saved list.
  * A discovery that lost more than a quarter of the portfolio is treated as a
  * partial result (bad token scope, truncated pagination) rather than a real
@@ -172,14 +194,14 @@ async function main() {
   if (discover) {
     console.log(`\n   Discovering repos for ${owner}...`);
     const discovered = await discoverRepos(owner);
-    repos = discovered.repos;
+    repos = excludeScanOutputRepos(discovered.repos);
     console.log(`   Found ${repos.length} repos (${discovered.scope}).`);
 
     // Discovery feeds the saved list, so a partial result (bad token scope,
     // truncated pagination) would quietly shrink every future scan. Refuse to
     // shrink the list by more than a quarter without --force-discover.
     const previous = await readFile(reposFile, 'utf8')
-      .then((raw) => JSON.parse(raw))
+      .then((raw) => excludeScanOutputRepos(JSON.parse(raw)))
       .catch(() => []);
     if (!shouldAcceptDiscovery(repos.length, previous.length, hasFlag('force-discover'))) {
       console.error(
@@ -194,7 +216,7 @@ async function main() {
     }
   } else {
     const raw = await readFile(reposFile, 'utf8');
-    repos = JSON.parse(raw);
+    repos = excludeScanOutputRepos(JSON.parse(raw));
   }
 
   if (topN > 0) repos = repos.slice(0, topN);
