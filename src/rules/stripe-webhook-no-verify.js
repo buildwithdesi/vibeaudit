@@ -7,7 +7,26 @@
 /** @typedef {import('./types.js').Rule} Rule */
 
 const SKIP = /(?:\.test\.|\.spec\.|__tests__|node_modules|src\/rules\/)/i;
-const WEBHOOK_FILE = /(?:webhook|stripe|payment)/i;
+
+// Only source can be a handler. The old rule matched on file content alone, so
+// a demo-bookmarks.json containing links to stripe.com was reported as an
+// unverified webhook handler.
+const SOURCE_FILE = /\.(?:[cm]?[jt]sx?|py|rb|go|php)$/i;
+
+// Stripe's own event names. Prose mentioning "Stripe" is not a webhook.
+const STRIPE_EVENT =
+  /(?:checkout\.session|payment_intent|invoice\.[a-z_]+|customer\.subscription|charge\.[a-z_]+|payout\.[a-z_]+|setup_intent)/i;
+
+// Reading this header is the single strongest proof a file IS a Stripe webhook.
+const READS_SIGNATURE = /['"`]stripe-signature['"`]|STRIPE_WEBHOOK_SECRET/i;
+
+// Evidence the file actually receives an HTTP request, rather than merely
+// mentioning payments. Kept broad on purpose: handlers are written many ways.
+const IS_HANDLER =
+  /\breq(?:uest)?\s*\.\s*(?:body|headers|method|text|json|rawBody)|\bres\s*\.\s*(?:status|json|send|end)|export\s+(?:async\s+)?function\s+(?:POST|PUT|PATCH)|export\s+const\s+(?:POST|PUT|PATCH)\s*=|\b(?:app|router)\s*\.\s*(?:post|use)\s*\(|export\s+default\s+(?:async\s+)?function|def\s+\w*webhook\w*\s*\(/i;
+
+// Signature verification, across the SDKs.
+const VERIFIES = /constructEvent|webhooks\.construct|construct_event|verify_header|Webhook\.constructEvent/i;
 
 /** @type {Rule} */
 export const stripeWebhookNoVerify = {
@@ -18,20 +37,25 @@ export const stripeWebhookNoVerify = {
 
   check(file) {
     if (SKIP.test(file.relativePath)) return [];
-    if (!WEBHOOK_FILE.test(file.relativePath) && !/stripe/i.test(file.content)) return [];
+    if (!SOURCE_FILE.test(file.relativePath)) return [];
 
-    // Does the file handle Stripe webhook events?
-    const hasStripeEvent = /(?:event\.type|type\s*===?\s*['"](?:checkout\.session|payment_intent|invoice|customer\.subscription))/i.test(file.content);
-    const hasStripeWebhook = /stripe.*webhook|webhook.*stripe/i.test(file.content);
-    if (!hasStripeEvent && !hasStripeWebhook) return [];
+    const content = file.content;
 
-    // Check for constructEvent
-    const hasVerification = /constructEvent|webhooks\.construct/i.test(file.content);
-    if (hasVerification) return [];
+    // Must actually receive a request. A schema comment, an env module, or a
+    // marketing page listing "Stripe, Twilio, SendGrid" is not a handler.
+    if (!IS_HANDLER.test(content)) return [];
+
+    // Must actually process Stripe webhook events. Either it reads the
+    // signature header / secret, or it branches on a real Stripe event name.
+    const readsSignature = READS_SIGNATURE.test(content);
+    const dispatchesEvent = /\b(?:event|evt)\s*\.\s*type\b/.test(content) && STRIPE_EVENT.test(content);
+    if (!readsSignature && !dispatchesEvent) return [];
+
+    if (VERIFIES.test(content)) return [];
 
     // Find the webhook handler line
     const lineIdx = file.lines.findIndex((l) =>
-      /event\.type|checkout\.session|payment_intent/i.test(l)
+      /event\.type|checkout\.session|payment_intent|stripe-signature/i.test(l)
     );
 
     return [{
