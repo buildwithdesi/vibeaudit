@@ -12,3 +12,6 @@ VIBE-AUDIT-FIXES.md
 # detail (per-repo findings with file:line). Do NOT ignore reports/ — only
 # transient scratch files.
 reports/*.tmp
+
+# local scan output — portfolio vulnerability data, never publish
+reports/
