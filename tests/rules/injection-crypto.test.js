@@ -60,6 +60,59 @@ describe('sql-injection', () => {
     assert.equal(sqlInjection.check(makeFile('api/x.js', '// db.query(`SELECT * FROM t WHERE id = ${id}`)')).length, 0);
     assert.equal(sqlInjection.check(makeFile('api/x.test.js', 'db.query(`SELECT * FROM t WHERE id = ${id}`)')).length, 0);
   });
+
+  // ── FP fix: tagged templates bind their interpolations ────────────────────
+  // A portfolio scan reported 12 of 25 sql-injection hits on parameterized
+  // tagged templates — the exact pattern this rule's own `fix` text recommends.
+
+  describe('MUST NOT flag (parameterized / not a query)', () => {
+    it('postgres.js / Neon sql`` tagged template', () => {
+      const file = makeFile('api/jobs.js', 'await sql`UPDATE jobs SET status = ${status} WHERE id = ${jobId}`;');
+      assert.equal(sqlInjection.check(file).length, 0);
+    });
+
+    it('prisma $queryRaw tagged template', () => {
+      const file = makeFile('api/u.js', 'const rows = await prisma.$queryRaw`SELECT * FROM users WHERE id = ${id}`;');
+      assert.equal(sqlInjection.check(file).length, 0);
+    });
+
+    it('a query string that is logged, not executed', () => {
+      const file = makeFile('api/debug.js', 'console.log(`SELECT * FROM users WHERE id = ${id}`);');
+      assert.equal(sqlInjection.check(file).length, 0);
+    });
+
+    it('English prose in an LLM prompt', () => {
+      const content = 'const text = `Synthesize a content drop from the following ${n} chunk analyses`;';
+      assert.equal(sqlInjection.check(makeFile('lib/gemini.ts', content)).length, 0);
+    });
+
+    it('a migration script echoing its progress to stdout', () => {
+      const content = 'process.stdout.write(`DROP TABLE IF EXISTS "${t}" CASCADE ... `);';
+      assert.equal(sqlInjection.check(makeFile('scripts/reset.ts', content)).length, 0);
+    });
+  });
+
+  describe('MUST STILL flag', () => {
+    it('$queryRawUnsafe as a call', () => {
+      const file = makeFile('api/u.js', 'await prisma.$queryRawUnsafe(`SELECT * FROM u WHERE id = ${id}`);');
+      assert.ok(sqlInjection.check(file).length > 0);
+    });
+
+    it('$queryRawUnsafe as a tagged template', () => {
+      const file = makeFile('api/u.js', 'await prisma.$queryRawUnsafe`SELECT * FROM u WHERE id = ${id}`;');
+      assert.ok(sqlInjection.check(file).length > 0, 'unsafe escape hatch must not be treated as bound');
+    });
+
+    it('sql.raw escape hatch', () => {
+      const file = makeFile('api/u.js', 'await db.execute(sql.raw`SELECT * FROM u WHERE id = ${id}`);');
+      assert.ok(sqlInjection.check(file).length > 0);
+    });
+
+    it('lowercase SQL next to a query sink', () => {
+      const file = makeFile('api/u.js', 'conn.execute(`select * from users where id = ${id}`);');
+      assert.ok(sqlInjection.check(file).length > 0, 'lowercase SQL at a sink is still injection');
+    });
+  });
 });
 
 // ── weak-hashing ─────────────────────────────────────────────────────────────
