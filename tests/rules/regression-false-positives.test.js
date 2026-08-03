@@ -9,7 +9,7 @@
  * blind to real vulnerabilities.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { supabaseServiceKeyClient } from '../../src/rules/supabase-service-key-client.js';
@@ -501,5 +501,64 @@ describe('FP fix: disableForPaths tolerates regex-style anchors', () => {
 
   it('does not leak across rules', () => {
     assert.equal(pathDisabledFor(cfg(['^public/']), 'sql-injection', 'public/app.js'), false);
+  });
+});
+
+describe('FP fix: stripe-webhook-no-verify requires an actual handler', () => {
+  let rule;
+  before(async () => {
+    ({ stripeWebhookNoVerify: rule } = await import('../../src/rules/stripe-webhook-no-verify.js'));
+  });
+
+  it('does NOT flag a data file that merely links to stripe.com', () => {
+    // Real finding: bookmark-universe/data/demo-bookmarks.json was reported as
+    // an unverified webhook handler because it contained bookmark URLs.
+    const content = '[{"url":"https://stripe.com/rate-limiting","title":"Usage","folder":"Ship"}]';
+    assert.equal(rule.check(mk('data/demo-bookmarks.json', content)).length, 0);
+  });
+
+  it('does NOT flag prose that lists Stripe among other services', () => {
+    const content = `export const copy = "Integrations: Stripe, Twilio, SendGrid, Airtable, and more.";`;
+    assert.equal(rule.check(mk('src/lib/monetization-content.ts', content)).length, 0);
+  });
+
+  it('does NOT flag a schema comment describing the webhook', () => {
+    const content = `// One row per verified checkout.session.completed webhook event.\nexport const purchases = pgTable('purchases', {});`;
+    assert.equal(rule.check(mk('src/db/schema.ts', content)).length, 0);
+  });
+
+  it('does NOT flag middleware that only routes the webhook path', () => {
+    const content = `export const config = { matcher: ['/api/wh/(.*)'] };\nexport function middleware(req) { return NextResponse.next(); }`;
+    assert.equal(rule.check(mk('src/middleware.ts', content)).length, 0);
+  });
+
+  it('does NOT flag a handler that DOES verify', () => {
+    const content = `export async function POST(req) {
+  const body = await req.text();
+  const sig = req.headers.get('stripe-signature');
+  const event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  if (event.type === 'checkout.session.completed') await fulfill(event.data.object);
+}`;
+    assert.equal(rule.check(mk('app/api/wh/route.ts', content)).length, 0);
+  });
+
+  it('MUST STILL flag a real handler that parses the body unverified', () => {
+    const content = `export async function POST(req) {
+  const event = await req.json();
+  if (event.type === 'checkout.session.completed') await fulfill(event.data.object);
+  return Response.json({ received: true });
+}`;
+    const found = rule.check(mk('app/api/stripe/webhook/route.ts', content));
+    assert.ok(found.length > 0, 'an unverified handler is the whole point of this rule');
+    assert.equal(found[0].severity, 'critical');
+  });
+
+  it('MUST STILL flag an Express handler reading the signature but never verifying', () => {
+    const content = `app.post('/webhook', (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  const event = JSON.parse(req.body);
+  res.json({ ok: true });
+});`;
+    assert.ok(rule.check(mk('server/routes.js', content)).length > 0);
   });
 });
