@@ -301,3 +301,53 @@ describe('FP fix: remote scans (audit()) respect the target repo\'s .vibe-audit.
     assert.ok(flaggedFiles.has('src/lib/config.js'));
   });
 });
+
+describe('FP fix: no-input-validation — document.write context', () => {
+  it('does NOT flag document.write with static markup', () => {
+    assert.equal(noInputValidation.check(mk('app/a.js', `document.write('<p>hi</p>');`)).length, 0);
+    assert.equal(
+      noInputValidation.check(mk('app/b.js', 'document.write(`<div class="banner">Sale</div>`);')).length,
+      0,
+    );
+  });
+
+  it('does NOT flag an escaped value', () => {
+    assert.equal(noInputValidation.check(mk('app/c.js', 'document.write(esc(name));')).length, 0);
+  });
+
+  it('MUST STILL flag document.write with a dynamic value', () => {
+    const bare = noInputValidation.check(mk('app/d.js', 'document.write(location.hash);'));
+    assert.ok(bare.length > 0, 'variable argument is the XSS vector');
+    assert.equal(bare[0].severity, 'critical');
+
+    const interpolated = noInputValidation.check(mk('app/e.js', 'document.write(`<b>${userInput}</b>`);'));
+    assert.ok(interpolated.length > 0, 'interpolated markup is the XSS vector');
+  });
+});
+
+describe('FP fix: no-input-validation — path and extension scope', () => {
+  it('does NOT scan generated bundles or non-JS files', () => {
+    const dangerous = 'document.write(location.hash);';
+    assert.equal(noInputValidation.check(mk('dist/bundle.min.js', dangerous)).length, 0);
+    assert.equal(noInputValidation.check(mk('scripts/build.py', dangerous)).length, 0);
+    assert.equal(noInputValidation.check(mk('app/a.test.js', dangerous)).length, 0);
+  });
+
+  it('MUST STILL scan ordinary source files', () => {
+    assert.ok(noInputValidation.check(mk('app/real.js', 'document.write(location.hash);')).length > 0);
+  });
+});
+
+describe('FP fix: SQL is owned by sql-injection only (no double-count)', () => {
+  it('no-input-validation no longer reports SQL', () => {
+    const sqlish = 'db.query(`SELECT * FROM users WHERE id = ${id}`);';
+    const findings = noInputValidation.check(mk('api/u.js', sqlish));
+    assert.equal(findings.length, 0, 'sql-injection owns this; two rules reporting it doubled every count');
+  });
+
+  it('MUST STILL be caught by the dedicated rule', async () => {
+    const { sqlInjection } = await import('../../src/rules/sql-injection.js');
+    const sqlish = 'db.query(`SELECT * FROM users WHERE id = ${id}`);';
+    assert.ok(sqlInjection.check(mk('api/u.js', sqlish)).length > 0, 'signal must survive the de-duplication');
+  });
+});
