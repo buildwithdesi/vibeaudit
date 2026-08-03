@@ -23,6 +23,17 @@ const DEFAULTS = {
 };
 
 /**
+ * Keep only string entries from a config array. A hostile repo can ship a
+ * .vibe-audit.json with non-string entries (e.g. "ignore": [123]) — downstream
+ * code calls .replace()/.includes() on these and crashes the whole scan.
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+function stringArray(value) {
+  return Array.isArray(value) ? value.filter((v) => typeof v === 'string') : [];
+}
+
+/**
  * Validate a raw parsed config object and merge it with defaults.
  * Shared by local config loading (readFile) and remote config fetching (GitHub API),
  * so both paths apply a project's .vibe-audit.json the same way.
@@ -31,17 +42,25 @@ const DEFAULTS = {
  * @returns {VibeAuditConfig}
  */
 export function normalizeConfig(parsed) {
+  const disableForPaths = {};
+  if (parsed.disableForPaths && typeof parsed.disableForPaths === 'object' && !Array.isArray(parsed.disableForPaths)) {
+    for (const [ruleId, patterns] of Object.entries(parsed.disableForPaths)) {
+      const strs = stringArray(patterns);
+      if (strs.length > 0) disableForPaths[ruleId] = strs;
+    }
+  }
+
   return {
-    ignore: Array.isArray(parsed.ignore) ? parsed.ignore : DEFAULTS.ignore,
-    rules: Array.isArray(parsed.rules) ? parsed.rules : DEFAULTS.rules,
-    exclude: Array.isArray(parsed.exclude) ? parsed.exclude : DEFAULTS.exclude,
+    ignore: stringArray(parsed.ignore),
+    rules: stringArray(parsed.rules),
+    exclude: stringArray(parsed.exclude),
     format: ['terminal', 'json', 'markdown'].includes(parsed.format)
       ? parsed.format
       : DEFAULTS.format,
     strict: typeof parsed.strict === 'boolean' ? parsed.strict : DEFAULTS.strict,
-    customEscapers: Array.isArray(parsed.customEscapers) ? parsed.customEscapers : DEFAULTS.customEscapers,
-    customAuthGuards: Array.isArray(parsed.customAuthGuards) ? parsed.customAuthGuards : DEFAULTS.customAuthGuards,
-    disableForPaths: parsed.disableForPaths && typeof parsed.disableForPaths === 'object' ? parsed.disableForPaths : DEFAULTS.disableForPaths,
+    customEscapers: stringArray(parsed.customEscapers),
+    customAuthGuards: stringArray(parsed.customAuthGuards),
+    disableForPaths,
   };
 }
 

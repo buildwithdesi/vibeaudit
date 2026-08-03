@@ -48,25 +48,41 @@ export function parseSource(source) {
  * Strip TypeScript type annotations so acorn can parse the file.
  * This is a best-effort transform — it handles the most common cases.
  *
+ * LINE-PRESERVATION CONTRACT: this transform must never change the number of
+ * lines. AST rules report node.loc.line from the cleaned source, and findings
+ * map that line back to the ORIGINAL file (evidence, inline suppression). A
+ * collapsed newline shifts every subsequent line number and silently breaks
+ * suppression alignment — observed: a union-type clause `[^,)=]+` crossing a
+ * newline and eating a JSDoc close + function declaration (3 lines gone).
+ * Multi-line declaration removers therefore blank content but keep newlines,
+ * and per-line clauses exclude \n from their character classes.
+ *
  * @param {string} source
  * @returns {string}
  */
+
+/** Blank a match but keep its newlines so line numbering is preserved. */
+function blankKeepLines(match) {
+  return match.replace(/[^\n\r]/g, '');
+}
+
 function stripTypeAnnotations(source) {
   return source
-    // Remove type imports: import type { X } from 'y'
-    .replace(/import\s+type\s+\{[^}]*\}\s+from\s+['"][^'"]+['"];?/g, '')
+    // Remove type imports: import type { X } from 'y' (may span lines)
+    .replace(/import\s+type\s+\{[^}]*\}\s+from\s+['"][^'"]+['"];?/g, blankKeepLines)
     // Remove type-only exports: export type { X }
-    .replace(/export\s+type\s+\{[^}]*\};?/g, '')
-    // Remove interface declarations
-    .replace(/(?:export\s+)?interface\s+\w+(?:\s+extends\s+[^{]+)?\s*\{[^}]*\}/g, '')
-    // Remove type alias declarations
-    .replace(/(?:export\s+)?type\s+\w+\s*=\s*[^;]+;/g, '')
-    // Remove parameter type annotations: (param: Type)
-    .replace(/:\s*(?:string|number|boolean|any|void|never|unknown|null|undefined|Record|Array|Promise|Response|Request|NextRequest)(?:<[^>]*>)?(?:\s*\[\s*\])?(?:\s*\|[^,)=]+)?/g, '')
-    // Remove return type annotations: ): Type {
-    .replace(/\)\s*:\s*\w+(?:<[^>]*>)?\s*(?:=>|\{)/g, ') $&'.slice(2))
-    // Remove 'as Type' assertions
-    .replace(/\s+as\s+\w+(?:<[^>]*>)?/g, '')
+    .replace(/export\s+type\s+\{[^}]*\};?/g, blankKeepLines)
+    // Remove interface declarations (multi-line bodies)
+    .replace(/(?:export\s+)?interface\s+\w+(?:\s+extends\s+[^{]+)?\s*\{[^}]*\}/g, blankKeepLines)
+    // Remove type alias declarations (may span lines)
+    .replace(/(?:export\s+)?type\s+\w+\s*=\s*[^;]+;/g, blankKeepLines)
+    // Remove parameter type annotations: (param: Type) — single-line only:
+    // the union clause must not cross \n or it eats following code wholesale
+    .replace(/:\s*(?:string|number|boolean|any|void|never|unknown|null|undefined|Record|Array|Promise|Response|Request|NextRequest)(?:<[^\n>]*>)?(?:\s*\[\s*\])?(?:\s*\|[^\n,)=]+)?/g, '')
+    // Remove return type annotations: ): Type { → ) {  (capture keeps the terminator)
+    .replace(/\)\s*:\s*\w+(?:<[^\n>]*>)?\s*(=>|\{)/g, ') $1')
+    // Remove 'as Type' assertions (single-line)
+    .replace(/\s+as\s+\w+(?:<[^\n>]*>)?/g, '')
     // Remove angle bracket assertions: <Type>expr
     .replace(/<(?:string|number|boolean|any)>/g, '')
     // Remove non-null assertions: expr!

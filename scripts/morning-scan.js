@@ -20,6 +20,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { audit } from '../src/index.js';
 import { fetchRepoFiles, parseGitHubTarget } from '../src/github.js';
+import { BASELINE_IGNORE } from '../src/baseline-ignore.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -37,22 +38,47 @@ const discover = hasFlag('discover');
 const owner = flag('owner', 'buildwithdesi');
 const concurrency = parseInt(flag('concurrency', '3'), 10);
 
-// Directories that are never production attack surface: test fixtures (often deliberately
-// vulnerable) and generated scan reports. Excluded from every repo's grade so the dashboard
-// reflects real risk — not the scanner grading its own test data. Passed as a hard baseline
-// so a grade never silently depends on fetchRemoteConfig() landing the repo's ignore list.
-const BASELINE_IGNORE = ['reports', 'tests', 'fixtures', '__tests__', '__fixtures__'];
+/**
+ * Decide whether a discovery result is safe to persist over the saved list.
+ * A discovery that lost more than a quarter of the portfolio is treated as a
+ * partial result (bad token scope, truncated pagination) rather than a real
+ * shrink, because persisting it would silently narrow every future scan.
+ */
+export function shouldAcceptDiscovery(discoveredCount, savedCount, force = false) {
+  if (force) return true;
+  if (!savedCount) return true;
+  return discoveredCount >= savedCount * 0.75;
+}
 
-async function discoverRepos(owner) {
+export async function discoverRepos(owner, { fetchImpl = fetch } = {}) {
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
   const headers = { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'vibe-audit' };
   if (token) headers.Authorization = `Bearer ${token}`;
 
+  // /users/{owner}/repos only ever returns PUBLIC repos, even with a token that
+  // can see private ones. Scanning your own account through it silently drops
+  // every private repo — the exact repos most likely to hold live secrets. When
+  // the token belongs to the owner we're discovering, use /user/repos instead,
+  // which includes private repos the token can read.
+  let listUrl = `https://api.github.com/users/${owner}/repos`;
+  let scope = 'public only';
+  if (token) {
+    const meRes = await fetchImpl('https://api.github.com/user', { headers });
+    if (meRes.ok) {
+      const me = await meRes.json();
+      if (me.login && me.login.toLowerCase() === owner.toLowerCase()) {
+        listUrl = 'https://api.github.com/user/repos?affiliation=owner';
+        scope = 'public + private';
+      }
+    }
+  }
+
   const repos = [];
   let page = 1;
   while (true) {
-    const url = `https://api.github.com/users/${owner}/repos?per_page=100&page=${page}&sort=updated&direction=desc`;
-    const res = await fetch(url, { headers }); // vibe-audit-ignore perf-no-await-parallel  (pagination is inherently sequential — need page N to know if N+1 exists)
+    const sep = listUrl.includes('?') ? '&' : '?';
+    const url = `${listUrl}${sep}per_page=100&page=${page}&sort=updated&direction=desc`;
+    const res = await fetchImpl(url, { headers }); // vibe-audit-ignore perf-no-await-parallel  (pagination is inherently sequential — need page N to know if N+1 exists)
     if (!res.ok) throw new Error(`Failed to list repos: ${res.status}`);
     const batch = await res.json(); // vibe-audit-ignore perf-no-await-parallel  (pagination response, inherently sequential)
     if (batch.length === 0) break;
@@ -61,7 +87,7 @@ async function discoverRepos(owner) {
     }
     page++;
   }
-  return repos;
+  return { repos, scope };
 }
 
 async function sleep(ms) {
@@ -82,15 +108,27 @@ async function sleep(ms) {
  */
 export function classifyScanError(err) {
   const msg = err?.message || String(err);
-  const status = /GitHub API error \((\d+)\)/.exec(msg)?.[1] || /\b(401|403|404|409|429)\b/.exec(msg)?.[1] || '';
+  // makeApiError tags status and rateLimited structurally on the error object.
+  // Trust those when present; parsing the message is only a fallback for errors
+  // that did not come from the GitHub client.
+  const status = String(
+    err?.status || /GitHub API error \((\d+)\)/.exec(msg)?.[1] || /\b(401|403|404|409|429)\b/.exec(msg)?.[1] || ''
+  );
   const body = msg.toLowerCase();
 
   if (status === '403' || status === '429') {
     // Real throttling says so in the body; anything else 403 is an access denial.
-    if (body.includes('rate limit') || body.includes('abuse detection')) {
+    // Distinguishing them matters: a rate limit is worth backing off for, a
+    // forbidden repo is not, and treating one as the other either wastes the
+    // run or hides a token-scope problem.
+    const rateLimited =
+      typeof err?.rateLimited === 'boolean'
+        ? err.rateLimited
+        : body.includes('rate limit') || body.includes('abuse detection');
+    if (rateLimited) {
       return { label: 'Rate limited', kind: 'rate-limited', rateLimited: true };
     }
-    return { label: 'Access denied', kind: 'access-denied', rateLimited: false };
+    return { label: 'Access denied (check token scope)', kind: 'access-denied', rateLimited: false };
   }
   if (status === '401') return { label: 'Auth required', kind: 'auth-required', rateLimited: false };
   if (status === '404') return { label: 'Not found / empty', kind: 'not-found', rateLimited: false };
@@ -133,10 +171,27 @@ async function main() {
   let repos;
   if (discover) {
     console.log(`\n   Discovering repos for ${owner}...`);
-    repos = await discoverRepos(owner);
-    console.log(`   Found ${repos.length} repos.`);
-    // Save discovered list for next time
-    await writeFile(join(ROOT, 'scripts', 'repos.json'), JSON.stringify(repos, null, 2));
+    const discovered = await discoverRepos(owner);
+    repos = discovered.repos;
+    console.log(`   Found ${repos.length} repos (${discovered.scope}).`);
+
+    // Discovery feeds the saved list, so a partial result (bad token scope,
+    // truncated pagination) would quietly shrink every future scan. Refuse to
+    // shrink the list by more than a quarter without --force-discover.
+    const previous = await readFile(reposFile, 'utf8')
+      .then((raw) => JSON.parse(raw))
+      .catch(() => []);
+    if (!shouldAcceptDiscovery(repos.length, previous.length, hasFlag('force-discover'))) {
+      console.error(
+        `\n   Refusing to overwrite ${reposFile}: discovery returned ${repos.length} repos ` +
+          `but the saved list has ${previous.length}.\n` +
+          `   This usually means the token can't see private repos. Scanning the saved list instead.\n` +
+          `   Re-run with --force-discover if the shrink is intentional.\n`,
+      );
+      repos = previous;
+    } else {
+      await writeFile(reposFile, JSON.stringify(repos, null, 2));
+    }
   } else {
     const raw = await readFile(reposFile, 'utf8');
     repos = JSON.parse(raw);
@@ -351,8 +406,10 @@ function generateReport(results, errors, totalRepos, durationSec) {
   return md;
 }
 
-// Only scan when run as a script — importing this module (e.g. from tests) must
-// not kick off a live GitHub scan.
+// Only scan when invoked as a CLI. Tests import this module for the discovery
+// and classification helpers and must not kick off a portfolio-wide scan on
+// import. Compare as URLs, not paths, so Windows drive-letter casing does not
+// make an invoked script look like an import.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((err) => {
     console.error('Fatal error:', err);
