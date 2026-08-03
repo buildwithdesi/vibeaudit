@@ -17,7 +17,7 @@
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { audit } from '../src/index.js';
 import { fetchRepoFiles, parseGitHubTarget } from '../src/github.js';
 import { BASELINE_IGNORE } from '../src/baseline-ignore.js';
@@ -94,9 +94,54 @@ async function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * Classify a failed repo scan.
+ *
+ * GitHub answers 403 for two very different situations: a genuine rate limit
+ * (retryable — backing off helps) and "this token cannot see this repo"
+ * (permanent for this run — backing off just burns wall-clock). Collapsing both
+ * into "Rate limited" made a fully blocked scan look like a throttled one, so an
+ * access outage rendered as an empty, clean-looking dashboard.
+ *
+ * @param {Error} err
+ * @returns {{ label: string, kind: string, rateLimited: boolean }}
+ */
+export function classifyScanError(err) {
+  const msg = err?.message || String(err);
+  // makeApiError tags status and rateLimited structurally on the error object.
+  // Trust those when present; parsing the message is only a fallback for errors
+  // that did not come from the GitHub client.
+  const status = String(
+    err?.status || /GitHub API error \((\d+)\)/.exec(msg)?.[1] || /\b(401|403|404|409|429)\b/.exec(msg)?.[1] || ''
+  );
+  const body = msg.toLowerCase();
+
+  if (status === '403' || status === '429') {
+    // Real throttling says so in the body; anything else 403 is an access denial.
+    // Distinguishing them matters: a rate limit is worth backing off for, a
+    // forbidden repo is not, and treating one as the other either wastes the
+    // run or hides a token-scope problem.
+    const rateLimited =
+      typeof err?.rateLimited === 'boolean'
+        ? err.rateLimited
+        : body.includes('rate limit') || body.includes('abuse detection');
+    if (rateLimited) {
+      return { label: 'Rate limited', kind: 'rate-limited', rateLimited: true };
+    }
+    return { label: 'Access denied (check token scope)', kind: 'access-denied', rateLimited: false };
+  }
+  if (status === '401') return { label: 'Auth required', kind: 'auth-required', rateLimited: false };
+  if (status === '404') return { label: 'Not found / empty', kind: 'not-found', rateLimited: false };
+  if (status === '409') return { label: 'Empty repo', kind: 'empty', rateLimited: false };
+  return { label: msg.slice(0, 120), kind: 'error', rateLimited: false };
+}
+
+/** Repos we could not even look at — these mean missing coverage, not a clean result. */
+const BLOCKED_KINDS = new Set(['access-denied', 'auth-required', 'rate-limited']);
+
 async function scanRepo(name) {
   const parsed = parseGitHubTarget(name);
-  if (!parsed) return { error: { repo: name, error: 'Invalid repo format' } };
+  if (!parsed) return { error: { repo: name, error: 'Invalid repo format', kind: 'error' } };
 
   try {
     const fileSource = fetchRepoFiles(parsed.owner, parsed.repo);
@@ -117,23 +162,8 @@ async function scanRepo(name) {
       result: { repo: name, grade, criticals, warnings, infos, total: findings.length, findings },
     };
   } catch (err) {
-    // makeApiError tags genuine rate limits (primary/secondary) vs plain 403s
-    // (token lacks access) — trust the flag, not string matching, so a forbidden
-    // repo doesn't trigger a false portfolio-wide backoff.
-    if (err.rateLimited) {
-      return { error: { repo: name, error: 'Rate limited' }, rateLimited: true };
-    }
-    const msg = err.message || String(err);
-    const short = msg.includes('404')
-      ? 'Not found / empty'
-      : msg.includes('403')
-        ? 'Forbidden (check token scope)'
-        : msg.includes('401')
-          ? 'Auth required'
-          : msg.includes('409')
-            ? 'Empty repo'
-            : msg.slice(0, 80);
-    return { error: { repo: name, error: short } };
+    const { label, kind, rateLimited } = classifyScanError(err);
+    return { error: { repo: name, error: label, kind }, rateLimited };
   }
 }
 
@@ -242,6 +272,25 @@ async function main() {
   console.log(`   Data:   ${jsonPath}\n`);
 
   const totalCriticals = results.reduce((sum, r) => sum + r.criticals, 0);
+  const blocked = errors.filter((e) => BLOCKED_KINDS.has(e.kind));
+
+  // A scan that reached nothing is an outage, not a clean bill of health. Exit
+  // distinctly (2) so a scheduler can tell "no findings" from "no coverage".
+  if (results.length === 0 && repos.length > 0) {
+    console.error(`   SCAN DID NOT RUN — 0 of ${repos.length} repos scanned.`);
+    if (blocked.length > 0) {
+      console.error(`   ${blocked.length} unreachable (GitHub access / token scope).`);
+    }
+    console.error(`   This is NOT an all-clear. Fix access and re-run.\n`);
+    process.exit(2);
+  }
+
+  if (blocked.length > 0) {
+    console.error(
+      `   WARNING: coverage incomplete — ${blocked.length} of ${repos.length} repos unreachable.\n`,
+    );
+  }
+
   process.exit(totalCriticals > 0 ? 1 : 0);
 }
 
@@ -256,6 +305,8 @@ function buildSummary(results, errors) {
     totalCriticals: results.reduce((sum, r) => sum + r.criticals, 0),
     totalWarnings: results.reduce((sum, r) => sum + r.warnings, 0),
     skipped: errors.length,
+    blocked: errors.filter((e) => BLOCKED_KINDS.has(e.kind)).length,
+    attempted: results.length + errors.length,
   };
 }
 
@@ -270,6 +321,18 @@ function generateReport(results, errors, totalRepos, durationSec) {
 
   let md = `# Vibe Audit Morning Scan\n`;
   md += `**${date}** | ${s.total} repos scanned | ${s.skipped} skipped | ${durationSec}s\n\n`;
+
+  // An empty dashboard reads as "all clear" at a glance. Say plainly when the
+  // grades below are empty because nothing was audited.
+  if (s.total === 0 && totalRepos > 0) {
+    md += `> ⛔ **SCAN DID NOT RUN — 0 of ${totalRepos} repos scanned. This is not an all-clear.**\n`;
+    if (s.blocked > 0) {
+      md += `> ${s.blocked} repos were unreachable (GitHub access / token scope).\n`;
+    }
+    md += `> The grades below are empty because nothing was audited, not because nothing was found.\n\n`;
+  } else if (s.blocked > 0) {
+    md += `> ⚠️ **Partial coverage — ${s.blocked} of ${totalRepos} repos unreachable (GitHub access).**\n\n`;
+  }
 
   // Health dashboard
   md += `## Portfolio Health\n\n`;
@@ -343,9 +406,11 @@ function generateReport(results, errors, totalRepos, durationSec) {
   return md;
 }
 
-// Only run the scan when invoked as a CLI — tests import this module for the
-// discovery helpers and must not kick off a portfolio-wide scan on import.
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// Only scan when invoked as a CLI. Tests import this module for the discovery
+// and classification helpers and must not kick off a portfolio-wide scan on
+// import. Compare as URLs, not paths, so Windows drive-letter casing does not
+// make an invoked script look like an import.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((err) => {
     console.error('Fatal error:', err);
     process.exit(2);

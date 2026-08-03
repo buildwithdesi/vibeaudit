@@ -1,6 +1,92 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { discoverRepos, shouldAcceptDiscovery } from '../scripts/morning-scan.js';
+
+import { classifyScanError, discoverRepos, shouldAcceptDiscovery } from '../scripts/morning-scan.js';
+
+const err = (msg, props = {}) => Object.assign(new Error(msg), props);
+
+describe('classifyScanError', () => {
+  test('a 403 that says "rate limit" is retryable', () => {
+    const c = classifyScanError(
+      err('GitHub API error (403): {"message":"API rate limit exceeded for user ID 1."}'),
+    );
+    assert.equal(c.kind, 'rate-limited');
+    assert.equal(c.rateLimited, true);
+  });
+
+  test('a 403 secondary-rate-limit / abuse response is retryable', () => {
+    const c = classifyScanError(
+      err('GitHub API error (403): {"message":"You have exceeded a secondary rate limit."}'),
+    );
+    assert.equal(c.kind, 'rate-limited');
+    assert.equal(c.rateLimited, true);
+  });
+
+  test('a 403 access denial is NOT reported as a rate limit', () => {
+    const c = classifyScanError(
+      err(
+        'GitHub API error (403): {"message":"GitHub access to this repository is not enabled for this session."}',
+      ),
+    );
+    assert.equal(c.kind, 'access-denied');
+    assert.equal(c.label, 'Access denied (check token scope)');
+    // Backing off cannot fix a permission problem — it only burns wall-clock.
+    assert.equal(c.rateLimited, false);
+  });
+
+  test('429 without a rate-limit body still counts as denial, not throttling', () => {
+    const c = classifyScanError(err('GitHub API error (429): {"message":"Forbidden by policy"}'));
+    assert.equal(c.kind, 'access-denied');
+    assert.equal(c.rateLimited, false);
+  });
+
+  test('401 / 404 / 409 keep their own labels', () => {
+    assert.equal(classifyScanError(err('GitHub API error (401): bad creds')).kind, 'auth-required');
+    assert.equal(classifyScanError(err('GitHub API error (404): Not Found')).kind, 'not-found');
+    assert.equal(
+      classifyScanError(err('GitHub API error (409): Git Repository is empty.')).kind,
+      'empty',
+    );
+  });
+
+  test('unrecognized failures fall through to a truncated message', () => {
+    const c = classifyScanError(err('socket hang up'));
+    assert.equal(c.kind, 'error');
+    assert.equal(c.label, 'socket hang up');
+    assert.equal(c.rateLimited, false);
+  });
+
+  test('a repo named like a status code does not hijack classification', () => {
+    const c = classifyScanError(err('GitHub API error (404): {"message":"Not Found","repo":"403"}'));
+    assert.equal(c.kind, 'not-found');
+  });
+
+  // makeApiError tags status/rateLimited on the error itself. Those flags are
+  // authoritative — a 403 whose body never says "rate limit" is still a real
+  // rate limit if the client said so from the response headers.
+  test('trusts err.rateLimited over the message body', () => {
+    const c = classifyScanError(err('GitHub API error (403): {"message":"Forbidden"}', {
+      status: 403,
+      rateLimited: true,
+    }));
+    assert.equal(c.kind, 'rate-limited');
+    assert.equal(c.rateLimited, true);
+  });
+
+  test('trusts err.status when the message carries no code', () => {
+    const c = classifyScanError(err('request failed', { status: 404 }));
+    assert.equal(c.kind, 'not-found');
+  });
+
+  test('a structurally-tagged 403 that is not a rate limit stays a denial', () => {
+    const c = classifyScanError(err('GitHub API error (403): nope', {
+      status: 403,
+      rateLimited: false,
+    }));
+    assert.equal(c.kind, 'access-denied');
+    assert.equal(c.rateLimited, false);
+  });
+});
 
 /**
  * Builds a fake fetch that records requested URLs and replies from a route map.
