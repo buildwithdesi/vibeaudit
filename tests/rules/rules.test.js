@@ -9,6 +9,7 @@ import { hardcodedCredentials } from '../../src/rules/hardcoded-credentials.js';
 import { exposedEnvVars } from '../../src/rules/exposed-env-vars.js';
 import { openDatabaseRules } from '../../src/rules/open-database-rules.js';
 import { noInputValidation } from '../../src/rules/no-input-validation.js';
+import { sqlInjection } from '../../src/rules/sql-injection.js';
 import { insecureErrorHandling } from '../../src/rules/insecure-error-handling.js';
 import { insecureConnections } from '../../src/rules/insecure-connections.js';
 
@@ -163,11 +164,20 @@ describe('no-input-validation', () => {
     assert.ok(evalFinding, 'Should detect eval');
   });
 
-  it('detects SQL injection', async () => {
+  it('leaves SQL injection to the dedicated rule (no double-counting)', async () => {
     const file = await loadFixture('vulnerable.js');
-    const findings = noInputValidation.check(file);
-    const sql = findings.find((f) => f.message.includes('SQL'));
-    assert.ok(sql, 'Should detect SQL injection');
+
+    // This rule used to carry its own SQL patterns, so the one bad query in
+    // the fixture produced two criticals. Ownership now sits with
+    // sql-injection; the signal must survive the move.
+    assert.equal(
+      noInputValidation.check(file).find((f) => f.message.includes('SQL')),
+      undefined,
+    );
+    assert.ok(
+      sqlInjection.check(file).length > 0,
+      'sql-injection must still catch the fixture it now owns',
+    );
   });
 });
 
