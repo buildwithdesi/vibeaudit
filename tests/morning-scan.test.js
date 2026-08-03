@@ -1,7 +1,12 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { classifyScanError, discoverRepos, shouldAcceptDiscovery } from '../scripts/morning-scan.js';
+import {
+  classifyScanError,
+  discoverRepos,
+  excludeScanOutputRepos,
+  shouldAcceptDiscovery,
+} from '../scripts/morning-scan.js';
 
 const err = (msg, props = {}) => Object.assign(new Error(msg), props);
 
@@ -231,5 +236,33 @@ describe('shouldAcceptDiscovery shrink guard', () => {
 
   test('force overrides the guard', () => {
     assert.equal(shouldAcceptDiscovery(15, 172, true), true);
+  });
+});
+
+describe('excludeScanOutputRepos', () => {
+  test('drops the report archive, which holds scan output rather than code', () => {
+    const repos = [
+      'buildwithdesi/vibeaudit',
+      'buildwithdesi/vibeaudit-reports',
+      'buildwithdesi/Siftly',
+    ];
+    assert.deepEqual(excludeScanOutputRepos(repos), [
+      'buildwithdesi/vibeaudit',
+      'buildwithdesi/Siftly',
+    ]);
+  });
+
+  test('matches on repo name, so a fork under any owner is still skipped', () => {
+    assert.deepEqual(excludeScanOutputRepos(['someone-else/vibeaudit-reports']), []);
+  });
+
+  test('does not drop the scanner repo itself, which is real code', () => {
+    const repos = ['buildwithdesi/vibeaudit'];
+    assert.deepEqual(excludeScanOutputRepos(repos), repos);
+  });
+
+  test('leaves an ordinary list untouched', () => {
+    const repos = ['a/one', 'b/two'];
+    assert.deepEqual(excludeScanOutputRepos(repos), repos);
   });
 });
