@@ -25,8 +25,11 @@ import { generateFixes } from '../src/fix.js';
 import { ALL_RULES } from '../src/rules/index.js';
 import { CWE_MAP } from '../src/data/cwe-map.js';
 import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
+
+const green_ok = (t) => `[32m${t}[0m`;
 import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
 import { BASELINE_IGNORE } from '../src/baseline-ignore.js';
+import { precheck } from '../src/precheck/index.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -40,6 +43,7 @@ const { values, positionals } = parseArgs({
     'skip-sca': { type: 'boolean' },
     deep: { type: 'boolean' },
     'list-rules': { type: 'boolean' },
+    precheck: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
     version: { type: 'boolean', short: 'v' },
   },
@@ -64,6 +68,7 @@ ${bold('OPTIONS')}
   ${cyan('--skip-sca')}                              Skip dependency vulnerability scanning
   ${cyan('--deep')}                                  Enable deep scanning (git history secrets)
   ${cyan('--list-rules')}                            Show all available rules
+  ${cyan('--precheck <pkg>')}                        Vet a package BEFORE installing it
   ${cyan('-h, --help')}                              Show this help
   ${cyan('-v, --version')}                           Show version
 
@@ -133,6 +138,44 @@ if (values['list-rules']) {
   }
 
   process.exit(0);
+}
+
+// ─── Pre-install Gate ─────────────────────────────────────────────────────────
+
+if (values.precheck) {
+  const spec = values.precheck;
+  console.log('');
+  console.log(bold(`  ⚗️  Pre-install gate — ${spec}`));
+  console.log(dim('  Resolving the full dependency tree without installing it...'));
+
+  let report;
+  try {
+    report = await precheck(spec);
+  } catch (err) {
+    console.error(red(`  Could not resolve ${spec}: ${err.message}`));
+    process.exit(2);
+  }
+
+  console.log(dim(`  ${report.total} package(s) would be added.`));
+  console.log('');
+
+  for (const r of report.results.filter((x) => x.level !== 'ok')) {
+    const tag = r.level === 'block' ? red(bold('BLOCK')) : yellow('WARN ');
+    console.log(`  ${tag}  ${bold(r.name)}@${r.version}`);
+    for (const reason of r.reasons) console.log(`         ${dim(reason)}`);
+  }
+
+  if (report.exitCode === 0) {
+    console.log(green_ok('  Nothing suspicious. Safe to install.'));
+  } else if (report.exitCode === 1) {
+    console.log('');
+    console.log(yellow(`  ${report.warned.length} package(s) worth a look. Not blocking.`));
+  } else {
+    console.log('');
+    console.log(red(bold(`  DO NOT INSTALL — ${report.blocked.length} package(s) failed the gate.`)));
+  }
+  console.log('');
+  process.exit(report.exitCode);
 }
 
 // ─── Run Audit ────────────────────────────────────────────────────────────────

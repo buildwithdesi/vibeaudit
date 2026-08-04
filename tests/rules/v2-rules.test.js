@@ -412,8 +412,14 @@ describe('cwe-metadata', () => {
 // ── Rule Registry ────────────────────────────────────────────────────────────
 
 describe('v2-rule-registry', () => {
-  it('has 102 rules', () => {
-    assert.equal(ALL_RULES.length, 102, `Expected 102 rules, got ${ALL_RULES.length}`);
+  it('registers every rule exactly once, with no gaps', () => {
+    // Deliberately not a hardcoded total: that number went stale on every new
+    // rule and taught nothing when it failed. What matters is that the registry
+    // has no duplicates and no blank ids.
+    const ids = ALL_RULES.map((r) => r.id);
+    assert.equal(new Set(ids).size, ids.length, 'duplicate rule id in ALL_RULES');
+    assert.ok(ids.every((id) => typeof id === 'string' && id.length > 0), 'every rule needs an id');
+    assert.ok(ALL_RULES.length >= 100, `registry looks truncated: ${ALL_RULES.length} rules`);
   });
 
   it('all new rules have fix prompts', async () => {
