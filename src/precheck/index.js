@@ -26,9 +26,9 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 /** Versions confirmed malicious. Checked by exact name@version. */
 export const KNOWN_MALICIOUS = new Set([
@@ -62,6 +62,25 @@ export function assertSafeSpec(spec) {
 }
 
 /**
+ * Locate npm's own CLI entry point so it can be run with the current node
+ * binary instead of through a shell.
+ *
+ * @returns {string|null}
+ */
+export function findNpmCli() {
+  const candidates = [
+    // Standard layout next to the node binary that is running us.
+    join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    // nvm / Volta / Linux prefix layouts.
+    join(dirname(process.execPath), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  ];
+  for (const c of candidates) {
+    if (existsSync(c)) return c;
+  }
+  return null;
+}
+
+/**
  * Ask npm what installing `spec` would actually add, without adding it.
  *
  * `--dry-run` resolves the full tree and reports every package, transitive
@@ -76,11 +95,20 @@ export function resolveTree(spec) {
   const dir = mkdtempSync(join(tmpdir(), 'vibeaudit-precheck-'));
   try {
     writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'precheck', version: '1.0.0' }));
-    const out = execFileSync(
-      'npm',
-      ['install', spec, '--dry-run', '--ignore-scripts', '--no-audit', '--no-fund'],
-      { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000, shell: process.platform === 'win32' },
-    );
+    const args = ['install', spec, '--dry-run', '--ignore-scripts', '--no-audit', '--no-fund'];
+    const cli = findNpmCli();
+    // Prefer running npm's own JS with the current node binary: no shell, so
+    // the spec is a real argv element and cannot be reinterpreted as a command.
+    // The shell path is a fallback for layouts where npm-cli.js is not where
+    // we expect, and is only reachable after assertSafeSpec above.
+    const out = cli
+      ? execFileSync(process.execPath, [cli, ...args], {
+          cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000,
+        })
+      : execFileSync('npm', args, {
+          cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000,
+          shell: process.platform === 'win32',
+        });
     const pkgs = [];
     for (const line of out.split('\n')) {
       // npm prints "add <name> <version>" per resolved package.
