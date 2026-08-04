@@ -115,6 +115,7 @@ import { templateInjection } from './template-injection.js';
 import { mdxUntrustedSource } from './mdx-untrusted-source.js';
 import { missingSri } from './missing-sri.js';
 import { unpinnedDependencies } from './unpinned-dependencies.js';
+import { installScriptDependency } from './install-script-dependency.js';
 // CI/CD & storage (v1.2)
 import { githubActionsInjection } from './github-actions-injection.js';
 import { supabasePublicBucket } from './supabase-public-bucket.js';
@@ -238,6 +239,7 @@ export const ALL_RULES = [
   mdxUntrustedSource,
   missingSri,
   unpinnedDependencies,
+  installScriptDependency,
   // CI/CD & storage (v1.2)
   githubActionsInjection,
   supabasePublicBucket,
