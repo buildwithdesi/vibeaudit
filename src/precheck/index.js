@@ -178,9 +178,8 @@ export async function precheck(spec, opts = {}) {
       if (i >= tree.length) return;
       const pkg = tree[i];
       try {
-        // vibe-audit-ignore perf-no-await-parallel  (bounded pool: the parallelism is the
-        // CONCURRENCY workers above, each of which must consume its queue one at a time)
-        const packument = await fetchPackument(pkg.name, fetchImpl);
+        // Parallelism here is the CONCURRENCY workers above; each must drain its queue serially.
+        const packument = await fetchPackument(pkg.name, fetchImpl); // vibe-audit-ignore perf-no-await-parallel
         results[i] = assessPackage(pkg, packument, nowMs);
       } catch {
         // A registry read that fails is not an all-clear. Say so.
