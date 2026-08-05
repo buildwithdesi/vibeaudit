@@ -140,6 +140,29 @@ describe('FP fix: nextjs-server-action-exposure', () => {
     assert.ok(nextjsServerActionExposure.check(file).some((x) => x.ruleId === 'nextjs-server-action-exposure'));
   });
 
+  it('does NOT treat a filename that merely ends in "actions" as an actions module', () => {
+    // React hooks and components caught by the old unanchored suffix match.
+    for (const p of [
+      'src/ui/color-picker-interactions.ts',
+      'src/hooks/useTransactions.ts',
+      'src/components/QuickActions.tsx',
+    ]) {
+      const file = mk(p,
+        `import { useState } from 'react';\nexport function useThing(id) {\n  return db.delete(id);\n}`);
+      assert.equal(nextjsServerActionExposure.check(file).length, 0, `${p} is not an actions module`);
+    }
+  });
+
+  it('STILL treats real actions modules as actions modules, directive or not', () => {
+    for (const p of ['src/app/actions.ts', 'src/app/admin/_actions.ts', 'src/lib/server-actions.ts', 'actions.ts']) {
+      const file = mk(p, `export async function deleteThing(id) {\n  return db.delete(id);\n}`);
+      assert.ok(
+        nextjsServerActionExposure.check(file).some((x) => x.ruleId === 'nextjs-server-action-exposure'),
+        `${p} must still be audited`,
+      );
+    }
+  });
+
   it('does NOT flag a file that merely mentions "use server" in a comment or string literal, not as a real directive', () => {
     // Mirrors src/context.js: a helper module that documents/detects the
     // directive by name, without actually being a "use server" file itself.

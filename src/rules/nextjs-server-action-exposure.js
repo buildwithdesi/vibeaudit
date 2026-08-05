@@ -25,7 +25,12 @@ import { hasUseServer, hasUseClient } from '../context.js';
 // content-wide regex would also match "use server" mentioned inside comments
 // or string literals (e.g. context.js's own JSDoc and its hasDirective() helper).
 const USE_SERVER_LINE = /['"]use server['"]/;
-const SERVER_ACTION_FILE = /(?:actions|server-actions?)\.(js|ts|jsx|tsx)$/i;
+// Anchored to a path or word separator so only a real actions module matches
+// (`actions.ts`, `_actions.ts`, `server-actions.ts`). The previous unanchored
+// suffix also matched any filename merely *ending* in those letters —
+// `interactions.ts`, `useTransactions.ts`, `QuickActions.tsx` — so ordinary
+// React hooks and components were audited as if they were server actions.
+const SERVER_ACTION_FILE = /(?:^|[/_.-])actions\.(?:js|ts|jsx|tsx)$/i;
 const SKIP = /(?:\.test\.|\.spec\.|__tests__|node_modules|fixtures\/|src\/rules\/)/i;
 const FILE_LEVEL_AUTH = /(?:getServerSession|getSession|auth\(\)|require\w*auth\w*|currentUser|getUser|session\.user|clerkClient|verify\w*token)/i;
 
