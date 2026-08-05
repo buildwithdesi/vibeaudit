@@ -10,8 +10,15 @@
 
 /** @typedef {import('./types.js').Rule} Rule */
 
-import { parseSource, isParseable, findExportedFunctions, collectImportedNames, callsAuthGuard } from '../ast.js';
-import { hasUseServer } from '../context.js';
+import {
+  parseSource,
+  isParseable,
+  findExportedFunctions,
+  collectImportedNames,
+  collectLocalFunctionNames,
+  callsAuthGuard,
+} from '../ast.js';
+import { hasUseServer, hasUseClient } from '../context.js';
 
 // Used only to locate a display line once hasUseServer() has already confirmed
 // a real directive exists — never to decide whether one exists. A naive
@@ -34,17 +41,28 @@ export const nextjsServerActionExposure = {
     const hasDirective = hasUseServer(file);
     const isActionFile = SERVER_ACTION_FILE.test(file.relativePath);
     if (!hasDirective && !isActionFile) return [];
+    // SERVER_ACTION_FILE matches on a filename suffix, so any component named
+    // `*Actions.tsx` (`BookingActions.tsx`) looks like an actions module. A
+    // "use client" file cannot define server actions at all — its exports are
+    // components and hooks — so every export it flagged was a false positive.
+    if (!hasDirective && hasUseClient(file)) return [];
     if (!isParseable(file.relativePath)) return [];
 
     const ast = parseSource(file.content);
     if (!ast) return [];
 
     const imported = collectImportedNames(ast);
+    // Server-action files routinely define their guard next to the actions it
+    // protects rather than importing it. Without these names a file-local
+    // `assertAdmin()` was invisible and every action in the file read as
+    // unauthenticated — `missing-auth` already resolves same-file guards, and
+    // this rule has to see them too or the two disagree on identical code.
+    const localFns = collectLocalFunctionNames(ast);
     const exported = findExportedFunctions(ast);
 
     const findings = [];
     for (const fn of exported) {
-      if (callsAuthGuard(fn.body, imported, file._config?.customAuthGuards)) continue;
+      if (callsAuthGuard(fn.body, imported, file._config?.customAuthGuards, localFns)) continue;
 
       const line = fn.loc?.start?.line || 1;
       findings.push({
