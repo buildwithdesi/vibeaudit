@@ -8,6 +8,7 @@ import { join } from 'node:path';
  * @property {string[]} [exclude] - Exclude these rule IDs
  * @property {'terminal' | 'json' | 'markdown'} [format] - Output format
  * @property {boolean} [strict] - Fail on warnings too (not just criticals)
+ * @property {string[]} [allowedLicenses] - Package names the license-contamination rule should downgrade to info (manually reviewed and cleared)
  */
 
 /** @type {VibeAuditConfig} */
@@ -20,6 +21,7 @@ const DEFAULTS = {
   customEscapers: [],
   customAuthGuards: [],
   disableForPaths: {},
+  allowedLicenses: [],
 };
 
 /**
@@ -61,6 +63,7 @@ export function normalizeConfig(parsed) {
     customEscapers: stringArray(parsed.customEscapers),
     customAuthGuards: stringArray(parsed.customAuthGuards),
     disableForPaths,
+    allowedLicenses: stringArray(parsed.allowedLicenses),
   };
 }
 

@@ -23,12 +23,25 @@
  * In the Mini Shai-Hulud incident the poisoned packages (keyv, file-entry-cache,
  * cacheable-request) were transitive dependencies — nobody installed them on
  * purpose. Checking only the named package would have missed it entirely.
+ *
+ * A fourth question rides along for free, because the same packument fetch
+ * already carries the answer: what is this package licensed under? A GPL or
+ * AGPL dependency is not a malware risk, but it is the one supply-chain
+ * decision that is cheapest to reverse before install and most expensive
+ * after — once it is woven into a build, ripping it back out is a real
+ * engineering project. See rules/license-contamination.js for the
+ * classification logic this reuses; this is the pre-install mirror of that
+ * post-install lockfile check.
  */
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { classifyLicense } from '../rules/license-contamination.js';
+
+/** Severity ladder for combining independent checks without ever downgrading a finding. */
+const LEVEL_RANK = { ok: 0, warn: 1, block: 2 };
 
 /** Versions confirmed malicious. Checked by exact name@version. */
 export const KNOWN_MALICIOUS = new Set([
@@ -143,6 +156,7 @@ export async function fetchPackument(name, fetchImpl = fetch) {
  * @param {any} packument
  * @param {number} nowMs
  * @returns {{name:string, version:string, level:'block'|'warn'|'ok', reasons:string[], ageHours:number|null, installScripts:string[]}}
+ *   `reasons` may include a `"license: ..."` entry from classifyLicense — see rules/license-contamination.js
  */
 export function assessPackage(pkg, packument, nowMs) {
   const reasons = [];
@@ -175,6 +189,16 @@ export function assessPackage(pkg, packument, nowMs) {
     // is worth stopping for, either alone is only worth mentioning.
     level = installScripts.length ? 'block' : 'warn';
   }
+
+  // License check rides the same packument, no extra registry call. Unlike
+  // the malware checks above, a license verdict is a legal fact, not a
+  // heuristic — so a strong-copyleft package with no permissive escape
+  // blocks outright, same tier as a confirmed-malicious version.
+  const license = packument?.versions?.[pkg.version]?.license;
+  const verdict = classifyLicense(license);
+  const licenseLevel = verdict.tier === 'block' ? 'block' : verdict.tier === 'pass' ? 'ok' : 'warn';
+  if (verdict.tier !== 'pass') reasons.push(`license: ${verdict.reason}`);
+  if (LEVEL_RANK[licenseLevel] > LEVEL_RANK[level]) level = licenseLevel;
 
   return { ...pkg, level, reasons, ageHours, installScripts };
 }

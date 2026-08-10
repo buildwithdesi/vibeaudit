@@ -123,6 +123,8 @@ import { supabasePublicBucket } from './supabase-public-bucket.js';
 import { sqlInjection } from './sql-injection.js';
 import { weakHashing } from './weak-hashing.js';
 import { insecureCipher } from './insecure-cipher.js';
+// Supply chain, licensing (v1.4)
+import { licenseContamination } from './license-contamination.js';
 
 /** @type {import('./types.js').Rule[]} */
 export const ALL_RULES = [
@@ -247,6 +249,8 @@ export const ALL_RULES = [
   sqlInjection,
   weakHashing,
   insecureCipher,
+  // Supply chain, licensing (v1.4)
+  licenseContamination,
 ];
 
 /**
