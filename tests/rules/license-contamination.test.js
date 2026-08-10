@@ -39,6 +39,12 @@ describe('classifyLicense', () => {
     assert.equal(classifyLicense('LGPL-2.1-only').tier, 'warn');
   });
 
+  it('warns (not silent pass) on CC-BY — attribution required, not copyleft', () => {
+    const v = classifyLicense('CC-BY-4.0');
+    assert.equal(v.tier, 'warn');
+    assert.match(v.reason, /attribution/);
+  });
+
   it('warns on a dual-licensed GPL package because the permissive branch is electable', () => {
     const v = classifyLicense('(MIT OR GPL-3.0-or-later)');
     assert.equal(v.tier, 'warn');

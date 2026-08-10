@@ -58,16 +58,23 @@ const EPL = /^EPL-/i;
 const CDDL = /^CDDL-/i;
 
 /**
- * SPDX identifiers with no meaningful obligation beyond keeping attribution
- * notices intact. Not exhaustive — anything not recognized falls through to
- * "unrecognized" rather than being silently assumed safe.
+ * SPDX identifiers with no meaningful obligation at all — not even a required
+ * attribution notice. Not exhaustive — anything not recognized falls through
+ * to "unrecognized" rather than being silently assumed safe.
  */
 const PERMISSIVE = new Set([
   'MIT', '0BSD', 'ISC', 'UNLICENSE', 'CC0-1.0', 'WTFPL', 'ZLIB', 'ZLIB-ACKNOWLEDGEMENT',
   'PYTHON-2.0', 'ARTISTIC-2.0', 'BLUEOAK-1.0.0', 'POSTGRESQL', 'X11', 'NCSA', 'VIM',
-  'CC-BY-4.0', 'CC-BY-3.0',
 ]);
 const PERMISSIVE_PREFIX = /^(APACHE|BSD|OFL)-/i;
+
+/**
+ * Not copyleft — no source-disclosure obligation — but DOES require keeping
+ * an attribution notice intact, which is a real thing a shipped product has
+ * to actually do. Worth a warn, not silence: mostly seen on fonts/docs/data
+ * assets rather than code, but the obligation is the same either way.
+ */
+const ATTRIBUTION = new Set(['CC-BY-4.0', 'CC-BY-3.0']);
 
 /**
  * @param {string} token - a single trimmed SPDX identifier, no AND/OR/parens
@@ -76,6 +83,11 @@ const PERMISSIVE_PREFIX = /^(APACHE|BSD|OFL)-/i;
 function isPermissive(token) {
   const upper = token.toUpperCase();
   return PERMISSIVE.has(upper) || PERMISSIVE_PREFIX.test(token);
+}
+
+/** @param {string} token */
+function isAttribution(token) {
+  return ATTRIBUTION.has(token.toUpperCase());
 }
 
 /** @param {string} token */
@@ -122,8 +134,9 @@ export function classifyLicense(raw) {
 
   const strong = tokens.filter(isStrongCopyleft);
   const weak = tokens.filter(isWeakCopyleft);
+  const attribution = tokens.filter(isAttribution);
   const permissive = tokens.filter(isPermissive);
-  const recognized = strong.length + weak.length + permissive.length;
+  const recognized = strong.length + weak.length + attribution.length + permissive.length;
 
   if (strong.length > 0) {
     if (hasOr && permissive.length > 0) {
@@ -137,6 +150,10 @@ export function classifyLicense(raw) {
 
   if (weak.length > 0) {
     return { tier: 'warn', reason: `"${normalized}" is weak copyleft — fine unmodified, review before forking or redistributing it` };
+  }
+
+  if (attribution.length > 0) {
+    return { tier: 'warn', reason: `"${normalized}" requires keeping an attribution notice intact — no copyleft obligation, just don't strip the credit` };
   }
 
   if (recognized === tokens.length) {
@@ -199,7 +216,10 @@ export const licenseContamination = {
       const verdict = classifyLicense(meta.license);
       if (verdict.tier === 'pass') continue;
 
-      let severity = verdict.tier === 'block' ? 'critical' : verdict.tier === 'warn' ? 'warning' : 'warning';
+      // 'warn' and 'flag' both land on 'warning' — Finding only has 3 severities
+      // (critical/warning/info), no room for the 4-tier BLOCK/WARN/FLAG/PASS the
+      // design doc originally sketched. They stay distinguishable by message text.
+      let severity = verdict.tier === 'block' ? 'critical' : 'warning';
 
       // A dev-only dependency never ships in the built product — real
       // copyleft obligations attach to distribution, so drop it a tier
