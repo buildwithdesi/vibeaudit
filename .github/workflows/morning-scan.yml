@@ -37,7 +37,7 @@ jobs:
           TOP: ${{ github.event.inputs.top || '0' }}
         run: |
           set +e
-          node scripts/morning-scan.js --top "$TOP" --format markdown
+          node scripts/morning-scan.js --top "$TOP"
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
       # Reports enumerate security findings across many repos, so they are NOT
