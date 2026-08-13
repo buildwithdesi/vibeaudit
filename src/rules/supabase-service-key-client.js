@@ -26,6 +26,24 @@ const SERVICE_KEY_PATTERNS = [
 /** A NEXT_PUBLIC_* service-role/key env var — bundled to the client, always wrong. */
 const NEXT_PUBLIC_LEAK = /NEXT_PUBLIC_[A-Z0-9_]*(?:SERVICE_ROLE|SERVICEROLE|SERVICE_KEY)/i;
 
+/**
+ * `service_role` is also the name of a Postgres ROLE, so it appears verbatim in
+ * correct RLS policy and GRANT statements. Those name a role; they do not carry
+ * the key. Projects embed such SQL in client files all the time — docs pages,
+ * setup instructions, a portfolio's code viewer — and on the 2026-08-13 scan
+ * that made `FOR ALL TO service_role USING (true);` a critical "service_role key
+ * in client code" in interactive-portfolio, where the SQL was display content
+ * inside a template literal.
+ */
+const SQL_ROLE_REFERENCE = /\b(?:TO|FROM|GRANT|REVOKE)\s+(?:[\w"]+\s*,\s*)*service_role\b/i;
+
+/**
+ * A SQL line comment. The JS comment skip below misses these, and embedded SQL
+ * is full of them. The optional quote/backtick prefix catches the first line of
+ * a template literal that opens straight into SQL.
+ */
+const SQL_COMMENT = /^(?:[`'"]\s*)?--/;
+
 /** @type {Rule} */
 export const supabaseServiceKeyClient = {
   id: 'supabase-service-key-client',
@@ -43,8 +61,11 @@ export const supabaseServiceKeyClient = {
       const line = file.lines[i];
       const trimmed = line.trim();
       if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) continue;
+      if (SQL_COMMENT.test(trimmed)) continue;
       // Type-only imports never reach runtime.
       if (/^import\s+type\b/.test(trimmed)) continue;
+      // Naming the Postgres role in a policy/grant is not holding its key.
+      if (SQL_ROLE_REFERENCE.test(line)) continue;
 
       const nextPublicLeak = NEXT_PUBLIC_LEAK.test(line);
       // On server files, only the NEXT_PUBLIC footgun is actually exploitable.
