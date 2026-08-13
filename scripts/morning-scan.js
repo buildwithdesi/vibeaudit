@@ -220,7 +220,9 @@ async function main() {
       );
       repos = previous;
     } else {
-      await writeFile(reposFile, JSON.stringify(repos, null, 2));
+      // Trailing newline: without it every --discover run re-adds a "\ No newline
+      // at end of file" marker to the diff of an otherwise unchanged list.
+      await writeFile(reposFile, JSON.stringify(repos, null, 2) + '\n');
     }
   } else {
     const raw = await readFile(reposFile, 'utf8');
