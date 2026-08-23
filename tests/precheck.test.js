@@ -183,3 +183,23 @@ describe('precheck: whole-tree behaviour', () => {
     }
   });
 });
+
+describe('precheck: closeAndSetExitCode', () => {
+  it('sets process.exitCode and does not call process.exit', async () => {
+    const { closeAndSetExitCode } = await import('../src/precheck/close-and-exit.js');
+    const prev = process.exitCode;
+    const original = process.exit;
+    let called = false;
+    process.exit = () => {
+      called = true;
+    };
+    try {
+      await closeAndSetExitCode(0);
+      assert.equal(process.exitCode, 0);
+      assert.equal(called, false);
+    } finally {
+      process.exit = original;
+      process.exitCode = prev;
+    }
+  });
+});

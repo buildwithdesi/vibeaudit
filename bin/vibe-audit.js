@@ -30,6 +30,7 @@ const green_ok = (t) => `[32m${t}[0m`;
 import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
 import { BASELINE_IGNORE } from '../src/baseline-ignore.js';
 import { precheck } from '../src/precheck/index.js';
+import { closeAndSetExitCode } from '../src/precheck/close-and-exit.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -49,11 +50,11 @@ const { values, positionals } = parseArgs({
   },
 });
 
-// ─── Help ─────────────────────────────────────────────────────────────────────
+// ??? Help ?????????????????????????????????????????????????????????????????????
 
 if (values.help) {
   console.log(`
-${bold('⚗️  vibe-audit')} — Security scanner for AI-generated code
+${bold('??  vibe-audit')} ? Security scanner for AI-generated code
 
 ${bold('USAGE')}
   ${cyan('npx vibe-audit')} ${dim('[directory | github-url | owner/repo]')} ${dim('[options]')}
@@ -98,12 +99,12 @@ ${bold('CONFIG')}
 ${bold('RULES')}
   Run ${cyan('npx vibe-audit --list-rules')} to see all available rules.
 
-${dim('Built by Digital Alchemy Academy — https://digitalalchemy.dev')}
+${dim('Built by Digital Alchemy Academy ? https://digitalalchemy.dev')}
 `);
   process.exit(0);
 }
 
-// ─── Version ──────────────────────────────────────────────────────────────────
+// ??? Version ??????????????????????????????????????????????????????????????????
 
 if (values.version) {
   // Read version from package.json.
@@ -114,12 +115,12 @@ if (values.version) {
   process.exit(0);
 }
 
-// ─── List Rules ───────────────────────────────────────────────────────────────
+// ??? List Rules ???????????????????????????????????????????????????????????????
 
 if (values['list-rules']) {
   console.log('');
-  console.log(bold('  ⚗️  Available Rules'));
-  console.log(dim('  ─────────────────────────────────────'));
+  console.log(bold('  ??  Available Rules'));
+  console.log(dim('  ?????????????????????????????????????'));
   console.log('');
 
   for (const rule of ALL_RULES) {
@@ -140,12 +141,12 @@ if (values['list-rules']) {
   process.exit(0);
 }
 
-// ─── Pre-install Gate ─────────────────────────────────────────────────────────
+// ??? Pre-install Gate ?????????????????????????????????????????????????????????
 
 if (values.precheck) {
   const spec = values.precheck;
   console.log('');
-  console.log(bold(`  ⚗️  Pre-install gate — ${spec}`));
+  console.log(bold(`  ??  Pre-install gate ? ${spec}`));
   console.log(dim('  Resolving the full dependency tree without installing it...'));
 
   let report;
@@ -153,9 +154,10 @@ if (values.precheck) {
     report = await precheck(spec);
   } catch (err) {
     console.error(red(`  Could not resolve ${spec}: ${err.message}`));
-    process.exit(2);
+    await closeAndSetExitCode(2);
   }
 
+  if (report) {
   console.log(dim(`  ${report.total} package(s) would be added.`));
   console.log('');
 
@@ -172,13 +174,14 @@ if (values.precheck) {
     console.log(yellow(`  ${report.warned.length} package(s) worth a look. Not blocking.`));
   } else {
     console.log('');
-    console.log(red(bold(`  DO NOT INSTALL — ${report.blocked.length} package(s) failed the gate.`)));
+    console.log(red(bold(`  DO NOT INSTALL ? ${report.blocked.length} package(s) failed the gate.`)));
   }
   console.log('');
-  process.exit(report.exitCode);
-}
+  await closeAndSetExitCode(report.exitCode);
+  }
+} else {
 
-// ─── Run Audit ────────────────────────────────────────────────────────────────
+// ??? Run Audit ????????????????????????????????????????????????????????????????
 
 const rawTarget = positionals[0] || '.';
 
@@ -189,7 +192,7 @@ const cliOptions = {
   strict: values.strict,
   skipSca: values['skip-sca'],
   deep: values.deep,
-  // Baseline ignore, always applied on top of resolved config — matches scripts/morning-scan.js
+  // Baseline ignore, always applied on top of resolved config ? matches scripts/morning-scan.js
   // so a self-scan never depends on .vibe-audit.json being read/resolved correctly to exclude
   // reports/ and test fixtures.
   extraIgnore: BASELINE_IGNORE,
@@ -202,10 +205,10 @@ try {
   const gh = parseGitHubTarget(rawTarget);
 
   if (gh) {
-    // GitHub mode — fetch files directly via API, no clone needed.
+    // GitHub mode ? fetch files directly via API, no clone needed.
     const label = `${gh.owner}/${gh.repo}`;
-    // stderr — keep stdout clean for --format json pipelines
-    console.error(cyan(`\n  ⚗️  Scanning GitHub repo: ${label}\n`));
+    // stderr ? keep stdout clean for --format json pipelines
+    console.error(cyan(`\n  ??  Scanning GitHub repo: ${label}\n`));
     targetDir = `github://${label}`;
     cliOptions.fileSource = fetchRepoFiles(gh.owner, gh.repo);
     cliOptions.skipSca = true; // SCA needs local package-lock.json, skip for remote
@@ -220,7 +223,7 @@ try {
         process.exit(2);
       }
     } catch {
-      console.error(red(`\n  Error: Directory not found — ${targetDir}\n`));
+      console.error(red(`\n  Error: Directory not found ? ${targetDir}\n`));
       console.error(dim(`  If this is a GitHub repo, use the full URL or owner/repo shorthand:\n`));
       console.error(dim(`    npx vibe-audit https://github.com/owner/repo`));
       console.error(dim(`    npx vibe-audit owner/repo\n`));
@@ -240,4 +243,5 @@ try {
 } catch (err) {
   console.error(red(`\n  Error: ${err.message}\n`));
   process.exit(2);
+}
 }
