@@ -50,7 +50,8 @@ jobs:
       - run: npm ci --ignore-scripts
 
       - name: Self-scan with vibeaudit (strict)
-        run: node bin/vibe-audit.js . --format json --strict | tee vibeaudit-report.json
+        # The independent pinned OSV job below supplies CI dependency coverage.
+        run: node bin/vibe-audit.js . --skip-osv --format json --strict | tee vibeaudit-report.json
 
       - name: Upload vibeaudit report
         if: always()
@@ -74,8 +75,21 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  osv:
+    permissions:
+      actions: read
+      contents: read
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@0c58c542420dfd23fcac08dd9c8ca3cca9c36f1a # v2.5.0
+    with:
+      scan-args: |-
+        --no-ignore
+        -r
+        ./
+      upload-sarif: false
+      fail-on-vuln: true
+
   publish:
-    needs: [test, vibeaudit, gitleaks]
+    needs: [test, vibeaudit, gitleaks, osv]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 10

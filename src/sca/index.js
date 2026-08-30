@@ -3,7 +3,8 @@
  *
  * Checks project dependencies for known vulnerabilities using:
  *   - `npm audit --json` for Node.js projects
- *   - package.json parsing for dependency enumeration
+ *   - package.json parsing for fresh lockfile and pinning signals
+ *   - OSV-Scanner for independent multi-ecosystem coverage
  *
  * Returns findings in the same format as SAST rules.
  */
@@ -13,6 +14,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { createIsolatedNpmEnv, findTrustedNpmCli, NPM_REGISTRY } from '../trusted-tools.js';
+import { runOsvAdapter } from '../adapters/osv.js';
 
 /** @typedef {import('../rules/types.js').Finding} Finding */
 
@@ -20,9 +22,10 @@ import { createIsolatedNpmEnv, findTrustedNpmCli, NPM_REGISTRY } from '../truste
  * Run SCA analysis on a project directory.
  *
  * @param {string} targetDir - Absolute path to the project root
+ * @param {{osv?:boolean,osvOptions?:object}} [options]
  * @returns {Promise<Finding[]>}
  */
-export async function runSCA(targetDir) {
+export async function runSCA(targetDir, options = {}) {
   const findings = [];
 
   // Node.js project detection
@@ -37,6 +40,16 @@ export async function runSCA(targetDir) {
   if (existsSync(reqPath)) {
     const pyFindings = checkPythonDeps(reqPath);
     findings.push(...pyFindings);
+  }
+
+  // OSV is the default second dependency-intelligence layer. An unavailable
+  // or incomplete run becomes a warning instead of silently reducing coverage.
+  if (options.osv === true) {
+    const osvResult = runOsvAdapter(targetDir, {
+      ...(options.osvOptions || {}),
+      targetDir,
+    });
+    findings.push(...osvResult.findings);
   }
 
   return findings;

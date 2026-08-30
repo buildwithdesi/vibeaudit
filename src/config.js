@@ -8,6 +8,7 @@ import { join } from 'node:path';
  * @property {string[]} [exclude] - Exclude these rule IDs
  * @property {'terminal' | 'json' | 'markdown'} [format] - Output format
  * @property {boolean} [strict] - Fail on warnings too (not just criticals)
+ * @property {boolean} [osv] - Run the OSV-Scanner dependency adapter
  * @property {string[]} [allowedLicenses] - Package names the license-contamination rule should downgrade to info (manually reviewed and cleared)
  */
 
@@ -18,6 +19,7 @@ const DEFAULTS = {
   exclude: [],
   format: 'terminal',
   strict: false,
+  osv: true,
   customEscapers: [],
   customAuthGuards: [],
   disableForPaths: {},
@@ -61,6 +63,7 @@ export function normalizeConfig(parsed) {
       ? parsed.format
       : DEFAULTS.format,
     strict: typeof parsed.strict === 'boolean' ? parsed.strict : DEFAULTS.strict,
+    osv: typeof parsed.osv === 'boolean' ? parsed.osv : DEFAULTS.osv,
     customEscapers: stringArray(parsed.customEscapers),
     customAuthGuards: stringArray(parsed.customAuthGuards),
     disableForPaths,

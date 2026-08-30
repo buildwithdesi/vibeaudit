@@ -101,6 +101,8 @@ async function runRules(fileSource, rules, deep, config = {}) {
  * @param {string[]} [cliOptions.exclude]
  * @param {boolean} [cliOptions.strict]
  * @param {boolean} [cliOptions.skipSca]
+ * @param {boolean} [cliOptions.osv]
+ * @param {object} [cliOptions.osvOptions] - Test or embedding seam for the trusted OSV adapter
  * @param {boolean} [cliOptions.deep]
  * @param {AsyncIterable} [cliOptions.fileSource] - Custom file source (e.g. GitHub API). If provided, skips local file discovery.
  * @param {string[]} [cliOptions.extraIgnore] - Baseline ignore patterns merged on top of the resolved config's ignore list. Applied to every file source, so a self/portfolio scan can always exclude reports/ and test fixtures even when a remote .vibe-audit.json fetch fails open to an empty ignore list.
@@ -153,6 +155,7 @@ export async function audit(targetDir, cliOptions = {}) {
   const excludeIds = cliOptions.exclude?.length ? cliOptions.exclude : config.exclude;
   const strict = cliOptions.strict ?? config.strict;
   const skipSca = cliOptions.skipSca ?? false;
+  const osv = cliOptions.osv ?? config.osv ?? true;
   const deep = cliOptions.deep ?? false;
 
   const unknown = unknownRuleIds([...(ruleIds || []), ...(excludeIds || [])]);
@@ -170,7 +173,10 @@ export async function audit(targetDir, cliOptions = {}) {
   // SCA: Dependency vulnerability scanning (only for local scans).
   if (!skipSca && !cliOptions.fileSource) {
     try {
-      const scaFindings = await runSCA(targetDir);
+      const scaFindings = await runSCA(targetDir, {
+        osv,
+        osvOptions: cliOptions.osvOptions,
+      });
       findings.push(...scaFindings);
     } catch {
       findings.push({
@@ -191,9 +197,9 @@ export async function audit(targetDir, cliOptions = {}) {
   for (const f of findings) {
     const meta = CWE_MAP[f.ruleId];
     if (meta) {
-      f.cweId = meta.cweId;
-      f.cvssScore = meta.cvssScore;
-      f.owaspCategory = meta.owaspCategory;
+      f.cweId ??= meta.cweId;
+      f.cvssScore ??= meta.cvssScore;
+      f.owaspCategory ??= meta.owaspCategory;
     }
   }
 

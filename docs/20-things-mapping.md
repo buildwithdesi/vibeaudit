@@ -235,9 +235,9 @@ Detects logout/signout handlers that don't call `session.destroy()`, `req.logout
 
 **Detection:** Built-in SCA scanner
 
-Vibe Audit automatically scans `package-lock.json` for known vulnerable dependencies using advisory data. Runs by default unless `--skip-sca` is used.
+Vibe Audit automatically scans `package-lock.json` with npm advisory data, then runs an independent OSV-Scanner pass across supported npm, Python, Go, Rust, CycloneDX, and SPDX inputs. OSV includes transitive lockfile entries. Missing or failed OSV coverage produces a `scan-incomplete` warning instead of a false clean result. Use `--skip-osv` for an explicit OSV exception. Both layers are skipped with `--skip-sca`.
 
-**What to do:** Run `npm audit` regularly. Schedule it as part of every deploy.
+**What to do:** Keep the npm precheck for fresh-package behavior. Install a verified OSV-Scanner binary, then run `vibeaudit --strict` in CI. Generate a CycloneDX or SPDX SBOM for built container images.
 
 ---
 

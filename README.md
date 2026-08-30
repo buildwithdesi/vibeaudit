@@ -388,7 +388,13 @@ The real culprits behind the "$50k server bill" — named, not vibed. Quality/sc
 
 ### 📦 Dependencies (SCA)
 
-Beyond the 106 rules above, Vibe Audit runs **software composition analysis** via `npm audit` to flag **known-vulnerable dependencies** (`vulnerable-dependency`, CWE-1035). Skip it with `--skip-sca`.
+Beyond the 106 rules above, Vibe Audit runs **software composition analysis** through two independent layers. `npm audit` preserves npm-specific advisory coverage. OSV-Scanner covers supported npm, Python, Go, Rust, CycloneDX, and SPDX dependency inventories, including transitive lockfile entries. The pre-install `--precheck` still catches fresh-package behavior that advisory databases cannot know yet.
+
+OSV runs by default. Vibe Audit stages only recognized inputs, ignores target-supplied OSV configuration, and fails closed when the trusted binary is missing. Use `--skip-osv` for an explicit OSV exception. Use `--skip-sca` only when all dependency scanning must be disabled.
+
+Container manifests are inventoried, but a Dockerfile cannot prove what entered the built image. Generate a CycloneDX or SPDX SBOM for the built image, then rerun Vibe Audit. Vibe Audit never pulls, starts, or executes an image.
+
+Install OSV-Scanner separately from its [official releases](https://github.com/google/osv-scanner/releases). Verify the release checksum and provenance before placing the binary on PATH. Vibe Audit never downloads a scanner or runs a package-manager install script on your behalf.
 
 > Run `vibeaudit --list-rules` for the complete, always-current list.
 
@@ -432,6 +438,7 @@ Drop a `.vibe-audit.json` in your project root:
   "exclude": ["predictable-ids"],
   "format": "terminal",
   "strict": false,
+  "osv": true,
   "customEscapers": ["myEscapeHtml"],
   "customAuthGuards": ["requireAuthedApiFromReq"],
   "disableForPaths": { "missing-auth": ["public/"] }
@@ -447,6 +454,7 @@ Drop a `.vibe-audit.json` in your project root:
 | `exclude` | string[] | `[]` | Skip these rules |
 | `format` | string | `"terminal"` | `terminal`, `json`, `markdown`, or `html` |
 | `strict` | boolean | `false` | Exit 1 on warnings too |
+| `osv` | boolean | `true` | Run the external OSV-Scanner adapter against supported dependency lockfiles and SBOMs |
 | `customEscapers` | string[] | `[]` | Extra HTML escaper/sanitizer names that make `innerHTML` / `dangerouslySetInnerHTML` safe |
 | `customAuthGuards` | string[] | `[]` | Extra auth-guard function names that satisfy `missing-auth` / server-action checks |
 | `disableForPaths` | object | `{}` | Per-rule path patterns to skip, e.g. `{ "rule-id": ["^public/"] }` |
@@ -514,6 +522,8 @@ Options:
   -s, --strict                                Exit 1 on warnings too
       --deep                                  Also scan git history for secrets
       --skip-sca                              Skip dependency vulnerability scanning
+      --osv                                   Explicitly enable the default OSV-Scanner pass
+      --skip-osv                              Skip OSV only, while preserving npm dependency checks
       --trust-target-config                  Apply the target's config and inline suppressions
       --fix                                   Show fix prompts + save VIBE-AUDIT-FIXES.md
       --fix-file                              Only save fix file (no terminal prompts)
@@ -532,6 +542,7 @@ import { audit } from '@jackdog668/vibeaudit';
 const { findings, exitCode } = await audit('/path/to/project', {
   format: 'json',
   strict: true,
+  osv: true, // Default. Set false only for an explicit exception.
 });
 
 console.log(`Found ${findings.length} issues`);

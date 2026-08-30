@@ -54,6 +54,8 @@ const { values, positionals } = parseArgs({
     fix: { type: 'boolean' },
     'fix-file': { type: 'boolean' },
     'skip-sca': { type: 'boolean' },
+    osv: { type: 'boolean' },
+    'skip-osv': { type: 'boolean' },
     deep: { type: 'boolean' },
     'trust-target-config': { type: 'boolean' },
     baseline: { type: 'string' },
@@ -86,6 +88,8 @@ ${bold('OPTIONS')}
   ${cyan('--fix')}                                   Show copy-paste fix prompts + save VIBE-AUDIT-FIXES.md
   ${cyan('--fix-file')}                              Only save fix file (no terminal prompts)
   ${cyan('--skip-sca')}                              Skip dependency vulnerability scanning
+  ${cyan('--osv')}                                   Explicitly enable the default OSV-Scanner pass
+  ${cyan('--skip-osv')}                              Skip OSV only, while preserving npm dependency checks
   ${cyan('--deep')}                                  Enable deep scanning (git history secrets)
   ${cyan('--list-rules')}                            Show all available rules
   ${cyan('--precheck <pkg>')}                        Vet a package BEFORE installing it
@@ -363,6 +367,7 @@ const cliOptions = {
   exclude: values.exclude?.split(',').filter(Boolean),
   strict: values.strict,
   skipSca: values['skip-sca'],
+  osv: values['skip-osv'] ? false : values.osv,
   deep: values.deep,
   trustTargetConfig: values['trust-target-config'],
   // Baseline ignore, always applied on top of resolved config ? matches scripts/morning-scan.js
