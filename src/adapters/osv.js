@@ -463,9 +463,13 @@ function normalizePath(value) {
   return resolve(String(value).replace(/^file:\/\//i, '')).replace(/\\/g, '/').toLowerCase();
 }
 
-function prepareApprovedOsv(executable, workspace) {
+export function prepareApprovedOsv(
+  executable,
+  workspace,
+  expectedSha256 = OSV_RELEASE_SHA256[`${process.platform}-${process.arch}`],
+) {
   const staged = join(workspace, process.platform === 'win32' ? 'osv-scanner.exe' : 'osv-scanner');
-  const inspected = snapshotOsvExecutable(executable, staged);
+  const inspected = snapshotOsvExecutable(executable, staged, expectedSha256);
   if (!inspected.expectedSha256 || !inspected.approved) {
     throw new Error(`The executable does not match the approved OSV-Scanner ${OSV_VERSION} release digest.`);
   }
@@ -473,7 +477,11 @@ function prepareApprovedOsv(executable, workspace) {
   return { path: staged, version: OSV_VERSION, sha256: inspected.sha256 };
 }
 
-function snapshotOsvExecutable(executable, stagedPath) {
+function snapshotOsvExecutable(
+  executable,
+  stagedPath,
+  expectedSha256 = OSV_RELEASE_SHA256[`${process.platform}-${process.arch}`],
+) {
   const source = resolve(executable);
   const info = lstatSync(source);
   if (info.isSymbolicLink() || normalizePath(realpathSync(source)) !== normalizePath(source) || !info.isFile()) {
@@ -505,7 +513,7 @@ function snapshotOsvExecutable(executable, stagedPath) {
   }
 
   const digest = hash.digest('hex');
-  const expected = OSV_RELEASE_SHA256[`${process.platform}-${process.arch}`];
+  const expected = expectedSha256;
   const approved = expected
     && timingSafeEqual(Buffer.from(digest, 'hex'), Buffer.from(expected, 'hex'));
   return {

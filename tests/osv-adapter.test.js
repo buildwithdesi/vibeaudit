@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 
-import { runOsvAdapter, discoverOsvLockfiles } from '../src/adapters/osv.js';
+import {
+  discoverOsvLockfiles,
+  prepareApprovedOsv,
+  runOsvAdapter,
+} from '../src/adapters/osv.js';
 import { getDefaultConfig } from '../src/config.js';
 import { audit } from '../src/index.js';
 
@@ -14,6 +19,10 @@ function approvedTestVerifier(executable) {
     version: '2.5.1',
     sha256: 'approved-test-verifier',
   };
+}
+
+function sha256(content) {
+  return createHash('sha256').update(content).digest('hex');
 }
 
 function fixture() {
@@ -99,6 +108,37 @@ test('OSV adapter rejects a forged executable before running it', () => {
     assert.equal(result.coverage.complete, false);
     assert.equal(ran, false);
     assert.match(result.coverage.reason, /approved OSV-Scanner 2\.5\.1 release digest/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(toolRoot, { recursive: true, force: true });
+  }
+});
+
+test('OSV adapter executes a private approved snapshot when the source changes', () => {
+  const { root } = fixture();
+  const toolRoot = mkdtempSync(join(tmpdir(), 'vibeaudit-osv-approved-tool-'));
+  const executable = join(toolRoot, process.platform === 'win32' ? 'osv-scanner.exe' : 'osv-scanner');
+  const approvedBytes = 'approved test osv scanner';
+  writeFileSync(executable, approvedBytes);
+  let invokedPath;
+  try {
+    const result = runOsvAdapter(root, {
+      findExecutable: () => executable,
+      prepareVerifier(source, workspace) {
+        const verifier = prepareApprovedOsv(source, workspace, sha256(approvedBytes));
+        writeFileSync(source, 'replaced after approval');
+        return verifier;
+      },
+      runner(stagedExecutable) {
+        invokedPath = stagedExecutable;
+        assert.notEqual(stagedExecutable, executable);
+        assert.equal(readFileSync(stagedExecutable, 'utf8'), approvedBytes);
+        return { status: 0, stdout: JSON.stringify({ results: [] }), stderr: '' };
+      },
+    });
+    assert.equal(result.status, 'completed');
+    assert.equal(result.toolSha256, sha256(approvedBytes));
+    assert.notEqual(invokedPath, executable);
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(toolRoot, { recursive: true, force: true });
