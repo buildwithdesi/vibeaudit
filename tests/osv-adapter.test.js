@@ -8,6 +8,14 @@ import { runOsvAdapter, discoverOsvLockfiles } from '../src/adapters/osv.js';
 import { getDefaultConfig } from '../src/config.js';
 import { audit } from '../src/index.js';
 
+function approvedTestVerifier(executable) {
+  return {
+    path: executable,
+    version: '2.5.1',
+    sha256: 'approved-test-verifier',
+  };
+}
+
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'vibeaudit-osv-test-'));
   const files = {
@@ -73,12 +81,37 @@ test('OSV adapter fails closed without claiming unavailable inputs were scanned'
   }
 });
 
+test('OSV adapter rejects a forged executable before running it', () => {
+  const { root } = fixture();
+  const toolRoot = mkdtempSync(join(tmpdir(), 'vibeaudit-osv-tool-'));
+  const executable = join(toolRoot, process.platform === 'win32' ? 'osv-scanner.exe' : 'osv-scanner');
+  writeFileSync(executable, 'forged osv scanner');
+  let ran = false;
+  try {
+    const result = runOsvAdapter(root, {
+      findExecutable: () => executable,
+      runner: () => {
+        ran = true;
+        return { status: 0, stdout: JSON.stringify({ results: [] }), stderr: '' };
+      },
+    });
+    assert.equal(result.status, 'failed');
+    assert.equal(result.coverage.complete, false);
+    assert.equal(ran, false);
+    assert.match(result.coverage.reason, /approved OSV-Scanner 2\.5\.1 release digest/i);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(toolRoot, { recursive: true, force: true });
+  }
+});
+
 test('OSV adapter stages only recognized inputs and maps transitive vulnerability groups', () => {
   const { root } = fixture();
   let invocation;
   try {
     const result = runOsvAdapter(root, {
       findExecutable: () => 'C:/trusted/osv-scanner.exe',
+      prepareVerifier: approvedTestVerifier,
       runner(executable, args, options) {
         invocation = { executable, args, options };
         const lockfileArg = args.find((arg) => arg.endsWith('package-lock.json'));
@@ -124,6 +157,8 @@ test('OSV adapter stages only recognized inputs and maps transitive vulnerabilit
       },
     });
     assert.equal(result.status, 'completed');
+    assert.equal(result.toolVersion, '2.5.1');
+    assert.equal(result.toolSha256, 'approved-test-verifier');
     assert.equal(result.coverage.complete, false);
     assert.equal(result.coverage.scanned, 6);
     assert.equal(result.coverage.vulnerabilities, 1);
@@ -151,6 +186,7 @@ test('OSV adapter accepts a clean report and records completed coverage', () => 
   try {
     const result = runOsvAdapter(root, {
       findExecutable: () => '/trusted/osv-scanner',
+      prepareVerifier: approvedTestVerifier,
       runner: () => ({ status: 0, stdout: JSON.stringify({ results: [] }), stderr: '' }),
     });
     assert.equal(result.status, 'completed');
@@ -169,6 +205,7 @@ test('OSV adapter fails closed on malformed output without exposing stderr', () 
   try {
     const result = runOsvAdapter(root, {
       findExecutable: () => '/trusted/osv-scanner',
+      prepareVerifier: approvedTestVerifier,
       runner: () => ({ status: 0, stdout: '{not-json}', stderr: 'private endpoint details' }),
     });
     assert.equal(result.status, 'failed');
@@ -194,6 +231,7 @@ test('audit pipeline runs OSV and preserves adapter CVSS metadata', async () => 
       config: { ...getDefaultConfig(), osv: true },
       osvOptions: {
         findExecutable: () => '/trusted/osv-scanner',
+        prepareVerifier: approvedTestVerifier,
         runner(_executable, args) {
           const goArg = args.find((arg) => arg.endsWith('go.mod'));
           const path = goArg.slice('--lockfile='.length).replace(/^:/, '');

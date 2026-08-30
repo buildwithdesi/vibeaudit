@@ -74,14 +74,14 @@ The scanner checks a project when you run it. **VibeGuard** adds user-wide check
 
 ### Check local security tools
 
-Run the doctor before your first full audit or agent-skill install. It checks Node.js, Cosign, OSV-Scanner, and optional Gitleaks. It provides official release links and exact Cosign digest evidence without downloading tools or executing installers.
+Run the doctor before your first full audit or agent-skill install. It checks Node.js, Cosign, OSV-Scanner, and optional Gitleaks. It provides official release links and exact Cosign and OSV-Scanner digest evidence without downloading tools or executing installers.
 
 ```powershell
 vibeaudit doctor
 vibeaudit doctor --format json
 ```
 
-Exit code `0` means the required tools are usable. The status remains `usable-with-warnings` while a found OSV-Scanner or Gitleaks binary is `available-unverified`. Exit code `3` means a required tool is missing, rejected, or unsupported. Cosign receives the stronger approved-release digest check. This keeps warnings honest without blocking normal work.
+Exit code `0` means every required tool is authenticated and usable. Optional Gitleaks can remain `available-unverified`, producing `usable-with-warnings` without blocking normal work. Exit code `3` means a required tool is missing, rejected, or unsupported. Cosign and OSV-Scanner both receive approved-release digest checks.
 
 ### Scan a backup before restoring agent files
 
@@ -409,7 +409,7 @@ OSV runs by default. Vibe Audit stages only recognized inputs, ignores target-su
 
 Container manifests are inventoried, but a Dockerfile cannot prove what entered the built image. Generate a CycloneDX or SPDX SBOM for the built image, then rerun Vibe Audit. Vibe Audit never pulls, starts, or executes an image.
 
-Install OSV-Scanner separately from its [official releases](https://github.com/google/osv-scanner/releases). Verify the release checksum and provenance before placing the binary on PATH. Vibe Audit never downloads a scanner or runs a package-manager install script on your behalf.
+Install OSV-Scanner 2.5.1 separately from its [official release](https://github.com/google/osv-scanner/releases/tag/v2.5.1). Vibe Audit authenticates the platform-specific SHA-256 digest, stages a private copy, and runs only those approved bytes. It never downloads a scanner or runs a package-manager install script on your behalf.
 
 > Run `vibeaudit --list-rules` for the complete, always-current list.
 

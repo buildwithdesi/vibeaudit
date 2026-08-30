@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { COSIGN_RELEASE_SHA256 } from '../src/adapters/cosign.js';
+import { OSV_RELEASE_SHA256 } from '../src/adapters/osv.js';
 import { formatDoctor, runDoctor } from '../src/doctor.js';
 
 test('doctor rejects a forged Cosign executable without running it', () => {
@@ -28,7 +29,7 @@ test('doctor rejects a forged Cosign executable without running it', () => {
   }
 });
 
-test('doctor does not call an unauthenticated OSV executable ready', () => {
+test('doctor rejects a forged OSV executable without running it', () => {
   const root = mkdtempSync(join(tmpdir(), 'vibeaudit-doctor-'));
   const executable = join(root, process.platform === 'win32' ? 'osv-scanner.exe' : 'osv-scanner');
   writeFileSync(executable, 'unverified osv scanner');
@@ -40,7 +41,10 @@ test('doctor does not call an unauthenticated OSV executable ready', () => {
       },
     });
     const osv = report.checks.find((check) => check.id === 'osv-scanner');
-    assert.equal(osv.status, 'available-unverified');
+    assert.equal(osv.status, 'rejected');
+    assert.equal(osv.versionPolicy, '=2.5.1');
+    assert.equal(osv.expectedSha256, OSV_RELEASE_SHA256[`${process.platform}-${process.arch}`]);
+    assert.match(osv.fix, /does not match the approved OSV-Scanner 2\.5\.1 release digest/i);
     assert.equal(report.status, 'attention');
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -75,7 +79,7 @@ test('doctor does not recommend installing Cosign on an unsupported platform', (
   assert.doesNotMatch(cosign.fix, /install Cosign/i);
 });
 
-test('doctor stays usable while warning about an unauthenticated OSV executable', () => {
+test('doctor becomes operational when required tools are authenticated', () => {
   const report = runDoctor({
     findExecutable(name) {
       return name === 'gitleaks' ? null : `/security/${name}`;
@@ -83,8 +87,11 @@ test('doctor stays usable while warning about an unauthenticated OSV executable'
     inspectCosign() {
       return { status: 'ready', sha256: 'a'.repeat(64) };
     },
+    inspectOsv() {
+      return { status: 'ready', sha256: 'b'.repeat(64) };
+    },
   });
-  assert.equal(report.status, 'usable-with-warnings');
+  assert.equal(report.status, 'ready');
   assert.equal(report.operational, true);
 });
 

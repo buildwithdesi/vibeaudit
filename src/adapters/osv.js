@@ -1,14 +1,21 @@
 import { spawnSync } from 'node:child_process';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import {
+  chmodSync,
+  closeSync,
   copyFileSync,
+  fstatSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
+  readSync,
   readdirSync,
   realpathSync,
   rmSync,
   statSync,
+  writeSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
@@ -19,6 +26,54 @@ const MAX_REPORT_BYTES = 10 * 1024 * 1024;
 const MAX_INPUT_BYTES = 10 * 1024 * 1024;
 const MAX_INPUTS = 512;
 const MAX_FINDINGS = 5000;
+const MAX_OSV_BYTES = 128 * 1024 * 1024;
+
+export const OSV_VERSION = '2.5.1';
+
+// Official v2.5.1 asset digests published by google/osv-scanner.
+export const OSV_RELEASE_SHA256 = Object.freeze({
+  'darwin-x64': '9f89beb6c3d784893cb1cae0a3d56c529bfe91075418c2f9440c45b79654198b',
+  'darwin-arm64': '75c44d6332f892a1e56286f4105a98ed751ae28d215ca0a8b65cc00d84103054',
+  'linux-x64': 'f9f25499a2c8cc367b3af45df2ea7eeca7fbccceab9c35079968f4b3652194be',
+  'linux-arm64': '3d0f5aa5a6baa8eb32bcef247388e149ef6030a6634ccae6fa0d62681fb27a6d',
+  'win32-x64': '25e42f5ef6711fd8c0fb45390972205891dd44c6bd02ac93f0f63e8e98d9bfb6',
+  'win32-arm64': '33feb0b210a3e5ea7b338c719defc899f8833d990cdd297bcad4ff1a2586ec8b',
+});
+
+/** Authenticate a local OSV-Scanner binary by digest without executing it. */
+export function inspectOsvExecutable(executable) {
+  try {
+    const inspected = snapshotOsvExecutable(executable);
+    if (!inspected.expectedSha256) {
+      return {
+        status: 'unsupported',
+        executable: inspected.source,
+        versionPolicy: `=${OSV_VERSION}`,
+        sha256: inspected.sha256,
+        expectedSha256: null,
+        reason: `OSV-Scanner ${OSV_VERSION} is not approved for ${process.platform}-${process.arch}.`,
+      };
+    }
+    return {
+      status: inspected.approved ? 'ready' : 'rejected',
+      executable: inspected.source,
+      versionPolicy: `=${OSV_VERSION}`,
+      sha256: inspected.sha256,
+      expectedSha256: inspected.expectedSha256,
+      ...(inspected.approved ? {} : {
+        reason: `The executable does not match the approved OSV-Scanner ${OSV_VERSION} release digest.`,
+      }),
+    };
+  } catch {
+    return {
+      status: 'rejected',
+      executable: resolve(executable),
+      versionPolicy: `=${OSV_VERSION}`,
+      expectedSha256: OSV_RELEASE_SHA256[`${process.platform}-${process.arch}`] || null,
+      reason: 'The external OSV-Scanner executable could not be authenticated.',
+    };
+  }
+}
 
 const INPUT_MATCHERS = [
   { ecosystem: 'JavaScript', test: (name) => ['bun.lock', 'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock'].includes(name.toLowerCase()) },
@@ -208,6 +263,12 @@ export function runOsvAdapter(targetDir, options = {}) {
   const stagedRoot = join(workspace, 'inputs');
   const pathMap = new Map();
   try {
+    let verifier;
+    try {
+      verifier = (options.prepareVerifier || prepareApprovedOsv)(executable, workspace);
+    } catch (error) {
+      return failed(safeOsvPreparationFailure(error), inventory);
+    }
     mkdirSync(stagedRoot, { recursive: true });
     for (const file of scanInputs) {
       const stagedPath = join(stagedRoot, file.relativePath.replace(/\//g, sep));
@@ -230,7 +291,7 @@ export function runOsvAdapter(targetDir, options = {}) {
     const runner = options.runner || ((command, commandArgs, runOptions) => spawnSync(command, commandArgs, runOptions));
     let run;
     try {
-      run = runner(executable, args, {
+      run = runner(verifier.path, args, {
         cwd: workspace,
         env: isolatedEnvironment(options.env),
         encoding: 'utf8',
@@ -274,6 +335,8 @@ export function runOsvAdapter(targetDir, options = {}) {
     return {
       tool: 'osv-scanner',
       status: 'completed',
+      toolVersion: verifier.version,
+      toolSha256: verifier.sha256,
       coverage: {
         ...coverage(containers.length === 0, scanInputs, containers, scanInputs.length,
           containers.length > 0 ? 'Container manifests require a lockfile or SBOM tied to the built image.' : undefined),
@@ -398,6 +461,69 @@ function mapSourcePath(sourcePath, pathMap) {
 
 function normalizePath(value) {
   return resolve(String(value).replace(/^file:\/\//i, '')).replace(/\\/g, '/').toLowerCase();
+}
+
+function prepareApprovedOsv(executable, workspace) {
+  const staged = join(workspace, process.platform === 'win32' ? 'osv-scanner.exe' : 'osv-scanner');
+  const inspected = snapshotOsvExecutable(executable, staged);
+  if (!inspected.expectedSha256 || !inspected.approved) {
+    throw new Error(`The executable does not match the approved OSV-Scanner ${OSV_VERSION} release digest.`);
+  }
+  chmodSync(staged, 0o700);
+  return { path: staged, version: OSV_VERSION, sha256: inspected.sha256 };
+}
+
+function snapshotOsvExecutable(executable, stagedPath) {
+  const source = resolve(executable);
+  const info = lstatSync(source);
+  if (info.isSymbolicLink() || normalizePath(realpathSync(source)) !== normalizePath(source) || !info.isFile()) {
+    throw new Error('The external OSV-Scanner executable is not a regular, direct file.');
+  }
+  if (info.size > MAX_OSV_BYTES) throw new Error('The external OSV-Scanner executable exceeds its safety limit.');
+
+  const hash = createHash('sha256');
+  const buffer = Buffer.allocUnsafe(64 * 1024);
+  let sourceHandle;
+  let stagedHandle;
+  try {
+    sourceHandle = openSync(source, 'r');
+    const opened = fstatSync(sourceHandle);
+    if (!opened.isFile() || opened.size > MAX_OSV_BYTES) throw new Error('The external OSV-Scanner executable is invalid.');
+    if (stagedPath) stagedHandle = openSync(stagedPath, 'wx', 0o700);
+    let total = 0;
+    while (true) {
+      const count = readSync(sourceHandle, buffer, 0, buffer.length, null);
+      if (count === 0) break;
+      hash.update(buffer.subarray(0, count));
+      if (stagedHandle !== undefined) writeAll(stagedHandle, buffer, count);
+      total += count;
+      if (total > MAX_OSV_BYTES) throw new Error('The external OSV-Scanner executable exceeds its safety limit.');
+    }
+  } finally {
+    if (sourceHandle !== undefined) closeSync(sourceHandle);
+    if (stagedHandle !== undefined) closeSync(stagedHandle);
+  }
+
+  const digest = hash.digest('hex');
+  const expected = OSV_RELEASE_SHA256[`${process.platform}-${process.arch}`];
+  const approved = expected
+    && timingSafeEqual(Buffer.from(digest, 'hex'), Buffer.from(expected, 'hex'));
+  return {
+    source,
+    sha256: digest,
+    expectedSha256: expected || null,
+    approved: Boolean(approved),
+  };
+}
+
+function writeAll(handle, buffer, length) {
+  let offset = 0;
+  while (offset < length) offset += writeSync(handle, buffer, offset, length - offset);
+}
+
+function safeOsvPreparationFailure(error) {
+  if (/approved OSV-Scanner|regular, direct file|safety limit|invalid/.test(error?.message || '')) return error.message;
+  return 'The external OSV-Scanner executable could not be authenticated.';
 }
 
 function findFixedVersion(vulnerability, pkg) {

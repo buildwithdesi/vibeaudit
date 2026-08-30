@@ -39,7 +39,7 @@ test('vibeaudit doctor explains missing tools without downloading or running ins
   assert.match(report.checks[1].source, /^https:\/\/github\.com\/sigstore\/cosign\/releases\/tag\/v3\.1\.3$/);
 });
 
-test('vibeaudit doctor shows trust evidence for healthy and unverified checks', () => {
+test('vibeaudit doctor shows trust evidence for healthy and rejected checks', () => {
   const tools = mkdtempSync(join(tmpdir(), 'vibeaudit-doctor-tools-'));
   const osv = join(tools, process.platform === 'win32' ? 'osv-scanner.exe' : 'osv-scanner');
   writeFileSync(osv, 'unverified osv scanner');
@@ -51,8 +51,11 @@ test('vibeaudit doctor shows trust evidence for healthy and unverified checks', 
     assert.match(result.stdout, /READY: Node\.js/);
     assert.match(result.stdout, /Version policy: >=18\.19\.0/);
     assert.match(result.stdout, /Source: https:\/\/nodejs\.org\/en\/download/);
-    assert.match(result.stdout, /AVAILABLE-UNVERIFIED: OSV-Scanner/);
-    assert.match(result.stdout, /Source: https:\/\/github\.com\/google\/osv-scanner\/releases/);
+    assert.match(result.stdout, /REJECTED: OSV-Scanner/);
+    assert.match(result.stdout, /Version policy: =2\.5\.1/);
+    assert.match(result.stdout, /Verification: pinned-sha256/);
+    assert.match(result.stdout, /Actual SHA-256: [a-f0-9]{64}/);
+    assert.match(result.stdout, /Source: https:\/\/github\.com\/google\/osv-scanner\/releases\/tag\/v2\.5\.1/);
   } finally {
     rmSync(tools, { recursive: true, force: true });
   }

@@ -5,11 +5,16 @@ import {
   COSIGN_VERSION,
   inspectCosignExecutable,
 } from './adapters/cosign.js';
+import {
+  inspectOsvExecutable,
+  OSV_RELEASE_SHA256,
+  OSV_VERSION,
+} from './adapters/osv.js';
 import { findTrustedExecutable } from './trusted-tools.js';
 
 const MINIMUM_NODE = [18, 19, 0];
 
-function toolPolicies(inspectCosign, cosignExpectedSha256) {
+function toolPolicies(inspectCosign, cosignExpectedSha256, inspectOsv, osvExpectedSha256) {
   return [{
     id: 'cosign',
     name: 'Cosign',
@@ -38,14 +43,22 @@ function toolPolicies(inspectCosign, cosignExpectedSha256) {
     name: 'OSV-Scanner',
     required: true,
     requiredFor: 'the default dependency vulnerability audit',
-    verification: 'external-path-only',
-    source: 'https://github.com/google/osv-scanner/releases',
-    missingFix: 'Install OSV-Scanner from Google\'s official release, verify its provenance, then rerun vibeaudit doctor.',
-    inspect() {
-      return {
-        status: 'available-unverified',
-        fix: 'Verify this OSV-Scanner binary against Google\'s official release before relying on it.',
-      };
+    versionPolicy: `=${OSV_VERSION}`,
+    expectedSha256: osvExpectedSha256,
+    supported: osvExpectedSha256 !== null,
+    verification: 'pinned-sha256',
+    source: `https://github.com/google/osv-scanner/releases/tag/v${OSV_VERSION}`,
+    missingFix: `Install OSV-Scanner ${OSV_VERSION} from Google's official release, then rerun vibeaudit doctor.`,
+    unsupportedFix: 'Run Vibe Audit on a supported platform: darwin-x64, darwin-arm64, linux-x64, linux-arm64, win32-x64, or win32-arm64.',
+    inspect(executable, policy) {
+      const inspected = inspectOsv(executable);
+      let fix = 'No action needed.';
+      if (inspected.status === 'unsupported') {
+        fix = `${inspected.reason} Run Vibe Audit on a supported platform: darwin-x64, darwin-arm64, linux-x64, linux-arm64, win32-x64, or win32-arm64.`;
+      } else if (inspected.status !== 'ready') {
+        fix = `${inspected.reason} Reinstall it from ${policy.source}, then rerun vibeaudit doctor.`;
+      }
+      return { ...inspected, fix };
     },
   },
   {
@@ -73,14 +86,18 @@ export function runDoctor(options = {}) {
     || ((name, target) => findTrustedExecutable(name, target, options.env));
   const node = nodeCheck(options.nodeVersion || process.versions.node);
   const inspectCosign = options.inspectCosign || inspectCosignExecutable;
+  const inspectOsv = options.inspectOsv || inspectOsvExecutable;
   const cosignExpectedSha256 = options.cosignExpectedSha256 === undefined
     ? (COSIGN_RELEASE_SHA256[`${process.platform}-${process.arch}`] || null)
     : options.cosignExpectedSha256;
-  const tools = toolPolicies(inspectCosign, cosignExpectedSha256)
+  const osvExpectedSha256 = options.osvExpectedSha256 === undefined
+    ? (OSV_RELEASE_SHA256[`${process.platform}-${process.arch}`] || null)
+    : options.osvExpectedSha256;
+  const tools = toolPolicies(inspectCosign, cosignExpectedSha256, inspectOsv, osvExpectedSha256)
     .map((policy) => toolCheck(policy, targetDir, findExecutable));
   const checks = [node, ...tools];
   const operational = checks.filter((check) => check.required)
-    .every((check) => ['ready', 'available-unverified'].includes(check.status));
+    .every((check) => check.status === 'ready');
   const hasWarnings = checks.some((check) => check.status === 'available-unverified');
   return {
     schemaVersion: 1,
