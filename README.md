@@ -81,7 +81,7 @@ vibeaudit doctor
 vibeaudit doctor --format json
 ```
 
-Exit code `0` means every required tool is ready. Exit code `3` means setup needs attention. A found OSV-Scanner or Gitleaks binary is reported as available, while Cosign receives the stronger approved-release digest check.
+Exit code `0` means the required tools are usable. The status remains `usable-with-warnings` while a found OSV-Scanner or Gitleaks binary is `available-unverified`. Exit code `3` means a required tool is missing, rejected, or unsupported. Cosign receives the stronger approved-release digest check. This keeps warnings honest without blocking normal work.
 
 ### Scan a backup before restoring agent files
 

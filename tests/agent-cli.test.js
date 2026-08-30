@@ -39,6 +39,25 @@ test('vibeaudit doctor explains missing tools without downloading or running ins
   assert.match(report.checks[1].source, /^https:\/\/github\.com\/sigstore\/cosign\/releases\/tag\/v3\.1\.3$/);
 });
 
+test('vibeaudit doctor shows trust evidence for healthy and unverified checks', () => {
+  const tools = mkdtempSync(join(tmpdir(), 'vibeaudit-doctor-tools-'));
+  const osv = join(tools, process.platform === 'win32' ? 'osv-scanner.exe' : 'osv-scanner');
+  writeFileSync(osv, 'unverified osv scanner');
+  try {
+    const result = run(['doctor'], '', {
+      env: { ...process.env, PATH: tools, Path: tools },
+    });
+    assert.equal(result.status, 3, result.stderr);
+    assert.match(result.stdout, /READY: Node\.js/);
+    assert.match(result.stdout, /Version policy: >=18\.19\.0/);
+    assert.match(result.stdout, /Source: https:\/\/nodejs\.org\/en\/download/);
+    assert.match(result.stdout, /AVAILABLE-UNVERIFIED: OSV-Scanner/);
+    assert.match(result.stdout, /Source: https:\/\/github\.com\/google\/osv-scanner\/releases/);
+  } finally {
+    rmSync(tools, { recursive: true, force: true });
+  }
+});
+
 function fixture(content = '# Writer\n\nKeep sentences short.\n') {
   const root = mkdtempSync(join(tmpdir(), 'vibeaudit-agent-cli-'));
   const skill = join(root, '.claude', 'skills', 'writer', 'SKILL.md');

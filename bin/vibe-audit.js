@@ -43,7 +43,7 @@ import {
   createSkillInstallPlan,
   readSkillMarkdown,
 } from '../src/skill.js';
-import { runDoctor } from '../src/doctor.js';
+import { formatDoctor, runDoctor } from '../src/doctor.js';
 import { createOfficialSkillVerificationSession } from '../src/agent-bundle.js';
 
 const { values, positionals } = parseArgs({
@@ -154,19 +154,8 @@ if (values.version) {
 if (positionals[0] === 'doctor') {
   const report = runDoctor();
   if (values.format === 'json') console.log(JSON.stringify(report, null, 2));
-  else {
-    console.log(`Vibe Audit Doctor: ${report.status.toUpperCase()}`);
-    for (const check of report.checks) {
-      console.log(`${check.status.toUpperCase()}: ${check.name}${check.executable ? `, ${check.executable}` : ''}`);
-      if (!['ready', 'available'].includes(check.status)) {
-        console.log(`  Fix: ${check.fix}`);
-        console.log(`  Source: ${check.source}`);
-        if (check.expectedSha256) console.log(`  Expected SHA-256: ${check.expectedSha256}`);
-      }
-    }
-    console.log('No tools were downloaded and no installers were executed.');
-  }
-  process.exit(report.status === 'ready' ? 0 : 3);
+  else console.log(formatDoctor(report));
+  process.exit(report.operational ? 0 : 3);
 }
 
 // Agent Shield commands are isolated from the normal project scanner. They do

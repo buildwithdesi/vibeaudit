@@ -9,17 +9,29 @@ import { findTrustedExecutable } from './trusted-tools.js';
 
 const MINIMUM_NODE = [18, 19, 0];
 
-const TOOL_POLICIES = [
-  {
+function toolPolicies(inspectCosign, cosignExpectedSha256) {
+  return [{
     id: 'cosign',
     name: 'Cosign',
     required: true,
     requiredFor: 'installing official Vibe Audit agent skills',
     versionPolicy: `=${COSIGN_VERSION}`,
-    expectedSha256: COSIGN_RELEASE_SHA256[`${process.platform}-${process.arch}`] || null,
+    expectedSha256: cosignExpectedSha256,
+    supported: cosignExpectedSha256 !== null,
     verification: 'pinned-sha256',
     source: `https://github.com/sigstore/cosign/releases/tag/v${COSIGN_VERSION}`,
-    fix: `Install Cosign ${COSIGN_VERSION} from Sigstore's official release, then rerun vibeaudit doctor.`,
+    missingFix: `Install Cosign ${COSIGN_VERSION} from Sigstore's official release, then rerun vibeaudit doctor.`,
+    unsupportedFix: 'Run Vibe Audit on a supported platform: darwin-x64, darwin-arm64, linux-x64, linux-arm64, or win32-x64.',
+    inspect(executable, policy) {
+      const inspected = inspectCosign(executable);
+      let fix = 'No action needed.';
+      if (inspected.status === 'unsupported') {
+        fix = `${inspected.reason} Run Vibe Audit on a supported platform: darwin-x64, darwin-arm64, linux-x64, linux-arm64, or win32-x64.`;
+      } else if (inspected.status !== 'ready') {
+        fix = `${inspected.reason} Reinstall it from ${policy.source}, then rerun vibeaudit doctor.`;
+      }
+      return { ...inspected, fix };
+    },
   },
   {
     id: 'osv-scanner',
@@ -28,7 +40,13 @@ const TOOL_POLICIES = [
     requiredFor: 'the default dependency vulnerability audit',
     verification: 'external-path-only',
     source: 'https://github.com/google/osv-scanner/releases',
-    fix: 'Install OSV-Scanner from Google\'s official release, verify its provenance, then rerun vibeaudit doctor.',
+    missingFix: 'Install OSV-Scanner from Google\'s official release, verify its provenance, then rerun vibeaudit doctor.',
+    inspect() {
+      return {
+        status: 'available-unverified',
+        fix: 'Verify this OSV-Scanner binary against Google\'s official release before relying on it.',
+      };
+    },
   },
   {
     id: 'gitleaks',
@@ -37,9 +55,16 @@ const TOOL_POLICIES = [
     requiredFor: 'optional secret scanning of restored agent controls',
     verification: 'external-path-only',
     source: 'https://github.com/gitleaks/gitleaks/releases',
-    fix: 'Install Gitleaks from its official release when you want optional restored-secret scanning.',
+    missingFix: 'Install Gitleaks from its official release when you want optional restored-secret scanning.',
+    inspect() {
+      return {
+        status: 'available-unverified',
+        fix: 'Verify this Gitleaks binary against its official release before relying on it.',
+      };
+    },
   },
-];
+  ];
+}
 
 /** Report local security-tool readiness without downloading or executing tools. */
 export function runDoctor(options = {}) {
@@ -47,16 +72,41 @@ export function runDoctor(options = {}) {
   const findExecutable = options.findExecutable
     || ((name, target) => findTrustedExecutable(name, target, options.env));
   const node = nodeCheck(options.nodeVersion || process.versions.node);
-  const tools = TOOL_POLICIES.map((policy) => toolCheck(policy, targetDir, findExecutable));
-  const requiredReady = [node, ...tools.filter((tool) => tool.required)]
-    .every((check) => check.status === 'ready' || check.status === 'available');
+  const inspectCosign = options.inspectCosign || inspectCosignExecutable;
+  const cosignExpectedSha256 = options.cosignExpectedSha256 === undefined
+    ? (COSIGN_RELEASE_SHA256[`${process.platform}-${process.arch}`] || null)
+    : options.cosignExpectedSha256;
+  const tools = toolPolicies(inspectCosign, cosignExpectedSha256)
+    .map((policy) => toolCheck(policy, targetDir, findExecutable));
+  const checks = [node, ...tools];
+  const operational = checks.filter((check) => check.required)
+    .every((check) => ['ready', 'available-unverified'].includes(check.status));
+  const hasWarnings = checks.some((check) => check.status === 'available-unverified');
   return {
     schemaVersion: 1,
-    status: requiredReady ? 'ready' : 'attention',
+    status: operational ? (hasWarnings ? 'usable-with-warnings' : 'ready') : 'attention',
+    operational,
     downloadsPerformed: false,
     installersExecuted: false,
-    checks: [node, ...tools],
+    checks,
   };
+}
+
+/** Format a doctor report for people while preserving its trust evidence. */
+export function formatDoctor(report) {
+  const lines = [`Vibe Audit Doctor: ${report.status.toUpperCase()}`];
+  for (const check of report.checks) {
+    lines.push(`${check.status.toUpperCase()}: ${check.name}${check.executable ? `, ${check.executable}` : ''}`);
+    if (check.version) lines.push(`  Version: ${check.version}`);
+    if (check.versionPolicy) lines.push(`  Version policy: ${check.versionPolicy}`);
+    if (check.verification) lines.push(`  Verification: ${check.verification}`);
+    if (check.expectedSha256) lines.push(`  Expected SHA-256: ${check.expectedSha256}`);
+    if (check.sha256) lines.push(`  Actual SHA-256: ${check.sha256}`);
+    lines.push(`  Source: ${check.source}`);
+    if (check.status !== 'ready') lines.push(`  Fix: ${check.fix}`);
+  }
+  lines.push('No tools were downloaded and no installers were executed.');
+  return lines.join('\n');
 }
 
 function nodeCheck(version) {
@@ -76,25 +126,32 @@ function nodeCheck(version) {
 }
 
 function toolCheck(policy, targetDir, findExecutable) {
+  const {
+    inspect,
+    missingFix,
+    supported = true,
+    unsupportedFix,
+    ...visiblePolicy
+  } = policy;
+  if (!supported) {
+    return {
+      ...visiblePolicy,
+      executable: null,
+      status: 'unsupported',
+      fix: unsupportedFix,
+    };
+  }
   let executable = null;
   try {
     executable = findExecutable(policy.id, targetDir);
   } catch {
     executable = null;
   }
-  const base = {
-    ...policy,
-    executable,
-  };
-  if (!executable) return { ...base, status: 'missing' };
-  if (policy.id !== 'cosign') return { ...base, status: 'available' };
-  const inspected = inspectCosignExecutable(executable);
+  const base = { ...visiblePolicy, executable };
+  if (!executable) return { ...base, status: 'missing', fix: missingFix };
   return {
     ...base,
-    ...inspected,
-    fix: inspected.status === 'ready'
-      ? 'No action needed.'
-      : `${inspected.reason} Reinstall it from ${policy.source}, then rerun vibeaudit doctor.`,
+    ...inspect(executable, visiblePolicy),
   };
 }
 
