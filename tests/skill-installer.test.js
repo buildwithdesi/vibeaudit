@@ -24,21 +24,23 @@ async function fakeHome(agentDirs = []) {
 
 function trustedSignatureOptions(calls = []) {
   return {
-    verifyArtifact(artifact, bundle) {
-      calls.push([artifact, bundle]);
-      const content = readFileSync(artifact);
-      return {
-        tool: 'cosign',
-        status: 'verified',
-        verified: true,
-        artifact,
-        bundle,
-        artifactSha256: createHash('sha256').update(content).digest('hex'),
-        artifactSize: content.length,
-        publisherIdentityPolicy: PUBLISHER_IDENTITY,
-        oidcIssuer: VIBEAUDIT_OIDC_ISSUER,
-        transparencyLogVerified: true,
-      };
+    verificationSession: {
+      verifyArtifact(artifact, bundle) {
+        calls.push([artifact, bundle]);
+        const content = readFileSync(artifact);
+        return {
+          tool: 'cosign',
+          status: 'verified',
+          verified: true,
+          artifact,
+          bundle,
+          artifactSha256: createHash('sha256').update(content).digest('hex'),
+          artifactSize: content.length,
+          publisherIdentityPolicy: PUBLISHER_IDENTITY,
+          oidcIssuer: VIBEAUDIT_OIDC_ISSUER,
+          transparencyLogVerified: true,
+        };
+      },
     },
   };
 }

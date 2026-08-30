@@ -43,16 +43,48 @@ export function publisherIdentityForVersion(version) {
   return `https://github.com/buildwithdesi/vibeaudit/.github/workflows/ci.yml@refs/tags/v${version}`;
 }
 
+/** Authenticate a local Cosign binary by digest without executing it. */
+export function inspectCosignExecutable(executable) {
+  try {
+    const inspected = snapshotCosignExecutable(executable);
+    if (!inspected.expectedSha256) {
+      return {
+        status: 'unsupported',
+        executable: inspected.source,
+        versionPolicy: `=${COSIGN_VERSION}`,
+        sha256: inspected.sha256,
+        expectedSha256: null,
+        reason: `Cosign ${COSIGN_VERSION} is not approved for ${process.platform}-${process.arch}.`,
+      };
+    }
+    return {
+      status: inspected.approved ? 'ready' : 'rejected',
+      executable: inspected.source,
+      versionPolicy: `=${COSIGN_VERSION}`,
+      sha256: inspected.sha256,
+      expectedSha256: inspected.expectedSha256,
+      ...(inspected.approved ? {} : {
+        reason: `The executable does not match the approved Cosign ${COSIGN_VERSION} release digest.`,
+      }),
+    };
+  } catch {
+    return {
+      status: 'rejected',
+      executable: resolve(executable),
+      versionPolicy: `=${COSIGN_VERSION}`,
+      expectedSha256: COSIGN_RELEASE_SHA256[`${process.platform}-${process.arch}`] || null,
+      reason: 'The external Cosign executable could not be authenticated.',
+    };
+  }
+}
+
 /**
  * Verify one official Vibe Audit blob against its Sigstore bundle. The files
  * and approved verifier are copied into a private workspace before execution,
  * so writable package files and PATH tools cannot change after approval.
  */
-export function verifyCosignArtifact(artifactPath, bundlePath, options = {}) {
-  const artifact = snapshotRegularFile(artifactPath, MAX_ARTIFACT_BYTES, 'artifact');
-  const bundle = snapshotRegularFile(bundlePath, MAX_BUNDLE_BYTES, 'signature bundle');
-  const publisherIdentityPolicy = publisherIdentityForVersion(options.expectedVersion);
-  const targetDir = resolve(options.targetDir || dirname(artifact.path));
+export function createCosignVerificationSession(options = {}) {
+  const targetDir = resolve(options.targetDir || process.cwd());
   const findExecutable = options.findExecutable
     || ((name, target) => findTrustedExecutable(name, target, options.env));
   let executable;
@@ -61,6 +93,66 @@ export function verifyCosignArtifact(artifactPath, bundlePath, options = {}) {
   } catch {
     executable = null;
   }
+
+  const workspace = mkdtempSync(join(tmpdir(), 'vibeaudit-cosign-session-'));
+  let verifier;
+  let preparationReason;
+  if (executable) {
+    try {
+      verifier = (options.prepareVerifier || prepareApprovedCosign)(executable, workspace);
+    } catch (error) {
+      preparationReason = safePreparationFailure(error);
+    }
+  }
+  let closed = false;
+
+  return {
+    verifyArtifact(artifactPath, bundlePath, verificationOptions = {}) {
+      if (closed) throw new Error('The Cosign verification session is closed.');
+      return verifyWithSession({
+        artifactPath,
+        bundlePath,
+        verificationOptions,
+        sessionOptions: options,
+        workspace,
+        executable,
+        verifier,
+        preparationReason,
+      });
+    },
+    close() {
+      if (closed) return;
+      closed = true;
+      rmSync(workspace, { recursive: true, force: true });
+    },
+  };
+}
+
+export function verifyCosignArtifact(artifactPath, bundlePath, options = {}) {
+  const session = createCosignVerificationSession({
+    ...options,
+    targetDir: options.targetDir || dirname(resolve(artifactPath)),
+  });
+  try {
+    return session.verifyArtifact(artifactPath, bundlePath, options);
+  } finally {
+    session.close();
+  }
+}
+
+function verifyWithSession({
+  artifactPath,
+  bundlePath,
+  verificationOptions,
+  sessionOptions,
+  workspace,
+  executable,
+  verifier,
+  preparationReason,
+}) {
+  const artifact = snapshotRegularFile(artifactPath, MAX_ARTIFACT_BYTES, 'artifact');
+  const bundle = snapshotRegularFile(bundlePath, MAX_BUNDLE_BYTES, 'signature bundle');
+  const publisherIdentityPolicy = publisherIdentityForVersion(verificationOptions.expectedVersion);
   if (!executable) {
     return evidence({
       status: 'unavailable',
@@ -70,27 +162,22 @@ export function verifyCosignArtifact(artifactPath, bundlePath, options = {}) {
       publisherIdentityPolicy,
     });
   }
+  if (!verifier) {
+    return evidence({
+      status: 'failed',
+      reason: preparationReason || 'The external Cosign executable could not be authenticated.',
+      artifact,
+      bundle,
+      publisherIdentityPolicy,
+    });
+  }
 
-  const workspace = mkdtempSync(join(tmpdir(), 'vibeaudit-cosign-verify-'));
+  const verificationDir = mkdtempSync(join(workspace, 'artifact-'));
   try {
-    const stagedArtifact = join(workspace, 'artifact.blob');
-    const stagedBundle = join(workspace, 'bundle.sigstore.json');
+    const stagedArtifact = join(verificationDir, 'artifact.blob');
+    const stagedBundle = join(verificationDir, 'bundle.sigstore.json');
     writeFileSync(stagedArtifact, artifact.bytes, { flag: 'wx', mode: 0o600 });
     writeFileSync(stagedBundle, bundle.bytes, { flag: 'wx', mode: 0o600 });
-
-    const prepareVerifier = options.prepareVerifier || prepareApprovedCosign;
-    let verifier;
-    try {
-      verifier = prepareVerifier(executable, workspace);
-    } catch (error) {
-      return evidence({
-        status: 'failed',
-        reason: safePreparationFailure(error),
-        artifact,
-        bundle,
-        publisherIdentityPolicy,
-      });
-    }
 
     const args = [
       'verify-blob',
@@ -100,14 +187,15 @@ export function verifyCosignArtifact(artifactPath, bundlePath, options = {}) {
       '--certificate-oidc-issuer', VIBEAUDIT_OIDC_ISSUER,
       '--offline',
     ];
-    const runner = options.runner || ((command, commandArgs, runOptions) => spawnSync(command, commandArgs, runOptions));
+    const runner = sessionOptions.runner
+      || ((command, commandArgs, runOptions) => spawnSync(command, commandArgs, runOptions));
     let run;
     try {
       run = runner(verifier.path, args, {
-        cwd: workspace,
-        env: isolatedEnvironment(options.env),
+        cwd: verificationDir,
+        env: isolatedEnvironment(sessionOptions.env),
         encoding: 'utf8',
-        timeout: options.timeoutMs || 30_000,
+        timeout: sessionOptions.timeoutMs || 30_000,
         maxBuffer: 1024 * 1024,
         windowsHide: true,
         shell: false,
@@ -154,7 +242,7 @@ export function verifyCosignArtifact(artifactPath, bundlePath, options = {}) {
       verifier,
     });
   } finally {
-    rmSync(workspace, { recursive: true, force: true });
+    rmSync(verificationDir, { recursive: true, force: true });
   }
 }
 
@@ -191,6 +279,16 @@ function sourceStillMatches(snapshot) {
 }
 
 function prepareApprovedCosign(executable, workspace) {
+  const staged = join(workspace, process.platform === 'win32' ? 'cosign.exe' : 'cosign');
+  const inspected = snapshotCosignExecutable(executable, staged);
+  if (!inspected.expectedSha256 || !inspected.approved) {
+    throw new Error(`The executable does not match the approved Cosign ${COSIGN_VERSION} release digest.`);
+  }
+  chmodSync(staged, 0o700);
+  return { path: staged, version: COSIGN_VERSION, sha256: inspected.sha256 };
+}
+
+function snapshotCosignExecutable(executable, stagedPath) {
   const source = resolve(executable);
   const info = lstatSync(source);
   if (info.isSymbolicLink() || normalizePath(realpathSync(source)) !== normalizePath(source) || !info.isFile()) {
@@ -198,7 +296,6 @@ function prepareApprovedCosign(executable, workspace) {
   }
   if (info.size > MAX_COSIGN_BYTES) throw new Error('The external Cosign executable exceeds its safety limit.');
 
-  const staged = join(workspace, process.platform === 'win32' ? 'cosign.exe' : 'cosign');
   const hash = createHash('sha256');
   const buffer = Buffer.allocUnsafe(64 * 1024);
   let sourceHandle;
@@ -207,13 +304,13 @@ function prepareApprovedCosign(executable, workspace) {
     sourceHandle = openSync(source, 'r');
     const opened = fstatSync(sourceHandle);
     if (!opened.isFile() || opened.size > MAX_COSIGN_BYTES) throw new Error('The external Cosign executable is invalid.');
-    stagedHandle = openSync(staged, 'wx', 0o700);
+    if (stagedPath) stagedHandle = openSync(stagedPath, 'wx', 0o700);
     let total = 0;
     while (true) {
       const count = readSync(sourceHandle, buffer, 0, buffer.length, null);
       if (count === 0) break;
       hash.update(buffer.subarray(0, count));
-      writeAll(stagedHandle, buffer, count);
+      if (stagedHandle !== undefined) writeAll(stagedHandle, buffer, count);
       total += count;
       if (total > MAX_COSIGN_BYTES) throw new Error('The external Cosign executable exceeds its safety limit.');
     }
@@ -226,11 +323,12 @@ function prepareApprovedCosign(executable, workspace) {
   const expected = COSIGN_RELEASE_SHA256[`${process.platform}-${process.arch}`];
   const approved = expected
     && timingSafeEqual(Buffer.from(digest, 'hex'), Buffer.from(expected, 'hex'));
-  if (!approved) {
-    throw new Error(`The executable does not match the approved Cosign ${COSIGN_VERSION} release digest.`);
-  }
-  chmodSync(staged, 0o700);
-  return { path: staged, version: COSIGN_VERSION, sha256: digest };
+  return {
+    source,
+    sha256: digest,
+    expectedSha256: expected || null,
+    approved: Boolean(approved),
+  };
 }
 
 function writeAll(handle, buffer, length) {

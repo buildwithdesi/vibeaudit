@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -8,7 +10,11 @@ import {
   officialSkillAssetPaths,
   verifyOfficialSkillBundle,
 } from '../src/agent-bundle.js';
-import { publisherIdentityForVersion, VIBEAUDIT_OIDC_ISSUER } from '../src/adapters/cosign.js';
+import {
+  createCosignVerificationSession,
+  publisherIdentityForVersion,
+  VIBEAUDIT_OIDC_ISSUER,
+} from '../src/adapters/cosign.js';
 
 const PUBLISHER_IDENTITY = publisherIdentityForVersion('1.4.0');
 
@@ -74,4 +80,52 @@ test('official skill verification rejects evidence for different bytes', () => {
       };
     },
   }), /verified bytes do not match/i);
+});
+
+test('one Cosign session authenticates its verifier once across repeated signed bundle checks', () => {
+  const root = mkdtempSync(join(tmpdir(), 'vibeaudit-agent-bundle-session-'));
+  const dataDir = join(root, 'src', 'data');
+  mkdirSync(dataDir, { recursive: true });
+  const skill = Buffer.from('# Trusted skill\n');
+  const baseline = {
+    schemaVersion: 1,
+    kind: 'vibeaudit-agent-skill-baseline',
+    publisher: 'https://github.com/buildwithdesi/vibeaudit',
+    package: '@jackdog668/vibeaudit',
+    version: '1.4.0',
+    files: [{
+      path: 'src/data/agent-skill.md',
+      sha256: createHash('sha256').update(skill).digest('hex'),
+      size: skill.length,
+    }],
+  };
+  writeFileSync(join(root, 'package.json'), '{"version":"1.4.0"}\n');
+  writeFileSync(join(dataDir, 'agent-skill.md'), skill);
+  writeFileSync(join(dataDir, 'agent-skill.md.sigstore.json'), '{}\n');
+  writeFileSync(join(dataDir, 'agent-skill-baseline.json'), `${JSON.stringify(baseline)}\n`);
+  writeFileSync(join(dataDir, 'agent-skill-baseline.json.sigstore.json'), '{}\n');
+
+  let preparations = 0;
+  let verifications = 0;
+  const session = createCosignVerificationSession({
+    targetDir: root,
+    findExecutable: () => '/trusted/cosign',
+    prepareVerifier(executable) {
+      preparations += 1;
+      return { path: executable, version: '3.1.3', sha256: 'approved-test-verifier' };
+    },
+    runner() {
+      verifications += 1;
+      return { status: 0, stdout: 'Verified OK\n', stderr: '' };
+    },
+  });
+  try {
+    verifyOfficialSkillBundle({ root, verificationSession: session });
+    verifyOfficialSkillBundle({ root, verificationSession: session });
+    assert.equal(preparations, 1);
+    assert.equal(verifications, 4);
+  } finally {
+    session.close();
+    rmSync(root, { recursive: true, force: true });
+  }
 });

@@ -43,6 +43,8 @@ import {
   createSkillInstallPlan,
   readSkillMarkdown,
 } from '../src/skill.js';
+import { runDoctor } from '../src/doctor.js';
+import { createOfficialSkillVerificationSession } from '../src/agent-bundle.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -98,6 +100,7 @@ ${bold('OPTIONS')}
   ${cyan('--trust-target-config')}                   Apply the scanned repo's config and inline suppressions
 
 ${bold('AGENT SHIELD')}
+  ${cyan('vibeaudit doctor')}                        Check local security tools without installing anything
   ${cyan('vibeaudit agent scan <backup>')}           Offline, fail-closed control-file scan
   ${cyan('  --gitleaks')}                            Add local secret scanning, fail if unavailable
   ${cyan('vibeaudit agent baseline <backup>')}       Save reviewed hashes outside the backup
@@ -146,6 +149,24 @@ if (values.version) {
   const pkg = require('../package.json');
   console.log(pkg.version);
   process.exit(0);
+}
+
+if (positionals[0] === 'doctor') {
+  const report = runDoctor();
+  if (values.format === 'json') console.log(JSON.stringify(report, null, 2));
+  else {
+    console.log(`Vibe Audit Doctor: ${report.status.toUpperCase()}`);
+    for (const check of report.checks) {
+      console.log(`${check.status.toUpperCase()}: ${check.name}${check.executable ? `, ${check.executable}` : ''}`);
+      if (!['ready', 'available'].includes(check.status)) {
+        console.log(`  Fix: ${check.fix}`);
+        console.log(`  Source: ${check.source}`);
+        if (check.expectedSha256) console.log(`  Expected SHA-256: ${check.expectedSha256}`);
+      }
+    }
+    console.log('No tools were downloaded and no installers were executed.');
+  }
+  process.exit(report.status === 'ready' ? 0 : 3);
 }
 
 // Agent Shield commands are isolated from the normal project scanner. They do
@@ -233,6 +254,7 @@ if (positionals[0] === 'command') {
 }
 
 if (positionals[0] === 'skill') {
+  let verificationSession;
   try {
     const action = positionals[1] || 'plan';
     if (action === 'print') {
@@ -240,7 +262,9 @@ if (positionals[0] === 'skill') {
       process.exit(0);
     }
     const only = values.only?.split(',').map((value) => value.trim()).filter(Boolean) || [];
-    const plan = await createSkillInstallPlan({ only });
+    verificationSession = createOfficialSkillVerificationSession();
+    const signatureOptions = { verificationSession };
+    const plan = await createSkillInstallPlan({ only, signatureOptions });
     const visiblePlan = {
       sourcePath: plan.sourcePath,
       sourceHash: plan.sourceHash,
@@ -277,7 +301,10 @@ if (positionals[0] === 'skill') {
         if (target.diff) console.log(`\n${target.diff}`);
       }
     }
-    if (action === 'plan' || action === 'status') process.exit(0);
+    if (action === 'plan' || action === 'status') {
+      verificationSession.close();
+      process.exit(0);
+    }
     if (action !== 'install') throw new Error('Unknown skill action. Use plan, install, status, or print.');
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
       throw new Error('skill install requires a person at an interactive terminal. Run skill plan first.');
@@ -290,12 +317,17 @@ if (positionals[0] === 'skill') {
       prompt.close();
     }
     if (confirmation !== `INSTALL ${plan.sourceHash}`) throw new Error('Skill installation cancelled.');
-    const results = await applySkillInstallPlan(plan, { confirmedSourceHash: plan.sourceHash });
+    const results = await applySkillInstallPlan(plan, {
+      confirmedSourceHash: plan.sourceHash,
+      signatureOptions,
+    });
     for (const result of results) {
       console.log(`${result.id}: ${result.status}${result.verifiedHash ? `, verified ${result.verifiedHash}` : ''}${result.backupPath ? `, backup ${result.backupPath}` : ''}`);
     }
+    verificationSession.close();
     process.exit(0);
   } catch (error) {
+    verificationSession?.close();
     console.error(`Agent Shield installer: ${error.message}`);
     process.exit(4);
   }

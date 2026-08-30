@@ -4,9 +4,9 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  createCosignVerificationSession,
   publisherIdentityForVersion,
   VIBEAUDIT_OIDC_ISSUER,
-  verifyCosignArtifact,
 } from './adapters/cosign.js';
 
 export const OFFICIAL_SKILL_BASELINE_SCHEMA = 1;
@@ -51,7 +51,27 @@ export function buildOfficialSkillBaseline(root = packageRoot) {
 /** Verify the signed baseline first, then the exact skill digest it names. */
 export function verifyOfficialSkillBundle(options = {}) {
   const paths = officialSkillAssetPaths(options.root || packageRoot);
-  const verifyArtifact = options.verifyArtifact || verifyCosignArtifact;
+  let ownedSession;
+  let verifyArtifact = options.verifyArtifact;
+  if (!verifyArtifact && options.verificationSession) {
+    verifyArtifact = options.verificationSession.verifyArtifact;
+  }
+  if (!verifyArtifact) {
+    ownedSession = createOfficialSkillVerificationSession(options.cosignOptions, paths.root);
+    verifyArtifact = ownedSession.verifyArtifact;
+  }
+  try {
+    return verifyOfficialSkillBundleWith(paths, verifyArtifact, options);
+  } finally {
+    ownedSession?.close();
+  }
+}
+
+export function createOfficialSkillVerificationSession(options = {}, root = packageRoot) {
+  return createCosignVerificationSession({ ...options, targetDir: resolve(root) });
+}
+
+function verifyOfficialSkillBundleWith(paths, verifyArtifact, options) {
   const packageSnapshot = snapshotFile(paths.packageJson, MAX_METADATA_BYTES, 'package metadata');
   const packageJson = parseJson(packageSnapshot.bytes, 'package metadata');
   const expectedIdentity = publisherIdentityForVersion(packageJson.version);

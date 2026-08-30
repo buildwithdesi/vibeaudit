@@ -7,16 +7,37 @@ import test from 'node:test';
 
 const cli = resolve('bin/vibe-audit.js');
 
-function run(args, input = '') {
+function run(args, input = '', options = {}) {
   return spawnSync(process.execPath, [cli, ...args], {
     cwd: resolve('.'),
     input,
+    env: options.env || process.env,
     encoding: 'utf8',
     // Windows security scanning can make a fresh Node process unusually slow
     // when the full test suite starts many workers at once.
     timeout: 120_000,
   });
 }
+
+test('vibeaudit doctor explains missing tools without downloading or running installers', () => {
+  const result = run(['doctor', '--format', 'json'], '', {
+    env: { ...process.env, PATH: '', Path: '' },
+  });
+  assert.equal(result.status, 3, result.stderr);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.status, 'attention');
+  assert.equal(report.downloadsPerformed, false);
+  assert.equal(report.installersExecuted, false);
+  assert.deepEqual(report.checks.map(({ id, status }) => ({ id, status })), [
+    { id: 'node', status: 'ready' },
+    { id: 'cosign', status: 'missing' },
+    { id: 'osv-scanner', status: 'missing' },
+    { id: 'gitleaks', status: 'missing' },
+  ]);
+  assert.match(report.checks[1].fix, /Cosign 3\.1\.3/i);
+  assert.match(report.checks[1].expectedSha256, /^[a-f0-9]{64}$/);
+  assert.match(report.checks[1].source, /^https:\/\/github\.com\/sigstore\/cosign\/releases\/tag\/v3\.1\.3$/);
+});
 
 function fixture(content = '# Writer\n\nKeep sentences short.\n') {
   const root = mkdtempSync(join(tmpdir(), 'vibeaudit-agent-cli-'));

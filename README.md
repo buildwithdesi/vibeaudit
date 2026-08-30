@@ -72,6 +72,17 @@ Requires Node `>=18.19.0`.
 
 The scanner checks a project when you run it. **VibeGuard** adds user-wide checks that run before supported AI tools or interactive PowerShell execute a command.
 
+### Check local security tools
+
+Run the doctor before your first full audit or agent-skill install. It checks Node.js, Cosign, OSV-Scanner, and optional Gitleaks. It provides official release links and exact Cosign digest evidence without downloading tools or executing installers.
+
+```powershell
+vibeaudit doctor
+vibeaudit doctor --format json
+```
+
+Exit code `0` means every required tool is ready. Exit code `3` means setup needs attention. A found OSV-Scanner or Gitleaks binary is reported as available, while Cosign receives the stronger approved-release digest check.
+
 ### Scan a backup before restoring agent files
 
 Keep the backup offline. This command inventories recognized skills, hooks, agent instructions, configs, plugins, Cursor rules, and helper scripts. It analyzes linked files as one capability chain and blocks incomplete coverage.
@@ -114,7 +125,7 @@ vibeaudit skill plan
 vibeaudit skill install
 ```
 
-Official npm releases include a Sigstore bundle for the packaged skill and a second signed baseline containing its expected SHA-256 digest, size, package name, and version. `skill plan` verifies both bundles with Cosign before showing any install target. It requires the exact versioned Digital Alchemy release-workflow identity, GitHub's OIDC issuer, the artifact digest, and the bundled transparency-log proof. `skill install` repeats the verification immediately before writing.
+Official npm releases include a Sigstore bundle for the packaged skill and a second signed baseline containing its expected SHA-256 digest, size, package name, and version. `skill plan` verifies both bundles with Cosign before showing any install target. It requires the exact versioned Digital Alchemy release-workflow identity, GitHub's OIDC issuer, the artifact digest, and the bundled transparency-log proof. `skill install` repeats the verification immediately before writing. One command authenticates and stages Cosign once, then reuses that private copy for every required artifact check.
 
 Install Cosign 3.1.3 separately from its [official release](https://github.com/sigstore/cosign/releases/tag/v3.1.3). Vibe Audit never downloads Cosign. It checks the executable against Sigstore's pinned release digest, stages a private copy, and rejects other PATH executables. Unsigned source checkouts cannot install the official skill.
 
@@ -516,6 +527,8 @@ npx @jackdog668/vibeaudit --strict
 
 ```
 npx @jackdog668/vibeaudit [target] [options]
+
+vibeaudit doctor                              Check local security-tool readiness
 
 target   A local directory, OR a GitHub repo (owner/repo or full URL)
 
