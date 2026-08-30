@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
@@ -7,6 +8,9 @@ import {
   officialSkillAssetPaths,
   verifyOfficialSkillBundle,
 } from '../src/agent-bundle.js';
+import { publisherIdentityForVersion, VIBEAUDIT_OIDC_ISSUER } from '../src/adapters/cosign.js';
+
+const PUBLISHER_IDENTITY = publisherIdentityForVersion('1.4.0');
 
 test('official skill baseline deterministically binds package version, path, size, and digest', () => {
   const paths = officialSkillAssetPaths();
@@ -28,14 +32,17 @@ test('official skill verification requires valid Cosign bundles for the skill an
   const result = verifyOfficialSkillBundle({
     verifyArtifact(artifact, bundle) {
       calls.push([artifact, bundle]);
+      const content = readFileSync(artifact);
       return {
         tool: 'cosign',
         status: 'verified',
         verified: true,
         artifact,
         bundle,
-        publisherIdentity: 'release workflow identity',
-        oidcIssuer: 'GitHub Actions',
+        artifactSha256: createHash('sha256').update(content).digest('hex'),
+        artifactSize: content.length,
+        publisherIdentityPolicy: PUBLISHER_IDENTITY,
+        oidcIssuer: VIBEAUDIT_OIDC_ISSUER,
         transparencyLogVerified: true,
       };
     },
@@ -48,4 +55,23 @@ test('official skill verification requires valid Cosign bundles for the skill an
   assert.equal(result.verified, true);
   assert.equal(result.transparencyLogVerified, true);
   assert.deepEqual(result.baseline, buildOfficialSkillBaseline());
+});
+
+test('official skill verification rejects evidence for different bytes', () => {
+  assert.throws(() => verifyOfficialSkillBundle({
+    verifyArtifact(artifact, bundle) {
+      return {
+        tool: 'cosign',
+        status: 'verified',
+        verified: true,
+        artifact,
+        bundle,
+        artifactSha256: '0'.repeat(64),
+        artifactSize: 1,
+        publisherIdentityPolicy: PUBLISHER_IDENTITY,
+        oidcIssuer: VIBEAUDIT_OIDC_ISSUER,
+        transparencyLogVerified: true,
+      };
+    },
+  }), /verified bytes do not match/i);
 });

@@ -5,7 +5,7 @@ try {
   console.log(JSON.stringify({
     verified: result.verified,
     transparencyLogVerified: result.transparencyLogVerified,
-    publisherIdentity: result.publisherIdentity,
+    publisherIdentityPolicy: result.publisherIdentityPolicy,
     oidcIssuer: result.oidcIssuer,
     version: result.baseline.version,
     skillSha256: result.baseline.files[0].sha256,

@@ -114,9 +114,9 @@ vibeaudit skill plan
 vibeaudit skill install
 ```
 
-Official npm releases include a Sigstore bundle for the packaged skill and a second signed baseline containing its expected SHA-256 digest, size, package name, and version. `skill plan` verifies both bundles with trusted Cosign before showing any install target. It requires the Digital Alchemy release-workflow identity, GitHub's OIDC issuer, the artifact digest, and the bundled transparency-log proof. `skill install` repeats the verification immediately before writing.
+Official npm releases include a Sigstore bundle for the packaged skill and a second signed baseline containing its expected SHA-256 digest, size, package name, and version. `skill plan` verifies both bundles with Cosign before showing any install target. It requires the exact versioned Digital Alchemy release-workflow identity, GitHub's OIDC issuer, the artifact digest, and the bundled transparency-log proof. `skill install` repeats the verification immediately before writing.
 
-Install Cosign separately from its [official release](https://github.com/sigstore/cosign/releases), then verify its own release signature before placing it on PATH. Vibe Audit never downloads Cosign. Unsigned source checkouts cannot install the official skill.
+Install Cosign 3.1.3 separately from its [official release](https://github.com/sigstore/cosign/releases/tag/v3.1.3). Vibe Audit never downloads Cosign. It checks the executable against Sigstore's pinned release digest, stages a private copy, and rejects other PATH executables. Unsigned source checkouts cannot install the official skill.
 
 Use `--only claude`, `--only codex`, or `--only cursor` to narrow the targets. `vibeaudit skill print` prints the packaged instructions without writing anything.
 

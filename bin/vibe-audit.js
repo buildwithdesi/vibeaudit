@@ -248,7 +248,7 @@ if (positionals[0] === 'skill') {
       publisherVerification: {
         verified: plan.publisherVerification.verified,
         transparencyLogVerified: plan.publisherVerification.transparencyLogVerified,
-        publisherIdentity: plan.publisherVerification.publisherIdentity,
+        publisherIdentityPolicy: plan.publisherVerification.publisherIdentityPolicy,
         oidcIssuer: plan.publisherVerification.oidcIssuer,
         baseline: plan.publisherVerification.baseline,
       },
@@ -267,7 +267,7 @@ if (positionals[0] === 'skill') {
     else {
       console.log(`Publisher signature: VERIFIED`);
       console.log(`Transparency proof: VERIFIED`);
-      console.log(`Publisher policy: ${visiblePlan.publisherVerification.publisherIdentity}`);
+      console.log(`Publisher identity policy: ${visiblePlan.publisherVerification.publisherIdentityPolicy}`);
       console.log(`Packaged skill SHA-256: ${plan.sourceHash}`);
       for (const target of visiblePlan.targets) {
         console.log(`\n${target.displayName}: ${target.action.toUpperCase()}\nTarget: ${target.installPath}\nCurrent SHA-256: ${target.beforeHash || 'missing'}\nNew SHA-256: ${plan.sourceHash}`);

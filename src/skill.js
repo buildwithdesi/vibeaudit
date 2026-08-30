@@ -87,6 +87,9 @@ export async function createSkillInstallPlan({ home = homedir(), only = [], sign
   const publisherVerification = verifyOfficialSkillBundle(signatureOptions);
   const source = await readSkillMarkdown();
   const sourceHash = hash(source);
+  if (publisherVerification.baseline.files[0]?.sha256 !== sourceHash) {
+    throw new Error('The packaged skill changed after publisher verification. Run the preview again.');
+  }
   const sourceFindings = analyzeAgentControlContent(source, sourcePath());
   const critical = sourceFindings.filter((finding) => finding.severity === 'critical');
   if (critical.length) throw new Error(`Packaged skill failed its security review: ${critical[0].message}`);

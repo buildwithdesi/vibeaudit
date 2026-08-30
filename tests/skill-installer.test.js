@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +12,9 @@ import {
   detectAgents,
   readSkillMarkdown,
 } from '../src/skill.js';
+import { publisherIdentityForVersion, VIBEAUDIT_OIDC_ISSUER } from '../src/adapters/cosign.js';
+
+const PUBLISHER_IDENTITY = publisherIdentityForVersion('1.4.0');
 
 async function fakeHome(agentDirs = []) {
   const home = await mkdtemp(join(tmpdir(), 'vibeaudit-skill-'));
@@ -21,14 +26,17 @@ function trustedSignatureOptions(calls = []) {
   return {
     verifyArtifact(artifact, bundle) {
       calls.push([artifact, bundle]);
+      const content = readFileSync(artifact);
       return {
         tool: 'cosign',
         status: 'verified',
         verified: true,
         artifact,
         bundle,
-        publisherIdentity: 'official release workflow',
-        oidcIssuer: 'GitHub Actions',
+        artifactSha256: createHash('sha256').update(content).digest('hex'),
+        artifactSize: content.length,
+        publisherIdentityPolicy: PUBLISHER_IDENTITY,
+        oidcIssuer: VIBEAUDIT_OIDC_ISSUER,
         transparencyLogVerified: true,
       };
     },
@@ -70,11 +78,19 @@ test('skill plan exposes verified publisher and transparency evidence before ins
   }
 });
 
-test('skill plan refuses unsigned source-checkout artifacts', async () => {
+test('skill plan refuses unsigned release artifacts', async () => {
   const home = await fakeHome(['.claude']);
   try {
     await assert.rejects(
-      createSkillInstallPlan({ home, only: ['claude'] }),
+      createSkillInstallPlan({
+        home,
+        only: ['claude'],
+        signatureOptions: {
+          verifyArtifact() {
+            throw new Error('Cosign signature bundle is missing.');
+          },
+        },
+      }),
       /signature bundle is missing/i,
     );
   } finally {
