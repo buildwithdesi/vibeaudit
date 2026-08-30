@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   assessPackage,
   assertSafeSpec,
+  parseResolvedPackageLock,
   precheck,
   KNOWN_MALICIOUS,
   FRESH_HOURS,
@@ -34,9 +35,45 @@ describe('precheck: spec validation (shell-injection guard)', () => {
   });
 
   it('refuses anything with shell metacharacters', () => {
-    for (const s of ['lodash; rm -rf /', 'lodash && curl evil.sh', 'a$(whoami)', 'a`id`', 'a|b', 'a>out']) {
+    for (const s of [
+      'lodash; rm -rf /',
+      'lodash && curl evil.sh',
+      'a$(whoami)',
+      'a`id`',
+      'a|b',
+      'a>out',
+      'left-pad@1 | whoami',
+      'left-pad@1 > owned.txt',
+      'left-pad@1 || calc',
+      'left-pad@1 < input.txt',
+    ]) {
       assert.throws(() => assertSafeSpec(s), /not a valid npm package spec/, s);
     }
+  });
+});
+
+describe('precheck: resolved lock parsing', () => {
+  it('reads direct, scoped, and transitive packages from a lockfile', () => {
+    const packages = parseResolvedPackageLock({
+      packages: {
+        '': { name: 'precheck', version: '1.0.0' },
+        'node_modules/alpha': { version: '1.2.3' },
+        'node_modules/@scope/beta': { version: '4.5.6' },
+        'node_modules/alpha/node_modules/gamma': { version: '7.8.9' },
+      },
+    });
+    assert.deepEqual(packages, [
+      { name: 'alpha', version: '1.2.3' },
+      { name: '@scope/beta', version: '4.5.6' },
+      { name: 'gamma', version: '7.8.9' },
+    ]);
+  });
+
+  it('fails closed when npm resolves no packages', () => {
+    assert.throws(
+      () => parseResolvedPackageLock({ packages: { '': { name: 'precheck', version: '1.0.0' } } }),
+      /result is incomplete/,
+    );
   });
 });
 
@@ -85,6 +122,17 @@ describe('precheck: assessPackage', () => {
     const r = assessPackage({ name: 'x', version: '1.0.0' }, { time: {}, versions: { '1.0.0': { license: 'MIT' } } }, NOW);
     assert.equal(r.ageHours, null);
     assert.equal(r.level, 'ok', 'unknown age alone is not a finding, but must not fabricate one either');
+  });
+
+  it('BLOCKS metadata that points the artifact at a different host', () => {
+    const p = packument('1.2.3', 5000);
+    p.versions['1.2.3'].dist = {
+      tarball: 'https://copycat.example/pkg-1.2.3.tgz',
+      integrity: 'sha512-safe-looking-value',
+    };
+    const r = assessPackage({ name: 'pkg', version: '1.2.3' }, p, NOW);
+    assert.equal(r.level, 'block');
+    assert.match(r.reasons.join(' '), /untrusted host/);
   });
 });
 

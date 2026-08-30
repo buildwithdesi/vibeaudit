@@ -12,6 +12,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { dirname } from 'node:path';
+import { findTrustedExecutable } from '../trusted-tools.js';
 
 const SECRET_INDICATORS = [
   /sk_live_[0-9a-zA-Z]{24,}/,
@@ -48,9 +49,21 @@ export const gitHistorySecrets = {
 
     try {
       const projectDir = dirname(file.path);
+      const git = findTrustedExecutable('git', projectDir);
+      if (!git) {
+        return [{
+          ruleId: 'git-history-secrets',
+          ruleName: 'Git History Secrets',
+          severity: 'warning',
+          message: 'Deep history scan was incomplete because a trusted Git executable was not found.',
+          file: '.git (history)',
+          line: 0,
+          fix: 'Install Git from a trusted source, ensure its absolute install directory is on PATH, then rerun with --deep.',
+        }];
+      }
       // Search recent git history for secret patterns (limit to last 50 commits for speed)
       const gitLog = execFileSync(
-        'git',
+        git,
         ['log', '--all', '-n', '50', '--diff-filter=D', '-p', '--', '*.env', '*.json', '*.js', '*.ts', '*.yaml', '*.yml'],
         { cwd: projectDir, encoding: 'utf-8', timeout: 10000 }
       );
@@ -72,7 +85,15 @@ export const gitHistorySecrets = {
         }
       }
     } catch {
-      // Git not available or command failed — skip silently
+      findings.push({
+        ruleId: 'git-history-secrets',
+        ruleName: 'Git History Secrets',
+        severity: 'warning',
+        message: 'Deep history scan failed. The result does not cover deleted secrets in Git history.',
+        file: '.git (history)',
+        line: 0,
+        fix: 'Run Git manually from a trusted installation, repair repository access, then rerun with --deep.',
+      });
     }
 
     return findings;

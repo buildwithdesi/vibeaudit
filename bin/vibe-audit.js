@@ -20,6 +20,7 @@
 import { resolve } from 'node:path';
 import { stat } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
+import { createInterface } from 'node:readline/promises';
 import { audit } from '../src/index.js';
 import { generateFixes } from '../src/fix.js';
 import { ALL_RULES } from '../src/rules/index.js';
@@ -27,10 +28,21 @@ import { CWE_MAP } from '../src/data/cwe-map.js';
 import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
 
 const green_ok = (t) => `[32m${t}[0m`;
-import { parseGitHubTarget, fetchRepoFiles } from '../src/github.js';
+import { parseGitHubTarget, fetchRepoFiles, resolveGitHubCommit } from '../src/github.js';
 import { BASELINE_IGNORE } from '../src/baseline-ignore.js';
 import { precheck } from '../src/precheck/index.js';
 import { closeAndSetExitCode } from '../src/precheck/close-and-exit.js';
+import { analyzeCommand } from '../src/guard/command.js';
+import {
+  createAgentIntegrityBaseline,
+  scanAgentControlPlane,
+  verifyAgentIntegrityBaseline,
+} from '../src/guard/control-plane.js';
+import {
+  applySkillInstallPlan,
+  createSkillInstallPlan,
+  readSkillMarkdown,
+} from '../src/skill.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -43,6 +55,13 @@ const { values, positionals } = parseArgs({
     'fix-file': { type: 'boolean' },
     'skip-sca': { type: 'boolean' },
     deep: { type: 'boolean' },
+    'trust-target-config': { type: 'boolean' },
+    baseline: { type: 'string' },
+    command: { type: 'string' },
+    stdin: { type: 'boolean' },
+    'i-reviewed-these-files': { type: 'boolean' },
+    only: { type: 'string' },
+    gitleaks: { type: 'boolean' },
     'list-rules': { type: 'boolean' },
     precheck: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
@@ -72,6 +91,16 @@ ${bold('OPTIONS')}
   ${cyan('--precheck <pkg>')}                        Vet a package BEFORE installing it
   ${cyan('-h, --help')}                              Show this help
   ${cyan('-v, --version')}                           Show version
+  ${cyan('--trust-target-config')}                   Apply the scanned repo's config and inline suppressions
+
+${bold('AGENT SHIELD')}
+  ${cyan('vibeaudit agent scan <backup>')}           Offline, fail-closed control-file scan
+  ${cyan('  --gitleaks')}                            Add local secret scanning, fail if unavailable
+  ${cyan('vibeaudit agent baseline <backup>')}       Save reviewed hashes outside the backup
+  ${cyan('vibeaudit agent verify <backup>')}         Detect added, changed, or deleted controls
+  ${cyan('vibeaudit command inspect --stdin')}       Inspect a pasted command without running it
+  ${cyan('vibeaudit skill plan')}                    Preview skill hashes and exact diffs
+  ${cyan('vibeaudit skill install')}                 Confirm, write, verify, and trust the skill
 
 ${bold('EXAMPLES')}
   ${dim('# Audit current directory')}
@@ -113,6 +142,149 @@ if (values.version) {
   const pkg = require('../package.json');
   console.log(pkg.version);
   process.exit(0);
+}
+
+// Agent Shield commands are isolated from the normal project scanner. They do
+// not load configuration or suppression rules from the inspected target.
+if (positionals[0] === 'agent') {
+  const action = positionals[1];
+  const target = positionals[2];
+  try {
+    if (!target) throw new Error(`agent ${action || '<action>'} requires a file or directory path.`);
+    let report;
+    if (action === 'scan') {
+      report = scanAgentControlPlane(target, { externalTools: values.gitleaks ? ['gitleaks'] : [] });
+      process.exitCode = report.decision === 'pass' ? 0 : report.decision === 'review' ? 3 : 4;
+    } else if (action === 'baseline') {
+      if (!values.baseline) throw new Error('agent baseline requires --baseline <outside-path>.');
+      if (!values['i-reviewed-these-files']) {
+        throw new Error('Refusing to save trusted hashes until --i-reviewed-these-files is supplied after manual review.');
+      }
+      report = createAgentIntegrityBaseline(target, values.baseline);
+      process.exitCode = 0;
+    } else if (action === 'verify') {
+      if (!values.baseline) throw new Error('agent verify requires --baseline <path>.');
+      report = verifyAgentIntegrityBaseline(target, values.baseline);
+      process.exitCode = report.ok ? 0 : 4;
+    } else {
+      throw new Error('Unknown agent action. Use scan, baseline, or verify.');
+    }
+    if (values.format === 'json') console.log(JSON.stringify(report, null, 2));
+    else if (action === 'scan') {
+      console.log([
+        `Decision: ${report.decision.toUpperCase()}`,
+        `Scanned: ${report.coverage.scanned}`,
+        `Coverage: ${report.coverage.complete ? 'complete' : 'incomplete'}`,
+        ...report.findings.map((finding) => `${finding.severity.toUpperCase()}: ${finding.file}:${finding.line} ${finding.message}`),
+        ...report.coverage.errors.map((error) => `ERROR: ${error}`),
+        ...report.adapters.results.flatMap((adapter) => [
+          `${adapter.tool}: ${adapter.status.toUpperCase()}${adapter.coverage.reason ? `, ${adapter.coverage.reason}` : ''}`,
+          ...adapter.findings.map((finding) => `CRITICAL: ${finding.file}:${finding.startLine} ${finding.description} (${finding.ruleId})`),
+        ]),
+      ].join('\n'));
+    } else if (action === 'baseline') {
+      console.log(`Saved ${report.trusted} reviewed SHA-256 hashes to ${report.baselinePath}.`);
+    } else {
+      console.log([
+        `Decision: ${report.decision.toUpperCase()}`,
+        `Added: ${report.added.length}`,
+        `Changed: ${report.changed.length}`,
+        `Missing: ${report.missing.length}`,
+        ...report.added.map((file) => `ADDED: ${file}`),
+        ...report.changed.map((file) => `CHANGED: ${file}`),
+        ...report.missing.map((file) => `MISSING: ${file}`),
+        ...report.coverage.errors.map((error) => `ERROR: ${error}`),
+      ].join('\n'));
+    }
+  } catch (error) {
+    console.error(`Agent Shield: ${error.message}`);
+    process.exitCode = 4;
+  }
+  process.exit(process.exitCode);
+}
+
+if (positionals[0] === 'command') {
+  try {
+    if (positionals[1] !== 'inspect') throw new Error('Unknown command action. Use command inspect.');
+    let commandText = values.command || positionals.slice(2).join(' ');
+    if (values.stdin) {
+      let size = 0;
+      const chunks = [];
+      for await (const chunk of process.stdin) {
+        size += Buffer.byteLength(chunk);
+        if (size > 1024 * 1024) throw new Error('Command input exceeds the 1 MiB safety limit.');
+        chunks.push(chunk);
+      }
+      commandText = chunks.join('');
+    }
+    if (!commandText.trim()) throw new Error('command inspect requires --stdin or --command <text>.');
+    const report = analyzeCommand(commandText);
+    if (values.format === 'json') console.log(JSON.stringify(report, null, 2));
+    else console.log(`${report.decision.toUpperCase()}: ${report.summary || 'No checked danger pattern found.'}`);
+    process.exit(report.decision === 'allow' ? 0 : report.decision === 'review' ? 3 : 4);
+  } catch (error) {
+    console.error(`Agent Shield: ${error.message}`);
+    process.exit(4);
+  }
+}
+
+if (positionals[0] === 'skill') {
+  try {
+    const action = positionals[1] || 'plan';
+    if (action === 'print') {
+      console.log(await readSkillMarkdown());
+      process.exit(0);
+    }
+    const only = values.only?.split(',').map((value) => value.trim()).filter(Boolean) || [];
+    const plan = await createSkillInstallPlan({ only });
+    const visiblePlan = {
+      sourcePath: plan.sourcePath,
+      sourceHash: plan.sourceHash,
+      sourceFindings: plan.sourceFindings,
+      targets: plan.targets.map((target) => ({
+        id: target.id,
+        displayName: target.displayName,
+        installPath: target.installPath,
+        action: target.action,
+        beforeHash: target.beforeHash,
+        sourceHash: plan.sourceHash,
+        currentFindings: target.currentFindings || [],
+        diff: target.diff,
+      })),
+    };
+    if (values.format === 'json') console.log(JSON.stringify(visiblePlan, null, 2));
+    else {
+      console.log(`Packaged skill SHA-256: ${plan.sourceHash}`);
+      for (const target of visiblePlan.targets) {
+        console.log(`\n${target.displayName}: ${target.action.toUpperCase()}\nTarget: ${target.installPath}\nCurrent SHA-256: ${target.beforeHash || 'missing'}\nNew SHA-256: ${plan.sourceHash}`);
+        for (const finding of target.currentFindings) {
+          console.log(`${finding.severity.toUpperCase()}: ${finding.file}:${finding.line} ${finding.message}`);
+        }
+        if (target.diff) console.log(`\n${target.diff}`);
+      }
+    }
+    if (action === 'plan' || action === 'status') process.exit(0);
+    if (action !== 'install') throw new Error('Unknown skill action. Use plan, install, status, or print.');
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      throw new Error('skill install requires a person at an interactive terminal. Run skill plan first.');
+    }
+    const prompt = createInterface({ input: process.stdin, output: process.stdout });
+    let confirmation;
+    try {
+      confirmation = await prompt.question(`\nType INSTALL ${plan.sourceHash} to apply this exact reviewed plan: `);
+    } finally {
+      prompt.close();
+    }
+    if (confirmation !== `INSTALL ${plan.sourceHash}`) throw new Error('Skill installation cancelled.');
+    const results = await applySkillInstallPlan(plan, { confirmedSourceHash: plan.sourceHash });
+    for (const result of results) {
+      console.log(`${result.id}: ${result.status}${result.verifiedHash ? `, verified ${result.verifiedHash}` : ''}${result.backupPath ? `, backup ${result.backupPath}` : ''}`);
+    }
+    process.exit(0);
+  } catch (error) {
+    console.error(`Agent Shield installer: ${error.message}`);
+    process.exit(4);
+  }
 }
 
 // ??? List Rules ???????????????????????????????????????????????????????????????
@@ -168,7 +340,7 @@ if (values.precheck) {
   }
 
   if (report.exitCode === 0) {
-    console.log(green_ok('  Nothing suspicious. Safe to install.'));
+    console.log(green_ok('  No checked warning signs found. This does not prove the package is safe.'));
   } else if (report.exitCode === 1) {
     console.log('');
     console.log(yellow(`  ${report.warned.length} package(s) worth a look. Not blocking.`));
@@ -192,6 +364,7 @@ const cliOptions = {
   strict: values.strict,
   skipSca: values['skip-sca'],
   deep: values.deep,
+  trustTargetConfig: values['trust-target-config'],
   // Baseline ignore, always applied on top of resolved config ? matches scripts/morning-scan.js
   // so a self-scan never depends on .vibe-audit.json being read/resolved correctly to exclude
   // reports/ and test fixtures.
@@ -210,7 +383,9 @@ try {
     // stderr ? keep stdout clean for --format json pipelines
     console.error(cyan(`\n  ??  Scanning GitHub repo: ${label}\n`));
     targetDir = `github://${label}`;
-    cliOptions.fileSource = fetchRepoFiles(gh.owner, gh.repo);
+    const snapshot = await resolveGitHubCommit(gh.owner, gh.repo);
+    cliOptions.remoteRef = snapshot;
+    cliOptions.fileSource = fetchRepoFiles(gh.owner, gh.repo, { commitSha: snapshot });
     cliOptions.skipSca = true; // SCA needs local package-lock.json, skip for remote
   } else {
     targetDir = resolve(rawTarget);

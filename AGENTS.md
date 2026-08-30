@@ -1,3 +1,4 @@
+<!-- vibe-audit-ignore download-execution: reviewed local development commands, no remote execution -->
 # AGENTS.md
 
 ## Cursor Cloud specific instructions
@@ -7,18 +8,17 @@ scans a codebase for security issues. There is no long-running server or GUI —
 "application" is the `vibeaudit` CLI plus its report generators. The update script runs
 `npm ci`, so dependencies are already installed when a session starts.
 
-- Requires Node `>=18.3.0` (CI uses Node 20; this VM runs Node 22 — both work).
+- Requires Node `>=18.19.0` (CI checks Node 18, 20, and 22).
 - Standard commands live in `package.json` scripts:
   - Lint: `npm run lint`
-  - Tests: `npm test` (Node's built-in test runner, ~328 tests)
+  - Tests: `npm test` (Node's built-in test runner, more than 480 tests)
   - Self-audit: `npm run audit:self` (runs the scanner on this repo)
 - Run the CLI directly with `node bin/vibe-audit.js <target> [options]`, e.g.
   `node bin/vibe-audit.js . --skip-sca`. Target can be a local dir or a GitHub `owner/repo`.
 - Non-obvious: `--format html` does **not** print HTML to stdout. It writes
   `vibe-audit-report.html` into the *scanned target directory* and prints only a summary
   to stdout. Grab the report from the target dir, not from redirected stdout.
-- `npm run audit:self` normally exits non-zero (grade F) because `npm audit` (SCA) reports
-  known-vulnerable transitive dev dependencies. That is expected, not a setup failure; the
-  static code rules on this repo are clean. Use `--skip-sca` to exclude dependency findings.
+- `npm run audit:self` must exit zero. It trusts this repository's reviewed config while
+  untrusted scan targets cannot disable rules or inline suppressions by default.
 - The `ui` / `ui:dev` package scripts reference `src/web/server.js`, which does not exist in
   the repo — there is no web UI to run. Ignore those scripts.

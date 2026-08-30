@@ -22,6 +22,7 @@ const DEFAULTS = {
   customAuthGuards: [],
   disableForPaths: {},
   allowedLicenses: [],
+  allowInlineSuppressions: false,
 };
 
 /**

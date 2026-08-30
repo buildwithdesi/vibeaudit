@@ -7,7 +7,8 @@
     "node": ">=18.19.0"
   },
   "bin": {
-    "vibeaudit": "./bin/vibe-audit.js"
+    "vibeaudit": "./bin/vibe-audit.js",
+    "vibeguard": "./bin/vibeguard.js"
   },
   "main": "./src/index.js",
   "exports": {
@@ -16,13 +17,14 @@
   "files": [
     "bin/",
     "src/",
+    "scripts/install-vibeguard.ps1",
     "LICENSE",
     "README.md"
   ],
   "scripts": {
     "test": "node --test tests/*.test.js tests/rules/*.test.js",
     "lint": "eslint src/ bin/ tests/ scripts/",
-    "audit:self": "node bin/vibe-audit.js .",
+    "audit:self": "node bin/vibe-audit.js . --trust-target-config",
     "ui": "node src/web/server.js",
     "ui:dev": "node --watch src/web/server.js",
     "prepublishOnly": "npm test && npm run lint"

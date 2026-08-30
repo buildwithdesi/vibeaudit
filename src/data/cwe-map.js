@@ -133,4 +133,9 @@ export const CWE_MAP = {
 
   // ── SCA ────────────────────────────────────────────────────────────────────
   'vulnerable-dependency':        { cweId: 'CWE-1035', cvssScore: 7.5, owaspCategory: 'A06:2021' },
+
+  // ── Agent control and installers ───────────────────────────────────────────
+  'agent-control-injection':      { cweId: 'CWE-506', cvssScore: 9.8, owaspCategory: 'A08:2021' },
+  'download-execution':           { cweId: 'CWE-494', cvssScore: 9.8, owaspCategory: 'A08:2021' },
+  'scan-incomplete':              { cweId: 'CWE-754', cvssScore: 5.3, owaspCategory: 'A09:2021' },
 };
