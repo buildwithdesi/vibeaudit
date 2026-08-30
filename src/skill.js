@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 import { analyzeAgentControlContent } from './guard/agent-files.js';
 import { trustOneAgentFile } from './guard/baseline.js';
+import { verifyOfficialSkillBundle } from './agent-bundle.js';
 
 const MAX_SKILL_BYTES = 2 * 1024 * 1024;
 const AGENTS = [
@@ -80,9 +81,10 @@ export async function readSkillMarkdown() {
 }
 
 /** Build a no-write preview that binds every target to its current hash. */
-export async function createSkillInstallPlan({ home = homedir(), only = [] } = {}) {
+export async function createSkillInstallPlan({ home = homedir(), only = [], signatureOptions = {} } = {}) {
   const unknown = only.filter((id) => !AGENTS.some((agent) => agent.id === id));
   if (unknown.length) throw new Error(`Unsupported agent target: ${unknown.join(', ')}`);
+  const publisherVerification = verifyOfficialSkillBundle(signatureOptions);
   const source = await readSkillMarkdown();
   const sourceHash = hash(source);
   const sourceFindings = analyzeAgentControlContent(source, sourcePath());
@@ -103,7 +105,7 @@ export async function createSkillInstallPlan({ home = homedir(), only = [] } = {
       currentFindings: current.exists ? analyzeAgentControlContent(current.content, agent.installPath) : [],
     };
   }));
-  return { schemaVersion: 1, home: resolve(home), sourcePath: sourcePath(), sourceHash, sourceFindings, targets };
+  return { schemaVersion: 1, home: resolve(home), sourcePath: sourcePath(), sourceHash, sourceFindings, publisherVerification, targets };
 }
 
 async function rollbackTarget(target, backupPath) {
@@ -112,9 +114,13 @@ async function rollbackTarget(target, backupPath) {
 }
 
 /** Apply only the exact plan and source hash the person just reviewed. */
-export async function applySkillInstallPlan(plan, { confirmedSourceHash, baselinePath } = {}) {
+export async function applySkillInstallPlan(plan, { confirmedSourceHash, baselinePath, signatureOptions = {} } = {}) {
   if (!plan || plan.schemaVersion !== 1) throw new Error('Unsupported skill install plan.');
   if (confirmedSourceHash !== plan.sourceHash) throw new Error('The confirmation hash does not match the reviewed skill source.');
+  const publisherVerification = verifyOfficialSkillBundle(signatureOptions);
+  if (publisherVerification.baseline.files[0]?.sha256 !== plan.sourceHash) {
+    throw new Error('The verified official skill digest no longer matches the reviewed install plan. Run the preview again.');
+  }
   const source = await readSkillMarkdown();
   if (hash(source) !== plan.sourceHash) throw new Error('The packaged skill changed after the install preview. Run the preview again.');
   const allowedTargets = new Map(detectAgents(plan.home).map((agent) => [agent.id, agent.installPath]));

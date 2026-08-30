@@ -17,10 +17,75 @@ async function fakeHome(agentDirs = []) {
   return home;
 }
 
+function trustedSignatureOptions(calls = []) {
+  return {
+    verifyArtifact(artifact, bundle) {
+      calls.push([artifact, bundle]);
+      return {
+        tool: 'cosign',
+        status: 'verified',
+        verified: true,
+        artifact,
+        bundle,
+        publisherIdentity: 'official release workflow',
+        oidcIssuer: 'GitHub Actions',
+        transparencyLogVerified: true,
+      };
+    },
+  };
+}
+
+test('skill install re-verifies signed release artifacts after plan review', async () => {
+  const home = await fakeHome(['.claude']);
+  const baselinePath = join(home, 'security-state', 'baseline.json');
+  const verificationCalls = [];
+  const signatureOptions = trustedSignatureOptions(verificationCalls);
+  try {
+    const plan = await createSkillInstallPlan({ home, only: ['claude'], signatureOptions });
+    assert.equal(verificationCalls.length, 2);
+    await applySkillInstallPlan(plan, {
+      confirmedSourceHash: plan.sourceHash,
+      baselinePath,
+      signatureOptions,
+    });
+    assert.equal(verificationCalls.length, 4);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+function createTrustedPlan(options) {
+  return createSkillInstallPlan({ ...options, signatureOptions: trustedSignatureOptions() });
+}
+
+test('skill plan exposes verified publisher and transparency evidence before installation', async () => {
+  const home = await fakeHome(['.claude']);
+  try {
+    const plan = await createTrustedPlan({ home, only: ['claude'] });
+    assert.equal(plan.publisherVerification.verified, true);
+    assert.equal(plan.publisherVerification.transparencyLogVerified, true);
+    assert.equal(plan.publisherVerification.baseline.files[0].sha256, plan.sourceHash);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('skill plan refuses unsigned source-checkout artifacts', async () => {
+  const home = await fakeHome(['.claude']);
+  try {
+    await assert.rejects(
+      createSkillInstallPlan({ home, only: ['claude'] }),
+      /signature bundle is missing/i,
+    );
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 test('skill plan shows source and target hashes before any write', async () => {
   const home = await fakeHome(['.claude']);
   try {
-    const plan = await createSkillInstallPlan({ home, only: ['claude'] });
+    const plan = await createTrustedPlan({ home, only: ['claude'] });
     assert.match(plan.sourceHash, /^[a-f0-9]{64}$/);
     assert.equal(plan.targets[0].action, 'install');
     assert.equal(plan.targets[0].beforeHash, null);
@@ -34,12 +99,12 @@ test('skill install requires the exact reviewed source hash and verifies its wri
   const home = await fakeHome(['.claude']);
   const baselinePath = join(home, 'security-state', 'baseline.json');
   try {
-    const plan = await createSkillInstallPlan({ home, only: ['claude'] });
+    const plan = await createTrustedPlan({ home, only: ['claude'] });
     await assert.rejects(
       applySkillInstallPlan(plan, { confirmedSourceHash: 'wrong', baselinePath }),
       /confirmation hash/i,
     );
-    const result = await applySkillInstallPlan(plan, { confirmedSourceHash: plan.sourceHash, baselinePath });
+    const result = await applySkillInstallPlan(plan, { confirmedSourceHash: plan.sourceHash, baselinePath, signatureOptions: trustedSignatureOptions() });
     assert.equal(result[0].status, 'installed');
     assert.equal(result[0].verifiedHash, plan.sourceHash);
     assert.equal(await readFile(plan.targets[0].installPath, 'utf8'), await readSkillMarkdown());
@@ -53,17 +118,17 @@ test('modified skill produces a reviewable diff and a backup before replacement'
   const home = await fakeHome(['.codex']);
   const baselinePath = join(home, 'security-state', 'baseline.json');
   try {
-    let plan = await createSkillInstallPlan({ home, only: ['codex'] });
-    await applySkillInstallPlan(plan, { confirmedSourceHash: plan.sourceHash, baselinePath });
+    let plan = await createTrustedPlan({ home, only: ['codex'] });
+    await applySkillInstallPlan(plan, { confirmedSourceHash: plan.sourceHash, baselinePath, signatureOptions: trustedSignatureOptions() });
     const target = plan.targets[0].installPath;
     await writeFile(target, '# My edited skill\nKeep this note.\n');
 
-    plan = await createSkillInstallPlan({ home, only: ['codex'] });
+    plan = await createTrustedPlan({ home, only: ['codex'] });
     assert.equal(plan.targets[0].action, 'replace');
     assert.match(plan.targets[0].diff, /- # My edited skill/);
     assert.match(plan.targets[0].diff, /\+ ---/);
 
-    const result = await applySkillInstallPlan(plan, { confirmedSourceHash: plan.sourceHash, baselinePath });
+    const result = await applySkillInstallPlan(plan, { confirmedSourceHash: plan.sourceHash, baselinePath, signatureOptions: trustedSignatureOptions() });
     assert.equal(result[0].status, 'updated');
     assert.ok(result[0].backupPath);
     assert.equal(await readFile(result[0].backupPath, 'utf8'), '# My edited skill\nKeep this note.\n');
@@ -75,12 +140,16 @@ test('modified skill produces a reviewable diff and a backup before replacement'
 test('skill installer refuses a stale plan when a target changes after review', async () => {
   const home = await fakeHome(['.claude']);
   try {
-    const plan = await createSkillInstallPlan({ home, only: ['claude'] });
+    const plan = await createTrustedPlan({ home, only: ['claude'] });
     const target = plan.targets[0].installPath;
     await mkdir(join(home, '.claude', 'skills', 'vibeaudit'), { recursive: true });
     await writeFile(target, 'changed after review');
     await assert.rejects(
-      applySkillInstallPlan(plan, { confirmedSourceHash: plan.sourceHash, baselinePath: join(home, 'baseline.json') }),
+      applySkillInstallPlan(plan, {
+        confirmedSourceHash: plan.sourceHash,
+        baselinePath: join(home, 'baseline.json'),
+        signatureOptions: trustedSignatureOptions(),
+      }),
       /changed after the install preview/i,
     );
   } finally {

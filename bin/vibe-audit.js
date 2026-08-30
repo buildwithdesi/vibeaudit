@@ -103,8 +103,8 @@ ${bold('AGENT SHIELD')}
   ${cyan('vibeaudit agent baseline <backup>')}       Save reviewed hashes outside the backup
   ${cyan('vibeaudit agent verify <backup>')}         Detect added, changed, or deleted controls
   ${cyan('vibeaudit command inspect --stdin')}       Inspect a pasted command without running it
-  ${cyan('vibeaudit skill plan')}                    Preview skill hashes and exact diffs
-  ${cyan('vibeaudit skill install')}                 Confirm, write, verify, and trust the skill
+  ${cyan('vibeaudit skill plan')}                    Verify publisher, transparency proof, hashes, and diffs
+  ${cyan('vibeaudit skill install')}                 Reverify, confirm, write, and trust the official skill
 
 ${bold('EXAMPLES')}
   ${dim('# Audit current directory')}
@@ -245,6 +245,13 @@ if (positionals[0] === 'skill') {
       sourcePath: plan.sourcePath,
       sourceHash: plan.sourceHash,
       sourceFindings: plan.sourceFindings,
+      publisherVerification: {
+        verified: plan.publisherVerification.verified,
+        transparencyLogVerified: plan.publisherVerification.transparencyLogVerified,
+        publisherIdentity: plan.publisherVerification.publisherIdentity,
+        oidcIssuer: plan.publisherVerification.oidcIssuer,
+        baseline: plan.publisherVerification.baseline,
+      },
       targets: plan.targets.map((target) => ({
         id: target.id,
         displayName: target.displayName,
@@ -258,6 +265,9 @@ if (positionals[0] === 'skill') {
     };
     if (values.format === 'json') console.log(JSON.stringify(visiblePlan, null, 2));
     else {
+      console.log(`Publisher signature: VERIFIED`);
+      console.log(`Transparency proof: VERIFIED`);
+      console.log(`Publisher policy: ${visiblePlan.publisherVerification.publisherIdentity}`);
       console.log(`Packaged skill SHA-256: ${plan.sourceHash}`);
       for (const target of visiblePlan.targets) {
         console.log(`\n${target.displayName}: ${target.action.toUpperCase()}\nTarget: ${target.installPath}\nCurrent SHA-256: ${target.beforeHash || 'missing'}\nNew SHA-256: ${plan.sourceHash}`);

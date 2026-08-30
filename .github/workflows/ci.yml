@@ -29,6 +29,9 @@ jobs:
 
       - run: npm ci --ignore-scripts
 
+      - name: Verify official skill baseline is current
+        run: npm run bundle:check
+
       - name: Lint
         run: npm run lint
 
@@ -124,6 +127,21 @@ jobs:
             echo "Tagged commit is not the current origin/main commit."
             exit 1
           }
+
+      - name: Install pinned Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.0.6
+
+      - name: Sign official agent skill and hash baseline
+        shell: bash
+        run: |
+          npm run bundle:check
+          cosign sign-blob --yes --bundle src/data/agent-skill.md.sigstore.json src/data/agent-skill.md
+          cosign sign-blob --yes --bundle src/data/agent-skill-baseline.json.sigstore.json src/data/agent-skill-baseline.json
+
+      - name: Verify publisher identity, digests, and transparency proofs
+        run: node scripts/verify-agent-release-assets.js
 
       - name: Inspect the publish artifact without scripts
         run: npm pack --dry-run --json --ignore-scripts
