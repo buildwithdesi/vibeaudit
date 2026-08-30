@@ -66,6 +66,7 @@ const { values, positionals } = parseArgs({
     'i-reviewed-these-files': { type: 'boolean' },
     only: { type: 'string' },
     gitleaks: { type: 'boolean' },
+    semgrep: { type: 'boolean' },
     'list-rules': { type: 'boolean' },
     precheck: { type: 'string' },
     help: { type: 'boolean', short: 'h' },
@@ -103,6 +104,7 @@ ${bold('AGENT SHIELD')}
   ${cyan('vibeaudit doctor')}                        Check local security tools without installing anything
   ${cyan('vibeaudit agent scan <backup>')}           Offline, fail-closed control-file scan
   ${cyan('  --gitleaks')}                            Add local secret scanning, fail if unavailable
+  ${cyan('  --semgrep')}                             Add optional data-flow scanning, fail if unavailable
   ${cyan('vibeaudit agent baseline <backup>')}       Save reviewed hashes outside the backup
   ${cyan('vibeaudit agent verify <backup>')}         Detect added, changed, or deleted controls
   ${cyan('vibeaudit command inspect --stdin')}       Inspect a pasted command without running it
@@ -167,7 +169,10 @@ if (positionals[0] === 'agent') {
     if (!target) throw new Error(`agent ${action || '<action>'} requires a file or directory path.`);
     let report;
     if (action === 'scan') {
-      report = scanAgentControlPlane(target, { externalTools: values.gitleaks ? ['gitleaks'] : [] });
+      const externalTools = [];
+      if (values.gitleaks) externalTools.push('gitleaks');
+      if (values.semgrep) externalTools.push('semgrep');
+      report = scanAgentControlPlane(target, { externalTools });
       process.exitCode = report.decision === 'pass' ? 0 : report.decision === 'review' ? 3 : 4;
     } else if (action === 'baseline') {
       if (!values.baseline) throw new Error('agent baseline requires --baseline <outside-path>.');
@@ -193,7 +198,7 @@ if (positionals[0] === 'agent') {
         ...report.coverage.errors.map((error) => `ERROR: ${error}`),
         ...report.adapters.results.flatMap((adapter) => [
           `${adapter.tool}: ${adapter.status.toUpperCase()}${adapter.coverage.reason ? `, ${adapter.coverage.reason}` : ''}`,
-          ...adapter.findings.map((finding) => `CRITICAL: ${finding.file}:${finding.startLine} ${finding.description} (${finding.ruleId})`),
+          ...adapter.findings.map((finding) => `${(finding.severity || 'critical').toUpperCase()}: ${finding.file}:${finding.startLine} ${finding.description} (${finding.ruleId})`),
         ]),
       ].join('\n'));
     } else if (action === 'baseline') {

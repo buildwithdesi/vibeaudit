@@ -18,6 +18,15 @@ vibeaudit agent baseline <backup-path> --baseline <path-outside-backup> --i-revi
 vibeaudit agent verify <backup-path> --baseline <path-outside-backup>
 ```
 
+For a deeper optional pass over agent scripts and hooks, add `--semgrep`. It
+uses bundled offline rules against staged JavaScript, TypeScript, and Python
+files only. A missing or failed Semgrep executable means coverage is
+incomplete and the restore must stop:
+
+```text
+vibeaudit agent scan <backup-path> --semgrep
+```
+
 Stop on a blocking result, incomplete coverage, unreadable file, changed hash,
 new control file, or missing control file. Do not copy restored agent controls
 into an active agent directory until the scan passes and a person reviews them.

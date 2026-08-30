@@ -129,6 +129,7 @@ export function scanAgentControlPlane(rootPath, options = {}) {
       adapterOptions: {
         ...(options.adapterOptions || {}),
         gitleaks: { targetDir: root, ...(options.adapterOptions?.gitleaks || {}) },
+        semgrep: { targetDir: root, ...(options.adapterOptions?.semgrep || {}) },
       },
     },
   );

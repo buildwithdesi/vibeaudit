@@ -97,6 +97,14 @@ Add Gitleaks when it is already installed locally. Vibe Audit does not download 
 vibeaudit agent scan "D:\Recovered Backup" --gitleaks
 ```
 
+Add Semgrep when you need a deeper data-flow pass over agent scripts and hooks. It is opt-in, scans only staged JavaScript, TypeScript, and Python files, and uses bundled rules with metrics disabled. Vibe Audit does not download rules, load target configuration, or execute the staged files. A missing or failed Semgrep executable is a blocking incomplete scan.
+
+```powershell
+vibeaudit agent scan "D:\Recovered Backup" --semgrep
+```
+
+The bundled rules look for credential or file data flowing into network and process-execution sinks. Semgrep's taint mode provides this flow-aware coverage beyond pattern matching. See the [Semgrep taint-mode guide](https://semgrep.dev/blog/2022/demystifying-taint-mode/) for the underlying analysis model.
+
 After reading every listed control file, save its SHA-256 inventory somewhere outside the backup. Verification detects added, changed, and deleted controls.
 
 ```powershell
@@ -547,6 +555,13 @@ Options:
       --list-rules                            Show all available rules
   -h, --help                                  Show help
   -v, --version                               Show version
+
+Agent Shield:
+  vibeaudit agent scan <backup>               Offline, fail-closed control-file scan
+      --gitleaks                              Add local secret scanning, fail if unavailable
+      --semgrep                               Add optional data-flow scanning, fail if unavailable
+  vibeaudit agent baseline <backup>            Save reviewed hashes outside the backup
+  vibeaudit agent verify <backup>              Detect added, changed, or deleted controls
 ```
 
 ---

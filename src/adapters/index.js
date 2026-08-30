@@ -1,8 +1,9 @@
 import { runGitleaksAdapter } from './gitleaks.js';
+import { runSemgrepAdapter } from './semgrep.js';
 
-const DEFAULT_ADAPTERS = { gitleaks: runGitleaksAdapter };
+const DEFAULT_ADAPTERS = { gitleaks: runGitleaksAdapter, semgrep: runSemgrepAdapter };
 
-/** One registry keeps future Semgrep, Trivy, or OS scanners behind one seam. */
+/** Keep optional external scanners behind one explicit, testable seam. */
 export function runSecurityAdapters(files, { enabled = [], adapters = DEFAULT_ADAPTERS, adapterOptions = {} } = {}) {
   const results = [];
   for (const name of enabled) {

@@ -27,8 +27,8 @@ test('official skill baseline deterministically binds package version, path, siz
   assert.deepEqual(Object.keys(committed), ['schemaVersion', 'kind', 'publisher', 'package', 'version', 'files']);
   assert.deepEqual(committed.files, [{
     path: 'src/data/agent-skill.md',
-    sha256: '102cfe2f18b14bfece6406050218e8db70300be0b13d9b931a568be30e99b269',
-    size: 1788,
+    sha256: '310eede00da410197f525c732e1f506dc475e41509aea2b3c928be55e5b3c83d',
+    size: 2108,
   }]);
 });
 
