@@ -29,7 +29,7 @@ function sanitizeMarkdown(str) {
   return sanitizeTerminal(str)
     .replace(/[\r\n\u2028\u2029]/g, ' ')
     .replace(/`/g, '\\u0060')
-    .replace(/([\\*_{}\[\]()#+.!|>~-])/g, '\\$1');
+    .replace(/[\\*_{}\[\]()#+.!|>~-]/g, (char) => `\\${char}`);
 }
 
 /**

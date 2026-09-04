@@ -56,6 +56,8 @@ const SPEND_AUTOMATION_RE = /(?:\b(?:pay|spend|fund|charge|wallet)\b[^\r\n]{0,10
 const DANGEROUS_MODE_RE = /\b(?:claude|codex)\b[^\r\n]{0,160}--dangerously-skip-permissions\b/i;
 const PERSISTENCE_RE = /(?:hooks?\.json|settings(?:\.local)?\.json|managed-settings|powershell profile|startup folder|scheduled task|schtasks|registry run|currentversion\\run|crontab|launchagent|every time (?:the )?(?:ai|agent|claude|codex)|on (?:every )?startup)/i;
 const APPROVAL_BYPASS_RE = /(?:\bvibeguard\b[\s\S]{0,80}\b(?:trust-(?:file|current)|approve-command|baseline)\b|\bmodify\b[\s\S]{0,80}\b(?:hooks?\.json|settings\.json)\b|\b(?:remove|disable)\b[\s\S]{0,80}\bvibeguard\b)/i;
+const ROOTS_WITH_AGENTS = new Set(['.claude', '.codex', '.agents', '.cursor']);
+const ROOTS_NO_AGENTS = new Set(['.claude', '.codex', '.cursor']);
 
 /** Return capability evidence so linked files can be evaluated as one chain. */
 export function identifyAgentCapabilities(content) {
@@ -93,6 +95,17 @@ export function normalizeAgentPath(value) {
   return String(value || '').replace(/\\/g, '/').toLowerCase();
 }
 
+function hasScopedSubdir(normalizedPath, roots, subdir) {
+  const parts = normalizedPath.split('/').filter(Boolean);
+  for (let index = 0; index < parts.length - 1; index++) {
+    if (!roots.has(parts[index])) continue;
+    for (let nested = index + 1; nested < parts.length - 1; nested++) {
+      if (parts[nested] === subdir) return true;
+    }
+  }
+  return false;
+}
+
 /** @param {string} filePath */
 export function isAgentControlPath(filePath) {
   const normalized = normalizeAgentPath(filePath);
@@ -108,11 +121,11 @@ export function isAgentControlPath(filePath) {
       /(?:^|\/)\.codex(?:\/|$)/.test(normalized)) return true;
   const extension = extname(name);
   const isAgentCode = AGENT_CODE_EXTENSIONS.has(extension);
-  const inSkills = /(?:^|\/)(?:\.claude|\.codex|\.agents|\.cursor)\/(?:[^/]+\/)*skills\//.test(normalized);
+  const inSkills = hasScopedSubdir(normalized, ROOTS_WITH_AGENTS, 'skills');
   if (inSkills) return name === 'skill.md' || isAgentCode;
-  const inHooks = /(?:^|\/)(?:\.claude|\.codex|\.cursor)\/(?:[^/]+\/)*hooks\//.test(normalized);
+  const inHooks = hasScopedSubdir(normalized, ROOTS_NO_AGENTS, 'hooks');
   if (inHooks) return isAgentCode;
-  const inPlugins = /(?:^|\/)(?:\.claude|\.codex|\.cursor)\/(?:[^/]+\/)*plugins\//.test(normalized);
+  const inPlugins = hasScopedSubdir(normalized, ROOTS_NO_AGENTS, 'plugins');
   if (inPlugins && ['plugin.json', 'plugin.lock.json', 'installed_plugins.json', '.mcp.json'].includes(name)) return true;
   const inCommandsOrAgents = /(?:^|\/)\.claude\/(?:commands|agents)\//.test(normalized);
   if (inCommandsOrAgents) return extension === '.md' || isAgentCode;
@@ -128,7 +141,7 @@ export function isHighAuthorityAgentPath(filePath) {
   const name = basename(normalized);
   if (AGENT_INSTRUCTION_NAMES.has(name)) return true;
   if (AGENT_CONFIG_NAMES.has(name) && isAgentControlPath(normalized)) return true;
-  return /(?:^|\/)(?:\.claude|\.codex|\.cursor)\/(?:[^/]+\/)*hooks\//.test(normalized) && isAgentControlPath(normalized);
+  return hasScopedSubdir(normalized, ROOTS_NO_AGENTS, 'hooks') && isAgentControlPath(normalized);
 }
 
 /**
