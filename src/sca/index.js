@@ -3,14 +3,18 @@
  *
  * Checks project dependencies for known vulnerabilities using:
  *   - `npm audit --json` for Node.js projects
- *   - package.json parsing for dependency enumeration
+ *   - package.json parsing for fresh lockfile and pinning signals
+ *   - OSV-Scanner for independent multi-ecosystem coverage
  *
  * Returns findings in the same format as SAST rules.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { execSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
+import { createIsolatedNpmEnv, findTrustedNpmCli, NPM_REGISTRY } from '../trusted-tools.js';
+import { runOsvAdapter } from '../adapters/osv.js';
 
 /** @typedef {import('../rules/types.js').Finding} Finding */
 
@@ -18,9 +22,10 @@ import { execSync } from 'node:child_process';
  * Run SCA analysis on a project directory.
  *
  * @param {string} targetDir - Absolute path to the project root
+ * @param {{osv?:boolean,osvOptions?:object}} [options]
  * @returns {Promise<Finding[]>}
  */
-export async function runSCA(targetDir) {
+export async function runSCA(targetDir, options = {}) {
   const findings = [];
 
   // Node.js project detection
@@ -35,6 +40,16 @@ export async function runSCA(targetDir) {
   if (existsSync(reqPath)) {
     const pyFindings = checkPythonDeps(reqPath);
     findings.push(...pyFindings);
+  }
+
+  // OSV is the default second dependency-intelligence layer. An unavailable
+  // or incomplete run becomes a warning instead of silently reducing coverage.
+  if (options.osv === true) {
+    const osvResult = runOsvAdapter(targetDir, {
+      ...(options.osvOptions || {}),
+      targetDir,
+    });
+    findings.push(...osvResult.findings);
   }
 
   return findings;
@@ -67,10 +82,21 @@ function parseNpmAudit(raw) {
         });
       }
     }
+    return { findings, valid: true };
   } catch {
-    // JSON parse failure — skip
+    return { findings: [], valid: false };
   }
-  return findings;
+}
+
+function incompleteNpmAudit(message) {
+  return [{
+    ruleId: 'vulnerable-dependency',
+    ruleName: 'Dependency Audit Incomplete',
+    severity: 'warning',
+    message,
+    file: 'package-lock.json',
+    fix: 'Run a vulnerability audit with the matching package manager from a trusted installation and registry. Treat this scan as incomplete until it succeeds.',
+  }];
 }
 
 /**
@@ -88,29 +114,53 @@ function parseNpmAudit(raw) {
  * which are sanitized at the reporter layer — accepted risk.
  */
 async function auditNpm(targetDir, pkgPath) {
-  const hasLockfile = existsSync(join(targetDir, 'package-lock.json')) ||
-                      existsSync(join(targetDir, 'yarn.lock')) ||
-                      existsSync(join(targetDir, 'pnpm-lock.yaml'));
+  const npmLockPath = join(targetDir, 'package-lock.json');
+  const hasNpmLock = existsSync(npmLockPath);
+  const hasOtherLock = existsSync(join(targetDir, 'yarn.lock')) || existsSync(join(targetDir, 'pnpm-lock.yaml'));
 
-  if (!hasLockfile) {
-    return checkPackageJsonDirect(pkgPath);
+  if (!hasNpmLock) {
+    const direct = checkPackageJsonDirect(pkgPath);
+    if (hasOtherLock) {
+      direct.push(...incompleteNpmAudit('A yarn or pnpm lockfile exists, but npm audit cannot verify that dependency graph.'));
+    }
+    return direct;
   }
 
+  const cli = findTrustedNpmCli();
+  if (!cli) return incompleteNpmAudit('npm-cli.js was not found in a trusted Node installation. No PATH fallback was used.');
+
+  const auditDir = mkdtempSync(join(tmpdir(), 'vibeaudit-sca-'));
   try {
-    const result = execSync('npm audit --json', {
-      cwd: targetDir,
+    copyFileSync(pkgPath, join(auditDir, 'package.json'));
+    copyFileSync(npmLockPath, join(auditDir, 'package-lock.json'));
+    const userConfig = join(auditDir, 'user.npmrc');
+    const globalConfig = join(auditDir, 'global.npmrc');
+    writeFileSync(userConfig, '');
+    writeFileSync(globalConfig, '');
+    const result = execFileSync(process.execPath, [
+      cli,
+      'audit',
+      '--json',
+      '--ignore-scripts',
+      `--registry=${NPM_REGISTRY}`,
+    ], {
+      cwd: auditDir,
       encoding: 'utf-8',
       timeout: 30000,
-      stdio: ['ignore', 'pipe', 'ignore'],
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: createIsolatedNpmEnv(process.env, { userConfig, globalConfig }),
     });
-    // Exit 0 — no vulnerabilities or empty output
-    return parseNpmAudit(result);
+    const parsed = parseNpmAudit(result);
+    return parsed.valid ? parsed.findings : incompleteNpmAudit('npm audit returned unreadable output.');
   } catch (err) {
     // npm audit exits 1 when it finds vulnerabilities — stdout still has the data
     if (err.stdout) {
-      return parseNpmAudit(err.stdout);
+      const parsed = parseNpmAudit(err.stdout);
+      if (parsed.valid) return parsed.findings;
     }
-    return [];
+    return incompleteNpmAudit('npm audit failed before it could produce a complete result.');
+  } finally {
+    rmSync(auditDir, { recursive: true, force: true });
   }
 }
 

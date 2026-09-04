@@ -18,7 +18,7 @@ export const mfaBypass = {
   check(file) {
     if (SKIP.test(file.relativePath)) return [];
 
-    const hasMFA = /(?:mfa|2fa|two.?factor|totp|otp|authenticator)/i.test(file.content);
+    const hasMFA = /(?:\bmfa|Mfa|MFA|\b2fa|2FA|\btwo[-_ ]?factor|\btotp|Totp|TOTP|\botp|Otp|OTP|\bauthenticator|Authenticator)/.test(file.content);
     if (!hasMFA) return [];
 
     const findings = [];
@@ -46,10 +46,10 @@ export const mfaBypass = {
     }
 
     // Pattern: MFA verified on a separate endpoint with no session link
-    if (/verify.*(?:otp|totp|mfa|2fa)/i.test(file.content)) {
+    if (/[Vv]erify.*(?:\botp|Otp|OTP|\btotp|Totp|TOTP|\bmfa|Mfa|MFA|\b2fa|2FA)/.test(file.content)) {
       const checksMfaSession = /(?:mfaSession|pendingMfa|mfaPending|awaitingMfa|mfaToken)/i.test(file.content);
       if (!checksMfaSession) {
-        const lineIdx = file.lines.findIndex((l) => /verify.*(?:otp|totp|mfa|2fa)/i.test(l));
+        const lineIdx = file.lines.findIndex((l) => /[Vv]erify.*(?:\botp|Otp|OTP|\btotp|Totp|TOTP|\bmfa|Mfa|MFA|\b2fa|2FA)/.test(l));
         findings.push({
           ruleId: 'mfa-bypass',
           ruleName: 'MFA Bypass',

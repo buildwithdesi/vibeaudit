@@ -359,7 +359,7 @@ function generateReport(results, errors, totalRepos, durationSec) {
   // Health dashboard
   md += `## Portfolio Health\n\n`;
   md += `| Grade | Count | |\n|-------|-------|-|\n`;
-  md += `| A | ${s.gradeA} | Clean |\n`;
+  md += `| A | ${s.gradeA} | No checked findings |\n`;
   md += `| B | ${s.gradeB} | Minor warnings |\n`;
   md += `| C | ${s.gradeC} | Multiple warnings |\n`;
   md += `| D | ${s.gradeD} | Many warnings |\n`;
@@ -409,12 +409,12 @@ function generateReport(results, errors, totalRepos, durationSec) {
     }
   }
 
-  // Clean repos
+  // Repos with no findings from the checks that completed
   const cleanRepos = results.filter((r) => r.grade === 'A');
   if (cleanRepos.length > 0) {
-    md += `## Clean Repos (Grade A)\n\n`;
+    md += `## Repos With No Checked Findings (Grade A)\n\n`;
     for (const r of cleanRepos) md += `- ${r.repo}\n`;
-    md += `\n`;
+    md += `\n> Grade A is not proof that a repository is safe. Manual review still applies.\n\n`;
   }
 
   // Skipped repos

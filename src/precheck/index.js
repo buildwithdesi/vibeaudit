@@ -23,12 +23,26 @@
  * In the Mini Shai-Hulud incident the poisoned packages (keyv, file-entry-cache,
  * cacheable-request) were transitive dependencies — nobody installed them on
  * purpose. Checking only the named package would have missed it entirely.
+ *
+ * A fourth question rides along for free, because the same packument fetch
+ * already carries the answer: what is this package licensed under? A GPL or
+ * AGPL dependency is not a malware risk, but it is the one supply-chain
+ * decision that is cheapest to reverse before install and most expensive
+ * after — once it is woven into a build, ripping it back out is a real
+ * engineering project. See rules/license-contamination.js for the
+ * classification logic this reuses; this is the pre-install mirror of that
+ * post-install lockfile check.
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { classifyLicense } from '../rules/license-contamination.js';
+import { createIsolatedNpmEnv, findTrustedNpmCli, NPM_REGISTRY } from '../trusted-tools.js';
+
+/** Severity ladder for combining independent checks without ever downgrading a finding. */
+const LEVEL_RANK = { ok: 0, warn: 1, block: 2 };
 
 /** Versions confirmed malicious. Checked by exact name@version. */
 export const KNOWN_MALICIOUS = new Set([
@@ -44,16 +58,14 @@ export const KNOWN_MALICIOUS = new Set([
 export const FRESH_HOURS = 72;
 
 /**
- * npm has to be launched through a shell on Windows (it is a .cmd shim), and a
- * shell means the spec string is concatenated rather than passed as an argv
- * element. Since the spec comes from whatever the user typed, that would be a
- * command-injection hole in a security tool. So the spec is validated against
- * the shape npm actually accepts, which contains no shell metacharacters.
+ * The package spec is passed as one argv value to npm's JavaScript entry point.
+ * Validation still rejects shell syntax so future callers cannot accidentally
+ * turn this back into a command-injection path.
  *
  * @param {string} spec
  */
 export function assertSafeSpec(spec) {
-  const SPEC = /^(?:@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*(?:@[a-zA-Z0-9-._~^>=<|* ]+)?$/;
+  const SPEC = /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*(?:@[a-zA-Z0-9^~*][a-zA-Z0-9._~^*+-]*)?$/;
   if (typeof spec !== 'string' || !SPEC.test(spec)) {
     throw new Error(
       `Refusing to run: "${spec}" is not a valid npm package spec. Expected e.g. "lodash", "lodash@4.17.21", "@scope/pkg".`,
@@ -67,25 +79,36 @@ export function assertSafeSpec(spec) {
  *
  * @returns {string|null}
  */
-export function findNpmCli() {
-  const candidates = [
-    // Standard layout next to the node binary that is running us.
-    join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-    // nvm / Volta / Linux prefix layouts.
-    join(dirname(process.execPath), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-  ];
-  for (const c of candidates) {
-    if (existsSync(c)) return c;
+export const findNpmCli = findTrustedNpmCli;
+
+/**
+ * Read every resolved registry package from a package-lock v2/v3 document.
+ * @param {object} lock
+ */
+export function parseResolvedPackageLock(lock) {
+  if (!lock || typeof lock.packages !== 'object') {
+    throw new Error('npm did not create a readable package-lock.');
   }
-  return null;
+  const packages = new Map();
+  for (const [location, metadata] of Object.entries(lock.packages)) {
+    const marker = 'node_modules/';
+    const index = location.lastIndexOf(marker);
+    if (index < 0 || typeof metadata?.version !== 'string') continue;
+    const name = location.slice(index + marker.length);
+    if (!/^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/i.test(name)) continue;
+    packages.set(`${name}@${metadata.version}`, { name, version: metadata.version });
+  }
+  if (packages.size === 0) {
+    throw new Error('npm resolved no packages. The pre-install result is incomplete.');
+  }
+  return [...packages.values()];
 }
 
 /**
  * Ask npm what installing `spec` would actually add, without adding it.
  *
- * `--dry-run` resolves the full tree and reports every package, transitive
- * included, then changes nothing on disk. `--ignore-scripts` is belt-and-braces:
- * dry-run should not execute hooks, and we do not rely on that.
+ * `--package-lock-only` resolves the full tree inside a disposable directory.
+ * No package is installed. `--ignore-scripts` prevents lifecycle execution.
  *
  * @param {string} spec e.g. "cacheable-request" or "left-pad@1.3.0"
  * @returns {{name: string, version: string}[]}
@@ -95,27 +118,25 @@ export function resolveTree(spec) {
   const dir = mkdtempSync(join(tmpdir(), 'vibeaudit-precheck-'));
   try {
     writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'precheck', version: '1.0.0' }));
-    const args = ['install', spec, '--dry-run', '--ignore-scripts', '--no-audit', '--no-fund'];
+    const userConfig = join(dir, 'user.npmrc');
+    const globalConfig = join(dir, 'global.npmrc');
+    writeFileSync(userConfig, '');
+    writeFileSync(globalConfig, '');
+    const args = [
+      'install', spec, '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund',
+      `--registry=${NPM_REGISTRY}`,
+    ];
     const cli = findNpmCli();
-    // Prefer running npm's own JS with the current node binary: no shell, so
-    // the spec is a real argv element and cannot be reinterpreted as a command.
-    // The shell path is a fallback for layouts where npm-cli.js is not where
-    // we expect, and is only reachable after assertSafeSpec above.
-    const out = cli
-      ? execFileSync(process.execPath, [cli, ...args], {
-          cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000,
-        })
-      : execFileSync('npm', args, {
-          cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120000,
-          shell: process.platform === 'win32',
-        });
-    const pkgs = [];
-    for (const line of out.split('\n')) {
-      // npm prints "add <name> <version>" per resolved package.
-      const m = /^\s*add\s+(\S+)\s+(\S+)\s*$/.exec(line);
-      if (m) pkgs.push({ name: m[1], version: m[2] });
-    }
-    return pkgs;
+    if (!cli) throw new Error('Could not locate npm-cli.js in a trusted Node installation. Refusing a PATH or shell fallback.');
+    execFileSync(process.execPath, [cli, ...args], {
+      cwd: dir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 120000,
+      env: createIsolatedNpmEnv(process.env, { userConfig, globalConfig }),
+    });
+    const lock = JSON.parse(readFileSync(join(dir, 'package-lock.json'), 'utf8'));
+    return parseResolvedPackageLock(lock);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -129,7 +150,7 @@ export function resolveTree(spec) {
  * @param {typeof fetch} [fetchImpl]
  */
 export async function fetchPackument(name, fetchImpl = fetch) {
-  const res = await fetchImpl(`https://registry.npmjs.org/${name.replace('/', '%2F')}`, {
+  const res = await fetchImpl(`https://registry.npmjs.org/${encodeURIComponent(name)}`, {
     headers: { Accept: 'application/json' },
   });
   if (!res.ok) throw new Error(`registry ${res.status} for ${name}`);
@@ -143,6 +164,7 @@ export async function fetchPackument(name, fetchImpl = fetch) {
  * @param {any} packument
  * @param {number} nowMs
  * @returns {{name:string, version:string, level:'block'|'warn'|'ok', reasons:string[], ageHours:number|null, installScripts:string[]}}
+ *   `reasons` may include a `"license: ..."` entry from classifyLicense — see rules/license-contamination.js
  */
 export function assessPackage(pkg, packument, nowMs) {
   const reasons = [];
@@ -162,6 +184,7 @@ export function assessPackage(pkg, packument, nowMs) {
   const ageHours = published ? (nowMs - Date.parse(published)) / 36e5 : null;
 
   const scripts = packument?.versions?.[pkg.version]?.scripts || {};
+  const dist = packument?.versions?.[pkg.version]?.dist;
   const installScripts = ['preinstall', 'install', 'postinstall'].filter((h) => scripts[h]);
 
   if (installScripts.length) {
@@ -175,6 +198,33 @@ export function assessPackage(pkg, packument, nowMs) {
     // is worth stopping for, either alone is only worth mentioning.
     level = installScripts.length ? 'block' : 'warn';
   }
+
+  if (dist?.tarball) {
+    try {
+      const artifactUrl = new URL(dist.tarball);
+      if (artifactUrl.protocol !== 'https:' || artifactUrl.hostname !== 'registry.npmjs.org') {
+        reasons.push(`package artifact comes from untrusted host ${artifactUrl.hostname || 'unknown'}`);
+        level = 'block';
+      }
+    } catch {
+      reasons.push('package artifact URL is invalid');
+      level = 'block';
+    }
+    if (!dist.integrity && !dist.shasum) {
+      reasons.push('package artifact has no registry integrity value');
+      if (LEVEL_RANK.warn > LEVEL_RANK[level]) level = 'warn';
+    }
+  }
+
+  // License check rides the same packument, no extra registry call. Unlike
+  // the malware checks above, a license verdict is a legal fact, not a
+  // heuristic — so a strong-copyleft package with no permissive escape
+  // blocks outright, same tier as a confirmed-malicious version.
+  const license = packument?.versions?.[pkg.version]?.license;
+  const verdict = classifyLicense(license);
+  const licenseLevel = verdict.tier === 'block' ? 'block' : verdict.tier === 'pass' ? 'ok' : 'warn';
+  if (verdict.tier !== 'pass') reasons.push(`license: ${verdict.reason}`);
+  if (LEVEL_RANK[licenseLevel] > LEVEL_RANK[level]) level = licenseLevel;
 
   return { ...pkg, level, reasons, ageHours, installScripts };
 }
