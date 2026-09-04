@@ -29,7 +29,7 @@ function sanitizeMarkdown(str) {
   return sanitizeTerminal(str)
     .replace(/[\r\n\u2028\u2029]/g, ' ')
     .replace(/`/g, '\\u0060')
-    .replace(/([\\*_{}\[\]()#+.!|>~-])/g, '\\$1');
+    .replace(/[\\*_{}\[\]()#+.!|>~-]/g, (char) => `\\${char}`);
 }
 
 /**
@@ -39,12 +39,20 @@ function sanitizeMarkdown(str) {
 /**
  * Format and print findings to stdout.
  *
+ * `'none'` prints nothing. It exists for programmatic callers that want the
+ * findings array `audit()` returns and nothing on stdout — batch runners like
+ * scripts/morning-scan.js, which render their own report. Without it a
+ * 194-repo run interleaves 194 full JSON reports into its own progress output,
+ * which is both unreadable and hundreds of MB of CI log.
+ *
  * @param {Finding[]} findings
- * @param {'terminal' | 'json' | 'markdown' | 'html'} format
+ * @param {'terminal' | 'json' | 'markdown' | 'html' | 'none'} format
  * @param {{ filesScanned: number, rulesRun: number, durationMs: number, targetDir?: string }} meta
  */
 export function report(findings, format, meta) {
   switch (format) {
+    case 'none':
+      return;
     case 'json':
       return reportJSON(findings, meta);
     case 'markdown':

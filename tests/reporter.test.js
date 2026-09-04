@@ -131,3 +131,15 @@ describe('reporter: terminal injection defense', () => {
     );
   });
 });
+
+describe("reporter: 'none' format", () => {
+  it('prints nothing, so batch callers can render their own report', () => {
+    const out = capture(() => report([a11yFinding], 'none', META));
+    assert.equal(out, '', "'none' must not write to stdout");
+  });
+
+  it('is not the fallback — an unknown format still prints the terminal report', () => {
+    const out = capture(() => report([a11yFinding], 'nope', META));
+    assert.ok(out.includes('VIBE AUDIT'), 'unknown formats keep falling back to terminal');
+  });
+});

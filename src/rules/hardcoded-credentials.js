@@ -25,8 +25,42 @@ const CREDENTIAL_PATTERNS = [
   {
     regex: /['"`]Basic\s+[A-Za-z0-9+/=]{10,}['"`]/g,
     label: 'Hardcoded basic auth header',
+    validate: looksLikeBasicAuth,
   },
 ];
+
+/**
+ * Confirm a `"Basic ..."` string really is an Authorization header value.
+ *
+ * The regex above only checks the charset, and `[A-Za-z0-9+/=]` happily accepts
+ * ordinary English. On the 2026-08-13 portfolio scan that turned the string
+ * `'Basic electrical'` — an entry in a job-training skills array in the PUBLIC
+ * trade-match repo — into a critical "hardcoded credential", three times over.
+ *
+ * A real basic-auth value is base64 of `user:pass`, so decode it and require
+ * what that actually implies: a valid base64 payload whose plaintext holds the
+ * `:` separator and is printable. `electrical` decodes to binary noise with no
+ * colon and fails, while `ZGVtbzpkZW1v` ("demo:demo") passes.
+ *
+ * @param {string} matchedText The full regex match, quotes included.
+ * @returns {boolean}
+ */
+function looksLikeBasicAuth(matchedText) {
+  const value = matchedText.slice(1, -1).replace(/^Basic\s+/, '');
+  // Base64 encodes 3 bytes to 4 chars, so a length remainder of 1 is impossible.
+  if (value.length % 4 === 1) return false;
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return false;
+
+  let decoded;
+  try {
+    decoded = Buffer.from(value, 'base64').toString('utf8');
+  } catch {
+    return false;
+  }
+  // "user:pass" — the colon is what makes it credentials rather than a word that
+  // happens to be base64-shaped, and real credentials are printable text.
+  return decoded.includes(':') && !/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F�]/.test(decoded);
+}
 
 /** Ignore test files and fixtures — hardcoded creds there are expected. */
 const TEST_FILE_PATTERN = /(?:__tests__|__mocks__|\.test\.|\.spec\.|\.mock\.|test\/fixtures|tests\/fixtures)/i;
@@ -65,7 +99,7 @@ export const hardcodedCredentials = {
       const line = file.lines[i];
       if (isCommentOrDoc(line)) continue;
 
-      for (const { regex, label } of CREDENTIAL_PATTERNS) {
+      for (const { regex, label, validate } of CREDENTIAL_PATTERNS) {
         regex.lastIndex = 0;
         let match;
         while ((match = regex.exec(line)) !== null) {
@@ -73,6 +107,9 @@ export const hardcodedCredentials = {
 
           // Skip placeholder values.
           if (PLACEHOLDER_VALUES.test(matchedText)) continue;
+          // Patterns whose charset alone is too permissive confirm the match
+          // against the credential format they claim to have found.
+          if (validate && !validate(matchedText)) continue;
 
           findings.push({
             ruleId: 'hardcoded-credentials',

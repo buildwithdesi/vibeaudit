@@ -12,7 +12,10 @@
  *   --discover          Auto-discover repos from GitHub (ignores --repos)
  *   --owner <name>      GitHub owner for --discover (default: buildwithdesi)
  *   --concurrency <N>   Parallel scans (default: 3)
- *   --format <fmt>      Report format (default: markdown)
+ *
+ * The report is always written as both markdown and JSON to reports/, so there
+ * is no output-format option. (There used to be a documented --format flag that
+ * nothing read.)
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -168,7 +171,12 @@ async function scanRepo(name) {
   try {
     const fileSource = fetchRepoFiles(parsed.owner, parsed.repo);
     const { findings } = await audit(name, {
-      format: 'json',
+      // 'none', not 'json': this script renders its own report from the returned
+      // findings. Asking audit() to print JSON dumped a full per-repo report into
+      // stdout for all ~194 repos, interleaved with the progress lines by the
+      // concurrent batches — the run log became unreadable and the CI artifact
+      // grew by hundreds of MB of duplicated findings.
+      format: 'none',
       skipSca: true,
       fileSource,
       extraIgnore: BASELINE_IGNORE,
@@ -212,7 +220,9 @@ async function main() {
       );
       repos = previous;
     } else {
-      await writeFile(reposFile, JSON.stringify(repos, null, 2));
+      // Trailing newline: without it every --discover run re-adds a "\ No newline
+      // at end of file" marker to the diff of an otherwise unchanged list.
+      await writeFile(reposFile, JSON.stringify(repos, null, 2) + '\n');
     }
   } else {
     const raw = await readFile(reposFile, 'utf8');

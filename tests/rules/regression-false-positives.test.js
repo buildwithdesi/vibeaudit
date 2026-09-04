@@ -21,6 +21,8 @@ import { clientSideDbAccess } from '../../src/rules/client-side-db-access.js';
 import { clientBundleSecrets } from '../../src/rules/client-bundle-secrets.js';
 import { exposedEnvVars } from '../../src/rules/exposed-env-vars.js';
 import { exposedSecrets } from '../../src/rules/exposed-secrets.js';
+import { hardcodedCredentials } from '../../src/rules/hardcoded-credentials.js';
+import { firebaseAdminClient } from '../../src/rules/firebase-admin-client.js';
 import { isSuppressed, pathDisabledFor } from '../../src/suppress.js';
 import { audit } from '../../src/index.js';
 
@@ -656,5 +658,126 @@ export function JsonLd({ data }) {
       dangerouslySetInnerHtml.check(mk('src/faq.tsx', unhardened)).length > 0,
       'an unescaped value containing </script> closes the tag early',
     );
+  });
+});
+
+describe('FP fix: hardcoded-credentials — "Basic" must be real base64 auth', () => {
+  // The charset [A-Za-z0-9+/=] accepts ordinary English, so the 2026-08-13
+  // portfolio scan read 'Basic electrical' out of a job-training skills array in
+  // the public trade-match repo and called it a critical hardcoded credential.
+  it('does NOT flag an English phrase that merely starts with "Basic"', () => {
+    const file = mk('index.html', `earns: ['Industry certifications','Basic electrical'],`);
+    assert.equal(hardcodedCredentials.check(file).length, 0);
+  });
+
+  it('does NOT flag other base64-shaped words after "Basic"', () => {
+    const file = mk('src/copy.ts', `const tagline = 'Basic understanding';`);
+    assert.equal(hardcodedCredentials.check(file).length, 0);
+  });
+
+  it('STILL flags base64 that decodes to user:pass', () => {
+    // ZGVtbzpkZW1v === base64('demo:demo')
+    const file = mk('src/api.ts', `const h = { Authorization: "Basic ZGVtbzpkZW1v" };`);
+    const found = hardcodedCredentials.check(file);
+    assert.equal(found.length, 1);
+    assert.match(found[0].message, /basic auth/i);
+    assert.equal(found[0].evidence, '***REDACTED***', 'the credential itself must never be echoed');
+  });
+
+  it('STILL flags padded base64 credentials', () => {
+    // YWRtaW46c3VwZXJzZWNyZXQxMjM= === base64('admin:supersecret123')
+    const file = mk('src/api.ts', `headers.set("Authorization", "Basic YWRtaW46c3VwZXJzZWNyZXQxMjM=")`);
+    assert.equal(hardcodedCredentials.check(file).length, 1);
+  });
+
+  it('leaves the other credential patterns alone', () => {
+    const bearer = mk('src/api.ts', `const t = "Bearer abcdefghijklmnopqrstuvwxyz123";`);
+    assert.equal(hardcodedCredentials.check(bearer).length, 1);
+    const pw = mk('src/api.ts', `const password = "hunter2abc";`);
+    assert.equal(hardcodedCredentials.check(pw).length, 1);
+  });
+});
+
+describe('FP fix: supabase-service-key-client — SQL naming the role is not the key', () => {
+  // interactive-portfolio renders .sql files in a code viewer, so correct RLS
+  // policy text lives inside a template literal in a 'use client' page. The
+  // 2026-08-13 scan read `FOR ALL TO service_role` as a leaked key.
+  const SQL_DISPLAY = `"use client";
+const CODE_FILES = [{
+  name: "rls_rules.sql",
+  code: \`-- Enable RLS
+ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+
+-- Allow service_role complete access
+CREATE POLICY "Service role admin access" ON projects
+FOR ALL TO service_role USING (true);\`
+}];`;
+
+  it('does NOT flag a policy/grant that names the service_role Postgres role', () => {
+    assert.equal(supabaseServiceKeyClient.check(mk('src/app/page.tsx', SQL_DISPLAY)).length, 0);
+  });
+
+  it('does NOT flag a GRANT listing service_role among several roles', () => {
+    const file = mk('src/app/docs.tsx',
+      `"use client";\nconst s = \`GRANT SELECT ON projects TO authenticated, service_role;\`;`);
+    assert.equal(supabaseServiceKeyClient.check(file).length, 0);
+  });
+
+  it('STILL flags a real service_role key read in a client component', () => {
+    const file = mk('src/app/Widget.tsx',
+      `'use client';\nconst admin = createClient(URL, process.env.SUPABASE_SERVICE_ROLE_KEY);`);
+    assert.equal(supabaseServiceKeyClient.check(file).length, 1);
+  });
+
+  it('STILL flags the NEXT_PUBLIC service-role footgun', () => {
+    const file = mk('src/app/W2.tsx',
+      `'use client';\nconst k = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY;`);
+    assert.equal(supabaseServiceKeyClient.check(file).length, 1);
+  });
+});
+
+describe('FP fix: firebase-admin-client — src/ alone does not mean client', () => {
+  // chibi-forge's src/lib/firebaseAdmin.js is a textbook server module, flagged
+  // critical on 2026-08-13 purely for living under src/.
+  const SERVER_MODULE = `import admin from 'firebase-admin';
+
+export function getFirebaseAdminApp() {
+  if (!admin.apps.length) {
+    if (!process.env.FIREBASE_PRIVATE_KEY) return null;
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY,
+      }),
+    });
+  }
+}`;
+
+  it('does NOT flag a server module that initializes from non-public env secrets', () => {
+    assert.equal(firebaseAdminClient.check(mk('src/lib/firebaseAdmin.js', SERVER_MODULE)).length, 0);
+  });
+
+  it('does NOT flag a file importing server-only', () => {
+    const file = mk('src/lib/adminServer.ts',
+      `import 'server-only';\nimport admin from 'firebase-admin';\nadmin.initializeApp({});`);
+    assert.equal(firebaseAdminClient.check(file).length, 0);
+  });
+
+  it('STILL flags the Admin SDK inside a "use client" component', () => {
+    const file = mk('src/components/Dash.tsx',
+      `'use client';\nimport admin from 'firebase-admin';\nadmin.initializeApp({});`);
+    assert.ok(firebaseAdminClient.check(file).length > 0);
+  });
+
+  it('STILL flags a Pages Router page, which really does bundle to the browser', () => {
+    const file = mk('pages/dashboard.tsx',
+      `import React from 'react';\nimport admin from 'firebase-admin';\nexport default function P(){ const [x] = useState(); admin.auth(); return null; }`);
+    assert.ok(firebaseAdminClient.check(file).length > 0);
+  });
+
+  it('STILL flags NEXT_PUBLIC_ credentials — those genuinely ship to the browser', () => {
+    const file = mk('src/lib/leak.ts',
+      `import admin from 'firebase-admin';\nadmin.initializeApp({ credential: process.env.NEXT_PUBLIC_FIREBASE_PRIVATE_KEY });\nuseEffect(() => {});`);
+    assert.ok(firebaseAdminClient.check(file).length > 0);
   });
 });
