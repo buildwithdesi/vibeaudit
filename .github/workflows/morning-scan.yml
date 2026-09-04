@@ -51,11 +51,34 @@ jobs:
           path: reports/
           retention-days: 90
 
-      # Exit 1 means "findings" — reported, not failed on. Exit 2 means the scan
-      # reached zero repos (revoked token, wrong scope, GitHub outage), which
-      # must never pass as a green, clean-looking run.
-      - name: Fail if the scan had no coverage
-        if: steps.scan.outputs.exit_code == '2'
+      # The scan's exit contract: 0 = clean, 1 = findings, 2 = reached zero repos.
+      # Only 0 and 1 mean the scan actually ran, and neither may be trusted on the
+      # exit code alone:
+      #
+      #   - Exit 2 is a coverage outage (revoked token, wrong scope, GitHub down)
+      #     and must never pass as a green, clean-looking run.
+      #   - Node also exits 1 when the script dies *before* main() — a missing
+      #     node_modules, a bad import, a syntax error. That is indistinguishable
+      #     from "findings" by exit code, so a scan that never scanned anything
+      #     used to render as a green run whose artifact held an empty reports/.
+      #
+      # So require the artifact the run claims to have produced: every path that
+      # reaches the end of main() writes reports/morning-scan-<date>.md, including
+      # the exit-2 path. No report means the script never got that far.
+      - name: Verify the scan actually ran
+        if: always() && steps.scan.conclusion != 'skipped'
+        env:
+          EXIT_CODE: ${{ steps.scan.outputs.exit_code }}
         run: |
-          echo "::error::Morning scan reached 0 repos — no coverage. Check the SCAN_TOKEN scope."
-          exit 1
+          if [ "$EXIT_CODE" = "2" ]; then
+            echo "::error::Morning scan reached 0 repos — no coverage. Check the SCAN_TOKEN scope."
+            exit 1
+          fi
+          if [ "$EXIT_CODE" != "0" ] && [ "$EXIT_CODE" != "1" ]; then
+            echo "::error::Morning scan exited $EXIT_CODE, which is not part of its exit contract. Treating as a failed run, not as findings."
+            exit 1
+          fi
+          if ! ls reports/morning-scan-*.md >/dev/null 2>&1; then
+            echo "::error::Morning scan exited $EXIT_CODE but wrote no report — it died before scanning anything. This is NOT a clean run."
+            exit 1
+          fi
