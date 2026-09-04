@@ -1,0 +1,77 @@
+rules:
+  - id: vibeaudit-agent-credential-to-network-js
+    languages: [javascript, typescript]
+    mode: taint
+    message: Credential or file data reaches a network sink.
+    severity: WARNING
+    metadata:
+      category: security
+      technology: [javascript]
+    pattern-sources:
+      - pattern: process.env.$KEY
+      - pattern: process.env[$KEY]
+      - pattern: fs.readFileSync(...)
+      - pattern: fs.readFile(...)
+    pattern-sinks:
+      - pattern: fetch(...)
+      - pattern: $HTTP.request(...)
+      - pattern: axios.$METHOD(...)
+      - pattern: $CLIENT.send(...)
+
+  - id: vibeaudit-agent-credential-to-shell-js
+    languages: [javascript, typescript]
+    mode: taint
+    message: Credential or file data reaches a process-execution sink.
+    severity: ERROR
+    metadata:
+      category: security
+      technology: [javascript]
+    pattern-sources:
+      - pattern: process.env.$KEY
+      - pattern: process.env[$KEY]
+      - pattern: fs.readFileSync(...)
+      - pattern: fs.readFile(...)
+    pattern-sinks:
+      - pattern: child_process.exec(...)
+      - pattern: child_process.execSync(...)
+      - pattern: child_process.spawn(...)
+      - pattern: child_process.spawnSync(...)
+      - pattern: exec(...)
+      - pattern: execSync(...)
+      - pattern: spawn(...)
+      - pattern: spawnSync(...)
+
+  - id: vibeaudit-agent-credential-to-network-python
+    languages: [python]
+    mode: taint
+    message: Credential or file data reaches a network sink.
+    severity: WARNING
+    metadata:
+      category: security
+      technology: [python]
+    pattern-sources:
+      - pattern: os.environ[$KEY]
+      - pattern: os.getenv(...)
+      - pattern: open(...).read()
+    pattern-sinks:
+      - pattern: requests.$METHOD(...)
+      - pattern: urllib.request.urlopen(...)
+      - pattern: httpx.$METHOD(...)
+      - pattern: $CLIENT.request(...)
+
+  - id: vibeaudit-agent-credential-to-shell-python
+    languages: [python]
+    mode: taint
+    message: Credential or file data reaches a process-execution sink.
+    severity: ERROR
+    metadata:
+      category: security
+      technology: [python]
+    pattern-sources:
+      - pattern: os.environ[$KEY]
+      - pattern: os.getenv(...)
+      - pattern: open(...).read()
+    pattern-sinks:
+      - pattern: subprocess.$METHOD(...)
+      - pattern: os.system(...)
+      - pattern: os.popen(...)

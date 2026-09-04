@@ -32,19 +32,45 @@
 #   ./scripts/purge-reports-history.sh            # DRY RUN: rewrites a temp
 #                                                 # mirror clone and reports the
 #                                                 # result, but does NOT push.
-#   ./scripts/purge-reports-history.sh --execute  # Actually force-push the
-#                                                 # rewritten history to origin.
+#   ./scripts/purge-reports-history.sh --execute --backup /absolute/path/pre-purge.bundle
+#                                                 # Confirm interactively, save
+#                                                 # a recovery bundle, then push.
 #
 set -euo pipefail
 
-REMOTE_URL="${REMOTE_URL:-https://github.com/buildwithdesi/vibeaudit}"
+REMOTE_URL="https://github.com/buildwithdesi/vibeaudit.git"
 PURGE_PATH="reports"
 WORKDIR="$(mktemp -d -t vibeaudit-purge-XXXXXX)"
 MIRROR="${WORKDIR}/repo.git"
 EXECUTE="no"
+BACKUP_BUNDLE=""
 
-if [[ "${1:-}" == "--execute" ]]; then
-  EXECUTE="yes"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --execute) EXECUTE="yes"; shift ;;
+    --backup) BACKUP_BUNDLE="${2:-}"; shift 2 ;;
+    *) echo "ERROR: unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
+
+if [[ "${EXECUTE}" == "yes" ]]; then
+  if [[ ! -t 0 ]]; then
+    echo "ERROR: --execute requires an interactive terminal." >&2
+    exit 1
+  fi
+  if [[ -z "${BACKUP_BUNDLE}" || "${BACKUP_BUNDLE}" != /* ]]; then
+    echo "ERROR: --execute requires --backup with an absolute, new .bundle path." >&2
+    exit 1
+  fi
+  if [[ -e "${BACKUP_BUNDLE}" ]]; then
+    echo "ERROR: backup path already exists: ${BACKUP_BUNDLE}" >&2
+    exit 1
+  fi
+  read -r -p "Type buildwithdesi/vibeaudit to confirm the force-mirror rewrite: " CONFIRM_REPO
+  if [[ "${CONFIRM_REPO}" != "buildwithdesi/vibeaudit" ]]; then
+    echo "ERROR: confirmation did not match. Nothing was pushed." >&2
+    exit 1
+  fi
 fi
 
 cleanup() { rm -rf "${WORKDIR}"; }
@@ -63,6 +89,11 @@ cd "${MIRROR}"
 BEFORE_COMMITS="$(git log --all --oneline -- "${PURGE_PATH}" | wc -l | tr -d ' ')"
 BEFORE_BLOBS="$(git rev-list --all --objects | grep -c "${PURGE_PATH}/morning-scan" || true)"
 echo "  before: ${BEFORE_COMMITS} commits touch ${PURGE_PATH}/, ${BEFORE_BLOBS} report blobs in history"
+
+if [[ "${EXECUTE}" == "yes" ]]; then
+  git bundle create "${BACKUP_BUNDLE}" --all >/dev/null
+  echo "✔ Recovery bundle saved to ${BACKUP_BUNDLE}"
+fi
 
 echo "▶ Rewriting history to drop '${PURGE_PATH}/' ..."
 git filter-repo --path "${PURGE_PATH}" --invert-paths --force >/dev/null
@@ -83,7 +114,7 @@ if [[ "${EXECUTE}" != "yes" ]]; then
 DRY RUN complete — nothing was pushed.
 Rewritten mirror is intact and verified. To actually publish the purge, re-run:
 
-    ./scripts/purge-reports-history.sh --execute
+    ./scripts/purge-reports-history.sh --execute --backup /absolute/path/pre-purge.bundle
 
 (Only after you have merged/closed open PRs and relaxed branch protection.)
 EOF

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "kind": "vibeaudit-agent-skill-baseline",
+  "publisher": "https://github.com/buildwithdesi/vibeaudit",
+  "package": "@jackdog668/vibeaudit",
+  "version": "1.4.0",
+  "files": [
+    {
+      "path": "src/data/agent-skill.md",
+      "sha256": "310eede00da410197f525c732e1f506dc475e41509aea2b3c928be55e5b3c83d",
+      "size": 2108
+    }
+  ]
+}

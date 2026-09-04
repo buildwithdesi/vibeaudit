@@ -2,8 +2,8 @@ import { bold, red, yellow, cyan, green, gray, dim } from './colors.js';
 import { getFixPrompt } from './data/prompts.js';
 import { generateHTML } from './reporters/html.js';
 import { PREFLIGHT_AUDIT_URL, PREFLIGHT_AUDIT_MESSAGE } from './constants.js';
-import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { writeNewOutput } from './safe-output.js';
 
 /**
  * Strip ANSI escape sequences and terminal control characters from a string.
@@ -23,6 +23,13 @@ function sanitizeTerminal(str) {
     .replace(OSC8_LINK_RE, '')
     .replace(ANSI_ESC_RE, '')
     .replace(CONTROL_RE, '');
+}
+
+function sanitizeMarkdown(str) {
+  return sanitizeTerminal(str)
+    .replace(/[\r\n\u2028\u2029]/g, ' ')
+    .replace(/`/g, '\\u0060')
+    .replace(/([\\*_{}\[\]()#+.!|>~-])/g, '\\$1');
 }
 
 /**
@@ -77,8 +84,8 @@ function reportTerminal(findings, meta) {
   const total = findings.length;
   if (total === 0) {
     console.log(green(bold('  ┌─────────────────────────────────────────────────────────┐')));
-    console.log(green(bold('  │                  ✅  ALL CLEAR — GRADE A                │')));
-    console.log(green(bold('  │             No security issues found. Ship it.           │')));
+    console.log(green(bold('  │              ✅  NO CHECKED FINDINGS — GRADE A           │')));
+    console.log(green(bold('  │          This result is not proof that the target is safe. │')));
     console.log(green(bold('  └─────────────────────────────────────────────────────────┘')));
     console.log('');
     printSummaryBar(0, 0, 0, meta);
@@ -210,7 +217,7 @@ function printSummaryBar(critCount, warnCount, infoCount, meta) {
     console.log(yellow(bold('  ⚠️  Warnings found. Review before going live.')));
     console.log(dim('  Run with --fix to get fix prompts.'));
   } else {
-    console.log(green(bold('  ✅ Looking clean. Ship it.')));
+    console.log(green(bold('  ✅ No checked findings. Manual review is still required.')));
   }
   console.log('');
 
@@ -274,14 +281,14 @@ function reportMarkdown(findings, meta) {
   ];
 
   if (findings.length === 0) {
-    lines.push('**✅ No issues found.**');
+    lines.push('**✅ No checked issues found. This result is not proof that the target is safe.**');
   } else {
     const renderFinding = (f) => {
       const cweBadge = f.cweId ? ` \`${f.cweId}\`` : f.wcag ? ` \`${f.wcag}\`` : '';
-      lines.push(`### \`${sanitizeTerminal(f.file)}\`${f.line ? `:${f.line}` : ''}${cweBadge}`);
-      lines.push(`- **${sanitizeTerminal(f.message)}**`);
-      if (f.evidence) lines.push(`- Evidence: \`${sanitizeTerminal(f.evidence)}\``);
-      lines.push(`- Fix: ${sanitizeTerminal(f.fix)}`);
+      lines.push(`### \`${sanitizeMarkdown(f.file)}\`${f.line ? `:${f.line}` : ''}${cweBadge}`);
+      lines.push(`- **${sanitizeMarkdown(f.message)}**`);
+      if (f.evidence) lines.push(`- Evidence: \`${sanitizeMarkdown(f.evidence)}\``);
+      lines.push(`- Fix: ${sanitizeMarkdown(f.fix)}`);
       const promptData = getFixPrompt(f.ruleId);
       if (promptData) {
         lines.push('');
@@ -313,7 +320,7 @@ function reportMarkdown(findings, meta) {
     if (infos.length > 0) {
       lines.push('## ℹ️ Info', '');
       for (const f of infos) {
-        lines.push(`- \`${sanitizeTerminal(f.file)}\`${f.line ? `:${f.line}` : ''} — ${sanitizeTerminal(f.message)}`);
+        lines.push(`- \`${sanitizeMarkdown(f.file)}\`${f.line ? `:${f.line}` : ''} — ${sanitizeMarkdown(f.message)}`);
       }
       lines.push('');
     }
@@ -338,10 +345,10 @@ async function reportHTMLFile(findings, meta) {
   // create a literal "github:" directory in the user's cwd. Use cwd instead.
   const rawDir = meta.targetDir || process.cwd();
   const targetDir = rawDir.startsWith('github://') ? process.cwd() : rawDir;
-  const filePath = join(targetDir, 'vibe-audit-report.html');
+  let filePath = join(targetDir, 'vibe-audit-report.html');
 
   try {
-    await writeFile(filePath, html);
+    filePath = await writeNewOutput(filePath, html);
     console.log('');
     console.log(bold('  ⚗️  VIBE AUDIT — HTML Report Generated'));
     console.log(dim('  ─────────────────────────────────────────────────────────────'));

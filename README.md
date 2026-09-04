@@ -8,7 +8,7 @@ Vibe coding is fast. Shipping insecure code is faster. Vibe Audit catches the se
 npx @jackdog668/vibeaudit
 ```
 
-No config required. **102 rules** across 17 attack surfaces (now including accessibility/WCAG, scale/performance, and observability). Two production dependencies. Runs in seconds.
+No config required. **106 rules** across 17 attack surfaces, including poisoned agent files and download-to-execution chains. Two production dependencies. Runs in seconds.
 
 > Every finding ships with a CWE ID, a CVSS v3.1 score, an OWASP Top 10 mapping, a plain-English explanation, **and** a copy-paste fix prompt for your AI coding tool.
 
@@ -48,7 +48,7 @@ npx @jackdog668/vibeaudit https://github.com/owner/repo
 npx @jackdog668/vibeaudit --deep
 
 # Interactive HTML report (security grade A–F, CVSS charts, OWASP grid)
-npx @jackdog668/vibeaudit --format html > audit-report.html
+npx @jackdog668/vibeaudit --format html
 
 # Copy-paste fix prompts for your AI coding tool
 npx @jackdog668/vibeaudit --fix
@@ -68,6 +68,134 @@ Requires Node `>=18.19.0`.
 
 ---
 
+## VibeGuard: Protection Outside the Project Folder
+
+The scanner checks a project when you run it. **VibeGuard** adds user-wide checks that run before supported AI tools or interactive PowerShell execute a command.
+
+### Check local security tools
+
+Run the doctor before your first full audit or agent-skill install. It checks Node.js, Cosign, OSV-Scanner, and optional Gitleaks. It provides official release links and exact Cosign and OSV-Scanner digest evidence without downloading tools or executing installers.
+
+```powershell
+vibeaudit doctor
+vibeaudit doctor --format json
+```
+
+Exit code `0` means every required tool is authenticated and usable. Optional Gitleaks can remain `available-unverified`, producing `usable-with-warnings` without blocking normal work. Exit code `3` means a required tool is missing, rejected, or unsupported. Cosign and OSV-Scanner both receive approved-release digest checks.
+
+### Scan a backup before restoring agent files
+
+Keep the backup offline. This command inventories recognized skills, hooks, agent instructions, configs, plugins, Cursor rules, and helper scripts. It analyzes linked files as one capability chain and blocks incomplete coverage.
+
+```powershell
+vibeaudit agent scan "D:\Recovered Backup"
+```
+
+Add Gitleaks when it is already installed locally. Vibe Audit does not download it. The adapter scans a sanitized staging copy of recognized agent files, forces the bundled default-rule configuration, ignores target allow comments and ignore files, and removes secret values from its report. A missing or failed Gitleaks executable is a blocking incomplete scan.
+
+```powershell
+vibeaudit agent scan "D:\Recovered Backup" --gitleaks
+```
+
+Add Semgrep when you need a deeper data-flow pass over agent scripts and hooks. It is opt-in, scans only staged JavaScript, TypeScript, and Python files, and uses bundled rules with metrics disabled. Vibe Audit does not download rules, load target configuration, or execute the staged files. A missing or failed Semgrep executable is a blocking incomplete scan.
+
+```powershell
+vibeaudit agent scan "D:\Recovered Backup" --semgrep
+```
+
+The bundled rules look for credential or file data flowing into network and process-execution sinks. Semgrep's taint mode provides this flow-aware coverage beyond pattern matching. See the [Semgrep taint-mode guide](https://semgrep.dev/blog/2022/demystifying-taint-mode/) for the underlying analysis model.
+
+After reading every listed control file, save its SHA-256 inventory somewhere outside the backup. Verification detects added, changed, and deleted controls.
+
+```powershell
+vibeaudit agent baseline "D:\Recovered Backup" `
+  --baseline "C:\Security State\recovered-backup.json" `
+  --i-reviewed-these-files
+
+vibeaudit agent verify "D:\Recovered Backup" `
+  --baseline "C:\Security State\recovered-backup.json"
+```
+
+Inspect a command without executing it:
+
+```powershell
+Get-Clipboard | vibeaudit command inspect --stdin
+```
+
+Exit code `0` passes. Exit code `3` requires review. Exit code `4` blocks because danger or incomplete coverage was found.
+
+### Install the optional agent skill safely
+
+The installer never uses a force-overwrite flag. It shows the packaged SHA-256 hash, target hashes, exact diffs, and security findings before writing. Installation requires an interactive confirmation containing the full reviewed hash. Existing files receive timestamp-independent backups, every write is rehashed, and the final file is added to VibeGuard's trust baseline.
+
+```powershell
+vibeaudit skill plan
+vibeaudit skill install
+```
+
+Official npm releases include a Sigstore bundle for the packaged skill and a second signed baseline containing its expected SHA-256 digest, size, package name, and version. `skill plan` verifies both bundles with Cosign before showing any install target. It requires the exact versioned Digital Alchemy release-workflow identity, GitHub's OIDC issuer, the artifact digest, and the bundled transparency-log proof. `skill install` repeats the verification immediately before writing. One command authenticates and stages Cosign once, then reuses that private copy for every required artifact check.
+
+Install Cosign 3.1.3 separately from its [official release](https://github.com/sigstore/cosign/releases/tag/v3.1.3). Vibe Audit never downloads Cosign. It checks the executable against Sigstore's pinned release digest, stages a private copy, and rejects other PATH executables. Unsigned source checkouts cannot install the official skill.
+
+Use `--only claude`, `--only codex`, or `--only cursor` to narrow the targets. `vibeaudit skill print` prints the packaged instructions without writing anything.
+
+On Windows, review the installer and your current AI control files first. Then preview every planned change:
+
+```powershell
+Get-Content -LiteralPath .\scripts\install-vibeguard.ps1
+node .\bin\vibeguard.js preflight
+.\scripts\install-vibeguard.ps1 -WhatIf
+```
+
+`preflight` rereads every recognized agent file and reports critical patterns, warnings, and unreadable paths without trusting anything. Add `--json` for the complete file and hash inventory. The installer stops before writing any file when preflight finds a critical pattern or incomplete coverage.
+
+Activate only after that manual review:
+
+```powershell
+.\scripts\install-vibeguard.ps1 -BaselineReviewed
+```
+
+The installer merges VibeGuard into your existing Claude and Codex user hooks. It also adds a command check to new PowerShell 5 and PowerShell 7 sessions. It keeps timestamped backups beside every changed configuration file.
+
+VibeGuard blocks or pauses these paths:
+
+- Downloaded content piped directly into PowerShell, Bash, Python, Node, or another interpreter.
+- Encoded PowerShell, common Windows malware launchers, and download-then-run command chains.
+- AI edits to `SKILL.md`, `AGENTS.md`, hooks, settings, and other recognized agent control files.
+- AI reads or edits of credential-bearing local paths such as `.env`, SSH keys, cloud credential stores, and browser session databases.
+- Script-based attempts to read secrets or rewrite agent control files.
+- New or changed agent files that do not match your manually reviewed hash baseline.
+- Agent instructions that combine downloads, execution, stealth, persistence, or credential collection.
+- External MCP actions that mutate state, such as uploads, sends, installs, deploys, or credential operations.
+- AI publication, deployment, repository push, and recursive destructive commands that need a human decision.
+
+For a legitimate package install or executable download, independently verify the official domain, publisher, signature, and checksum. Then create one short-lived approval from a separate prompt:
+
+```powershell
+vibeguard approve-command
+```
+
+Paste the exact verified command when asked. The approval works once, only in that PowerShell process, and expires after ten minutes. Download-to-interpreter commands cannot be approved.
+
+If an agent file changes, inspect every line yourself. Then update only that reviewed file:
+
+```powershell
+vibeguard status
+vibeguard trust-file "C:\path\to\SKILL.md" --i-reviewed-this-file
+```
+
+Remove the integration without deleting your timestamped backups:
+
+```powershell
+.\scripts\install-vibeguard.ps1 -Uninstall
+```
+
+**Important limit:** VibeGuard is a user-level guardrail, not an operating-system security boundary. It does not intercept `cmd.exe`, WSL, GUI installers, browser downloads, unsupported assistants, non-interactive PowerShell scripts, or malware already running with your user or administrator rights. Use Microsoft Defender, SmartScreen, signed downloads, publisher verification, and least-privilege accounts as separate layers.
+
+Claude and Codex hooks can deny supported tool calls, while PowerShell's command validation handler runs before an interactive command executes. Review the official [Claude hooks](https://code.claude.com/docs/en/hooks), [Codex hooks](https://learn.chatgpt.com/docs/hooks), and [PowerShell PSReadLine](https://learn.microsoft.com/en-us/powershell/module/PSReadline/set-psreadlineoption?view=powershell-5.1) documentation before activation.
+
+---
+
 ## Output Formats
 
 | Format | Flag | Best for |
@@ -83,7 +211,14 @@ Every **security** finding carries its **CWE ID, CVSS v3.1 score, and OWASP Top 
 
 ## What It Checks
 
-**102 rules** across 17 categories, plus dependency scanning (SCA). Severity is as reported by Vibe Audit: 🔴 **CRIT** · 🟡 **WARN** · ⚪ **INFO**. CVSS is the v3.1 base score.
+**106 rules** across 17 categories, plus dependency scanning (SCA). Severity is as reported by Vibe Audit: 🔴 **CRIT** · 🟡 **WARN** · ⚪ **INFO**. CVSS is the v3.1 base score.
+
+### 🛡️ Agent Files & Install Commands
+
+| Rule | Sev | CVSS | CWE | What it catches |
+| --- | --- | --- | --- | --- |
+| `agent-control-injection` | 🔴 | 9.8 | CWE-506 | Agent instructions combining downloads, execution, stealth, persistence, credential theft, or guard bypass |
+| `download-execution` | 🔴 | 9.8 | CWE-494 | Commands that download unverified content and immediately execute it |
 
 ### 🔑 Secrets & Credentials
 
@@ -276,7 +411,13 @@ The real culprits behind the "$50k server bill" — named, not vibed. Quality/sc
 
 ### 📦 Dependencies (SCA)
 
-Beyond the 102 rules above, Vibe Audit runs **software composition analysis** via `npm audit` to flag **known-vulnerable dependencies** (`vulnerable-dependency`, CWE-1035). Skip it with `--skip-sca`.
+Beyond the 106 rules above, Vibe Audit runs **software composition analysis** through two independent layers. `npm audit` preserves npm-specific advisory coverage. OSV-Scanner covers supported npm, Python, Go, Rust, CycloneDX, and SPDX dependency inventories, including transitive lockfile entries. The pre-install `--precheck` still catches fresh-package behavior that advisory databases cannot know yet.
+
+OSV runs by default. Vibe Audit stages only recognized inputs, ignores target-supplied OSV configuration, and fails closed when the trusted binary is missing. Use `--skip-osv` for an explicit OSV exception. Use `--skip-sca` only when all dependency scanning must be disabled.
+
+Container manifests are inventoried, but a Dockerfile cannot prove what entered the built image. Generate a CycloneDX or SPDX SBOM for the built image, then rerun Vibe Audit. Vibe Audit never pulls, starts, or executes an image.
+
+Install OSV-Scanner 2.5.1 separately from its [official release](https://github.com/google/osv-scanner/releases/tag/v2.5.1). Vibe Audit authenticates the platform-specific SHA-256 digest, stages a private copy, and runs only those approved bytes. It never downloads a scanner or runs a package-manager install script on your behalf.
 
 > Run `vibeaudit --list-rules` for the complete, always-current list.
 
@@ -320,6 +461,7 @@ Drop a `.vibe-audit.json` in your project root:
   "exclude": ["predictable-ids"],
   "format": "terminal",
   "strict": false,
+  "osv": true,
   "customEscapers": ["myEscapeHtml"],
   "customAuthGuards": ["requireAuthedApiFromReq"],
   "disableForPaths": { "missing-auth": ["public/"] }
@@ -335,15 +477,18 @@ Drop a `.vibe-audit.json` in your project root:
 | `exclude` | string[] | `[]` | Skip these rules |
 | `format` | string | `"terminal"` | `terminal`, `json`, `markdown`, or `html` |
 | `strict` | boolean | `false` | Exit 1 on warnings too |
+| `osv` | boolean | `true` | Run the external OSV-Scanner adapter against supported dependency lockfiles and SBOMs |
 | `customEscapers` | string[] | `[]` | Extra HTML escaper/sanitizer names that make `innerHTML` / `dangerouslySetInnerHTML` safe |
 | `customAuthGuards` | string[] | `[]` | Extra auth-guard function names that satisfy `missing-auth` / server-action checks |
 | `disableForPaths` | object | `{}` | Per-rule path patterns to skip, e.g. `{ "rule-id": ["^public/"] }` |
 
 CLI flags override config file values.
 
+For safety, the CLI ignores a scanned target's `.vibe-audit.json` and inline suppression comments by default. This prevents a hostile repository from disabling the checks meant to inspect it. Add `--trust-target-config` only after reviewing that target's configuration and suppression comments.
+
 ### Suppressing a finding
 
-When a finding is a false positive, silence it inline with a comment — no config needed:
+When a finding is a false positive, silence it inline with a comment:
 
 ```js
 // vibe-audit-ignore-next-line missing-auth
@@ -352,7 +497,7 @@ export async function GET(req) { /* intentionally public */ }
 const admin = createServiceRoleClient(); // vibe-audit-ignore supabase-service-key-client
 ```
 
-A bare `// vibe-audit-ignore` (no rule id) suppresses every rule on that line; comma-separate ids to silence several.
+A bare `// vibe-audit-ignore` (no rule id) suppresses every rule on that line; comma-separate ids to silence several. Inline suppressions apply only when the CLI is run with `--trust-target-config`.
 
 > **Note on framework awareness:** Vibe Audit understands Next.js App Router context. A file is treated as **server** by default — importing React does not make it "client." Server-only code (`import 'server-only'`, route handlers, `'use server'`) is exempt from client-exposure rules, and auth guards imported from your own libs are recognized automatically.
 
@@ -391,6 +536,8 @@ npx @jackdog668/vibeaudit --strict
 ```
 npx @jackdog668/vibeaudit [target] [options]
 
+vibeaudit doctor                              Check local security-tool readiness
+
 target   A local directory, OR a GitHub repo (owner/repo or full URL)
 
 Options:
@@ -400,11 +547,21 @@ Options:
   -s, --strict                                Exit 1 on warnings too
       --deep                                  Also scan git history for secrets
       --skip-sca                              Skip dependency vulnerability scanning
+      --osv                                   Explicitly enable the default OSV-Scanner pass
+      --skip-osv                              Skip OSV only, while preserving npm dependency checks
+      --trust-target-config                  Apply the target's config and inline suppressions
       --fix                                   Show fix prompts + save VIBE-AUDIT-FIXES.md
       --fix-file                              Only save fix file (no terminal prompts)
       --list-rules                            Show all available rules
   -h, --help                                  Show help
   -v, --version                               Show version
+
+Agent Shield:
+  vibeaudit agent scan <backup>               Offline, fail-closed control-file scan
+      --gitleaks                              Add local secret scanning, fail if unavailable
+      --semgrep                               Add optional data-flow scanning, fail if unavailable
+  vibeaudit agent baseline <backup>            Save reviewed hashes outside the backup
+  vibeaudit agent verify <backup>              Detect added, changed, or deleted controls
 ```
 
 ---
@@ -417,6 +574,7 @@ import { audit } from '@jackdog668/vibeaudit';
 const { findings, exitCode } = await audit('/path/to/project', {
   format: 'json',
   strict: true,
+  osv: true, // Default. Set false only for an explicit exception.
 });
 
 console.log(`Found ${findings.length} issues`);
@@ -436,7 +594,7 @@ console.log(`Found ${findings.length} issues`);
 
 **Every finding includes a fix AND a prompt.** Plain-English explanation for understanding PLUS a copy-paste prompt for action. No "go read the OWASP docs."
 
-**It audits itself.** `npm run audit:self` — Vibe Audit passes its own checks in strict mode. 299+ tests, all passing.
+**It audits itself.** `npm run audit:self` runs the trusted repository configuration in strict mode. The regression suite contains more than 480 tests.
 
 
 ## Roadmap

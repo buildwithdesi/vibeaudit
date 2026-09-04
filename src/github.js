@@ -1,8 +1,10 @@
 import { execFile } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, extname } from 'node:path';
+import { join, extname, resolve, sep } from 'node:path';
 import { normalizeConfig } from './config.js';
+import { isAgentControlPath } from './guard/agent-files.js';
+import { findTrustedExecutable } from './trusted-tools.js';
 
 /**
  * Patterns that indicate a GitHub target rather than a local path.
@@ -23,6 +25,7 @@ const SCAN_EXTENSIONS = new Set([
   '.json', '.env', '.yaml', '.yml', '.toml', '.html', '.htm', '.css',
   '.py', '.rb', '.go', '.rs', '.php', '.java', '.kt', '.swift', '.dart',
   '.rules', '.lock',
+  '.ps1', '.psm1', '.sh', '.bash', '.zsh', '.fish', '.bat', '.cmd', '.mdx',
 ]);
 
 /** Files we always scan regardless of extension. */
@@ -31,6 +34,7 @@ const ALWAYS_SCAN = new Set([
   '.env.test', '.gitignore', '.dockerignore', 'firestore.rules', 'storage.rules',
   'database.rules.json', 'firebase.json', 'vercel.json', 'netlify.toml',
   'docker-compose.yml', 'docker-compose.yaml', 'Dockerfile', '.htaccess', 'nginx.conf',
+  '.npmrc', '.yarnrc', '.yarnrc.yml',
 ]);
 
 /** Directories to skip when walking the tree via API. */
@@ -154,6 +158,29 @@ export function parseGitHubTarget(target) {
   return null;
 }
 
+function repoApiBase(owner, repo) {
+  return `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+}
+
+function githubHeaders() {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  const headers = { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'vibe-audit' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+/** Resolve a mutable branch name once so every file comes from one commit. */
+export async function resolveGitHubCommit(owner, repo, branch = 'HEAD') {
+  const url = `${repoApiBase(owner, repo)}/commits/${encodeURIComponent(branch)}`;
+  const res = await fetch(url, { headers: githubHeaders() });
+  if (!res.ok) throw makeApiError(res, await res.text());
+  const data = await res.json();
+  if (!/^[0-9a-f]{40}$/i.test(data.sha || '')) {
+    throw new Error('GitHub returned an invalid commit identifier. Remote scan stopped.');
+  }
+  return data.sha;
+}
+
 /**
  * Fetch the full file tree of a GitHub repo using the Git Trees API (single request).
  * Falls back to the Contents API if the tree is too large.
@@ -165,22 +192,21 @@ export function parseGitHubTarget(target) {
  * @param {{ branch?: string }} options
  * @returns {AsyncGenerator<{ path: string, relativePath: string, content: string, lines: string[] }>}
  */
-export async function* fetchRepoFiles(owner, repo, { branch = 'HEAD' } = {}) {
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-  const headers = {
-    Accept: 'application/vnd.github.v3+json',
-    'User-Agent': 'vibe-audit',
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
+export async function* fetchRepoFiles(owner, repo, { branch = 'HEAD', commitSha } = {}) {
+  const headers = githubHeaders();
+  const snapshot = commitSha || await resolveGitHubCommit(owner, repo, branch);
 
   // 1. Get the recursive tree in a single API call.
-  const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
+  const treeUrl = `${repoApiBase(owner, repo)}/git/trees/${snapshot}?recursive=1`;
   const treeRes = await fetch(treeUrl, { headers });
   if (!treeRes.ok) {
     const body = await treeRes.text();
     throw makeApiError(treeRes, body);
   }
   const treeData = await treeRes.json();
+  if (treeData.truncated) {
+    throw new Error('GitHub truncated the repository tree. Remote scan stopped instead of reporting partial coverage.');
+  }
 
   // Filter to scannable files.
   const files = (treeData.tree || []).filter((item) => {
@@ -191,47 +217,34 @@ export async function* fetchRepoFiles(owner, repo, { branch = 'HEAD' } = {}) {
     // Check extension / name.
     const name = parts[parts.length - 1];
     const ext = extname(name).toLowerCase();
-    return SCAN_EXTENSIONS.has(ext) || ALWAYS_SCAN.has(name);
+    return SCAN_EXTENSIONS.has(ext) || ALWAYS_SCAN.has(name) || isAgentControlPath(item.path);
   });
 
   // 2. Fetch each file's content (using blob API for efficiency).
   for (const file of files) {
-    try {
-      // Use the raw content endpoint for simplicity.
-      // Note: the Authorization header (GITHUB_TOKEN) is sent to
-      // raw.githubusercontent.com as well, since private repos require it.
-      // For public repos this is harmless; for private ones it's necessary.
-      // Node's undici (since 5.28.3) strips Authorization on cross-origin
-      // redirect, but engines >= 18.19 is recommended.
-      const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${file.path}`;
-      const fileRes = await fetch(rawUrl, { headers }); // vibe-audit-ignore perf-no-await-parallel  (sequential fetch avoids GitHub secondary rate limits)
-      if (!fileRes.ok) {
-        // raw.githubusercontent.com rate-limits separately from api.github.com — surface it
-        // instead of silently dropping the file, so a mid-repo throttle doesn't masquerade
-        // as "file just didn't exist."
-        if (fileRes.status === 429 || fileRes.status === 403) {
-          throw makeApiError(fileRes, await fileRes.text()); // vibe-audit-ignore perf-no-await-parallel  (sequential fetch avoids GitHub secondary rate limits)
-        }
-        continue;
-      }
-
-      const content = await fileRes.text(); // vibe-audit-ignore perf-no-await-parallel  (part of the same intentional sequential fetch)
-      // Skip huge files (> 2 MB).
-      if (content.length > 2 * 1024 * 1024) continue;
-
-      const lines = content.split('\n');
-      yield {
-        path: `github://${owner}/${repo}/${file.path}`,
-        relativePath: file.path,
-        content,
-        lines,
-      };
-    } catch (err) {
-      // Rate limits abort the whole repo scan so the caller can back off and retry;
-      // everything else (network blip, one bad file) just skips that file.
-      if (err.rateLimited) throw err;
-      continue;
+    if (file.size > 2 * 1024 * 1024) {
+      throw new Error(`Scannable file exceeds the 2 MB safety limit: ${file.path}. Remote scan stopped instead of reporting partial coverage.`);
     }
+    const blobUrl = `${repoApiBase(owner, repo)}/git/blobs/${encodeURIComponent(file.sha)}`;
+    const fileRes = await fetch(blobUrl, { headers }); // vibe-audit-ignore perf-no-await-parallel  (sequential fetch avoids GitHub secondary rate limits)
+    if (!fileRes.ok) throw makeApiError(fileRes, await fileRes.text()); // vibe-audit-ignore perf-no-await-parallel
+    const blob = await fileRes.json(); // vibe-audit-ignore perf-no-await-parallel
+    if (blob.encoding !== 'base64' || typeof blob.content !== 'string') {
+      throw new Error(`GitHub returned unsupported blob data for ${file.path}. Remote scan stopped.`);
+    }
+    const bytes = Buffer.from(blob.content.replace(/\s/g, ''), 'base64');
+    if (bytes.length > 2 * 1024 * 1024) {
+      throw new Error(`Scannable file exceeds the 2 MB safety limit: ${file.path}. Remote scan stopped instead of reporting partial coverage.`);
+    }
+    const content = bytes.toString('utf8');
+    yield {
+      path: `github://${owner}/${repo}@${snapshot}/${file.path}`,
+      relativePath: file.path,
+      content,
+      lines: content.split('\n'),
+      _agentControl: isAgentControlPath(file.path),
+      _snapshot: snapshot,
+    };
   }
 }
 
@@ -246,20 +259,16 @@ export async function* fetchRepoFiles(owner, repo, { branch = 'HEAD' } = {}) {
  * @returns {Promise<import('./config.js').VibeAuditConfig | null>} null if no config file exists or it's invalid.
  */
 export async function fetchRemoteConfig(owner, repo, { branch = 'HEAD' } = {}) {
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-  const headers = { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'vibe-audit' };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  try {
-    const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/.vibe-audit.json`;
-    const res = await fetch(rawUrl, { headers });
-    if (!res.ok) return null;
-    const text = await res.text();
-    return normalizeConfig(JSON.parse(text));
-  } catch {
-    // No config file, invalid JSON, or network failure — caller falls back to defaults.
-    return null;
+  const url = `${repoApiBase(owner, repo)}/contents/.vibe-audit.json?ref=${encodeURIComponent(branch)}`;
+  const res = await fetch(url, { headers: githubHeaders() });
+  if (res.status === 404) return null;
+  if (!res.ok) throw makeApiError(res, await res.text());
+  const data = await res.json();
+  if (data.encoding !== 'base64' || typeof data.content !== 'string') {
+    throw new Error('Remote .vibe-audit.json used an unsupported encoding.');
   }
+  const text = Buffer.from(data.content.replace(/\s/g, ''), 'base64').toString('utf8');
+  return normalizeConfig(JSON.parse(text));
 }
 
 /**
@@ -279,12 +288,14 @@ export async function cloneRepo(owner, repo, { branch } = {}) {
   if (branch) args.push('--branch', branch);
   args.push(cloneUrl, tmp);
 
-  await new Promise((resolve, reject) => {
-    execFile('git', args, { timeout: 60_000 }, (err, _stdout, stderr) => {
+  const git = findTrustedExecutable('git', process.cwd());
+  if (!git) throw new Error('A trusted Git executable was not found. Refusing a PATH-resolved clone.');
+  await new Promise((done, reject) => {
+    execFile(git, args, { timeout: 60_000 }, (err, _stdout, stderr) => {
       if (err) {
         reject(new Error(`git clone failed: ${stderr || err.message}`));
       } else {
-        resolve();
+        done();
       }
     });
   });
@@ -297,8 +308,11 @@ export async function cloneRepo(owner, repo, { branch } = {}) {
  * @param {string} dir
  */
 export async function cleanupClone(dir) {
+  const absolute = resolve(dir);
+  const expectedPrefix = `${resolve(tmpdir())}${sep}vibe-audit-`;
+  if (!absolute.startsWith(expectedPrefix)) return;
   try {
-    await rm(dir, { recursive: true, force: true });
+    await rm(absolute, { recursive: true, force: true });
   } catch {
     // Best-effort cleanup.
   }
