@@ -143,6 +143,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
 import { createConnection } from 'node:net';
 import { Resolver } from 'node:dns/promises';
+import { isAbsolute } from 'node:path';
 import { setTimeout, clearTimeout } from 'node:timers';
 
 const targets = JSON.parse(readFileSync('/input/targets.json', 'utf8'));
@@ -162,6 +163,13 @@ for (const path of ['/skill/run.mjs', '/input/targets.json', '/runner/supervisor
   assert.throws(() => writeFileSync(path, 'benign-test-overwrite'),
     (error) => ['EROFS', 'EACCES', 'EPERM', 'ENOENT', 'ENOTDIR'].includes(error.code), path);
   deniedWrites++;
+}
+// A Windows path is a relative scratch filename inside Linux. It cannot address
+// the host drive; the host separately verifies both canaries remain unchanged.
+for (const path of targets.literalWindowsPaths) {
+  assert.equal(isAbsolute(path), false);
+  writeFileSync(path, 'scratch filename only');
+  assert.equal(readFileSync(path, 'utf8'), 'scratch filename only');
 }
 assert.throws(() => process.kill(1, 'SIGSTOP'), { code: 'EPERM' });
 
@@ -187,7 +195,8 @@ try { await assert.rejects(resolver.resolve4('pilot-probe.invalid')); }
 finally { clearTimeout(dnsDeadline); }
 writeFileSync('/tmp/result.txt', 'scratch works');
 assert.equal(readFileSync('/tmp/result.txt', 'utf8'), 'scratch works');
-console.log(JSON.stringify({ deniedReads, deniedWrites, networkAttempts: 4, scratch: true }));
+console.log(JSON.stringify({ deniedReads, deniedWrites, literalWindowsPaths: targets.literalWindowsPaths.length,
+  networkAttempts: 4, scratch: true }));
 `;
 
 const deadlineSource = String.raw`
@@ -229,6 +238,17 @@ test('protection pilot real Docker acceptance', { timeout: 180_000 }, async (t) 
   const [availableImage] = JSON.parse(await prerequisites.docker(['image', 'inspect', image]));
   assert.equal(availableImage.Os, 'linux');
   evidence.dockerVersion = await prerequisites.docker(['version', '--format', '{{.Server.Version}}']);
+  const doctorResult = await command(process.execPath, [cli, 'pilot', 'doctor', '--image', image, '--json'], {
+    cwd: prerequisites.root, timeout: 35_000,
+  });
+  assert.equal(doctorResult.code, 0, doctorResult.stdout || doctorResult.stderr);
+  const doctor = JSON.parse(doctorResult.stdout);
+  assert.equal(doctor.status, 'ready');
+  assert.equal(doctor.reasonCode, 'runtime_ready');
+  assert.equal(doctor.isolationVerified, false);
+  assert.equal(doctor.clientCleanupVerified, true);
+  evidence.doctor = { status: doctor.status, reasonCode: doctor.reasonCode,
+    isolationVerified: doctor.isolationVerified, clientCleanupVerified: doctor.clientCleanupVerified };
   evidence.prerequisites = 'passed';
 
   await runCase('the shipped notes skill returns the actual expected summary', { timeout: 30_000 }, async (context) => {
@@ -258,12 +278,15 @@ test('protection pilot real Docker acceptance', { timeout: 180_000 }, async (t) 
       const policyText = '{"network":"none","fakePolicyCanary":true}\n';
       writeFileSync(canary, canaryText);
       writeFileSync(policy, policyText);
-      const mapped = (path) => /^([A-Za-z]):/.test(path)
-        ? `/host_mnt/${path[0].toLowerCase()}${path.slice(2).replaceAll('\\', '/')}` : `/host_mnt${path}`;
-      const reads = [canary, mapped(canary), policy, mapped(policy), '/var/run/docker.sock', '/run/docker.sock',
-        '/host_mnt/c/Users/pilot-fixture-only/fake-host-secret.txt'];
-      const writes = [policy, mapped(policy)];
-      writeFileSync(join(options.input, 'targets.json'), JSON.stringify({ reads, writes }));
+      const hostPaths = (path) => /^([A-Za-z]):/.test(path)
+        ? ['/host_mnt', '/run/desktop/mnt/host', '/mnt', ''].map((prefix) =>
+          `${prefix}/${path[0].toLowerCase()}${path.slice(2).replaceAll('\\', '/')}`)
+        : [path, `/host_mnt${path}`];
+      const reads = [...new Set([canary, ...hostPaths(canary), policy, ...hostPaths(policy), '/var/run/docker.sock', '/run/docker.sock',
+        '/host_mnt/c/Users/pilot-fixture-only/fake-host-secret.txt'])];
+      const writes = hostPaths(policy);
+      const literalWindowsPaths = process.platform === 'win32' ? [canary, policy] : [];
+      writeFileSync(join(options.input, 'targets.json'), JSON.stringify({ reads, writes, literalWindowsPaths }));
       const review = await approved(options, 15);
       const reviewPath = join(options.store, 'reviews', `${review.id}.json`);
       const policyBefore = readFileSync(reviewPath, 'utf8');
@@ -278,7 +301,8 @@ test('protection pilot real Docker acceptance', { timeout: 180_000 }, async (t) 
       }
       checkedReceipt(receipt, { status: 'completed', exitCode: 0 });
       assert.deepEqual(JSON.parse(receipt.workload.stdout), {
-        deniedReads: reads.length, deniedWrites: writes.length + 3, networkAttempts: 4, scratch: true,
+        deniedReads: reads.length, deniedWrites: writes.length + 3, literalWindowsPaths: literalWindowsPaths.length,
+        networkAttempts: 4, scratch: true,
       });
       assert.equal(readFileSync(canary, 'utf8'), canaryText);
       assert.equal(readFileSync(policy, 'utf8'), policyText);

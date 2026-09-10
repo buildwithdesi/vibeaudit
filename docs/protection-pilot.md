@@ -50,6 +50,31 @@ needed for the task. Review records and receipts belong outside both directories
 the default store is `~/.vibeaudit/pilot`. An optional `--store <path>` selects an
 external store and must be supplied consistently across commands.
 
+Check readiness **before creating a review or spending its one-use approval**:
+
+```text
+node bin/vibeguard.js pilot doctor --image node@sha256:<reviewed-digest>
+```
+
+Doctor checks the Docker executable, the fixed local Linux engine, and the
+already provisioned image. It prints `ready`, `unavailable`, or `blocked` with a
+reason and a concrete next step. Add `--json` for a versioned result with stable
+reason codes and individual checks. Exit 0 means ready; exit 4 means the check
+did not establish readiness. Doctor never pulls an image, creates a container,
+starts Docker, or reads or changes the approval store. It verifies removal of its
+isolated temporary Docker client configuration before reporting readiness.
+
+Readiness is a prerequisite check. It does not activate or verify isolation.
+`pilot run` repeats the same runtime checks and inspects each container's policy
+before starting it. A run attempt still consumes its one-use approval, including
+when Docker or the image has become unavailable since doctor passed.
+
+On Windows, the pilot addresses Docker Desktop's local Linux engine pipe. A
+working remote context or Windows container engine does not satisfy this check.
+On Linux, it uses the local `/var/run/docker.sock` endpoint. Inherited Docker
+contexts, remote hosts, credentials, and proxy variables do not choose the
+pilot's engine or client configuration.
+
 ## Run the example in PowerShell
 
 Run these commands from the repository checkout. The prompt asks for the exact
@@ -59,6 +84,9 @@ image reference you selected; no mutable tag is accepted by the pilot.
 $pilotImage = Read-Host 'Approved official Node image reference (node@sha256:...)'
 docker pull $pilotImage
 if ($LASTEXITCODE -ne 0) { throw 'Image provisioning failed.' }
+
+node bin/vibeguard.js pilot doctor --image $pilotImage
+if ($LASTEXITCODE -ne 0) { throw 'Resolve the reported runtime issue before reviewing or approving a skill.' }
 
 $pilotReviewText = node bin/vibeguard.js pilot review ./examples/protection-pilot/skill --input ./examples/protection-pilot/input --entry run.mjs --image $pilotImage --seconds 30 --json
 if ($LASTEXITCODE -ne 0) { throw 'Pilot review failed. Read its error before continuing.' }
@@ -84,6 +112,7 @@ node bin/vibeguard.js pilot status --json
 ```bash
 read -r -p 'Approved official Node image reference (node@sha256:...): ' pilot_image
 docker pull "$pilot_image" || exit 1
+node bin/vibeguard.js pilot doctor --image "$pilot_image" || exit 1
 
 pilot_review=$(node bin/vibeguard.js pilot review ./examples/protection-pilot/skill --input ./examples/protection-pilot/input --entry run.mjs --image "$pilot_image" --seconds 30 --json) || exit 1
 printf '%s\n' "$pilot_review"
@@ -163,10 +192,10 @@ Use disposable fixtures and fake secrets for these tests. Read the receipts and
 independently inspect container state. Record the OS, Docker version, image
 digest, exercised cases, and remaining unverified boundaries with each run.
 
-At implementation time, Docker startup on the Windows development host failed
-with an existing `dockerInference` socket error. Local source checks and Linux
-CI runtime acceptance must be reported separately. Neither is a Windows runtime
-pass. Re-run the actual protection tests on that host once Docker is operational.
+Keep Windows and Linux runtime evidence separate. A ready doctor result, source
+tests, or Linux CI acceptance cannot establish Windows containment. Record the
+actual Windows runtime acceptance results on a host with Docker Desktop running
+Linux containers before claiming that boundary passed.
 
 This pilot is an offline execution boundary, not a production security assurance
 or an assessment of arbitrary AI assistants. It has no web interface, backend
