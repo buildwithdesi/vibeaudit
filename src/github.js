@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, extname, resolve, sep } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { normalizeConfig } from './config.js';
 import { isAgentControlPath } from './guard/agent-files.js';
 import { findTrustedExecutable } from './trusted-tools.js';
@@ -243,6 +244,77 @@ export async function* fetchRepoFiles(owner, repo, { branch = 'HEAD', commitSha 
       content,
       lines: content.split('\n'),
       _agentControl: isAgentControlPath(file.path),
+      _snapshot: snapshot,
+    };
+  }
+}
+
+/**
+ * Minimal tar reader (ustar + pax/GNU long names). Yields regular files only;
+ * symlinks, directories and special entries are ignored, and nothing is written
+ * to disk, so a hostile archive cannot escape a directory.
+ * @param {Buffer} buf  decompressed tar bytes
+ */
+export function* readTarEntries(buf) {
+  let off = 0;
+  let nextPath = null;
+  while (off + 512 <= buf.length) {
+    const h = buf.subarray(off, off + 512);
+    if (h.every((b) => b === 0)) break;
+    const field = (a, n) => h.toString('utf8', a, a + n).replace(/\0.*$/s, '');
+    const size = parseInt(field(124, 12).trim() || '0', 8);
+    const type = field(156, 1) || '0';
+    let name = field(0, 100);
+    const prefix = field(345, 155);
+    if (prefix) name = `${prefix}/${name}`;
+    const body = buf.subarray(off + 512, off + 512 + size);
+    off += 512 + Math.ceil(size / 512) * 512;
+    if (type === 'x') {
+      const m = /(?:^|\n)\d+ path=([^\n]*)\n/.exec(body.toString('utf8'));
+      if (m) nextPath = m[1];
+    } else if (type === 'L') {
+      nextPath = body.toString('utf8').replace(/\0.*$/s, '');
+    } else if (type === 'g') {
+      // global pax header (commit id) - ignore
+    } else if (type === '0' || type === '\0') {
+      yield { path: nextPath || name, size, body };
+      nextPath = null;
+    } else {
+      nextPath = null;
+    }
+  }
+}
+
+/**
+ * Same output as fetchRepoFiles but costs 2 API requests per repo (commit +
+ * tarball) instead of 1 + one per scannable file. Use for portfolio-wide scans,
+ * where the per-file blob calls exhaust the 5,000/hour token quota.
+ */
+export async function* fetchRepoFilesTarball(owner, repo, { branch = 'HEAD', commitSha } = {}) {
+  const headers = githubHeaders();
+  const snapshot = commitSha || await resolveGitHubCommit(owner, repo, branch);
+  const res = await fetch(`${repoApiBase(owner, repo)}/tarball/${snapshot}`, { headers, redirect: 'follow' });
+  if (!res.ok) throw makeApiError(res, await res.text());
+  const tar = gunzipSync(Buffer.from(await res.arrayBuffer()));
+  for (const entry of readTarEntries(tar)) {
+    // GitHub tarballs wrap everything in one top-level "<owner>-<repo>-<sha>/" directory.
+    const relativePath = entry.path.split('/').slice(1).join('/');
+    if (!relativePath) continue;
+    const parts = relativePath.split('/');
+    if (parts.some((p) => IGNORE_DIRS.has(p))) continue;
+    const name = parts[parts.length - 1];
+    const ext = extname(name).toLowerCase();
+    if (!(SCAN_EXTENSIONS.has(ext) || ALWAYS_SCAN.has(name) || isAgentControlPath(relativePath))) continue;
+    if (entry.size > 2 * 1024 * 1024) {
+      throw new Error(`Scannable file exceeds the 2 MB safety limit: ${relativePath}. Remote scan stopped instead of reporting partial coverage.`);
+    }
+    const content = entry.body.toString('utf8');
+    yield {
+      path: `github://${owner}/${repo}@${snapshot}/${relativePath}`,
+      relativePath,
+      content,
+      lines: content.split('\n'),
+      _agentControl: isAgentControlPath(relativePath),
       _snapshot: snapshot,
     };
   }

@@ -124,10 +124,18 @@ test('real scan reads a GitHub snapshot, detects a finding, and persists verifie
     globalThis.fetch = async (url) => {
       let data;
       if (url === base + '/commits/HEAD') data = { sha };
-      else if (url === base + '/git/trees/' + sha + '?recursive=1') {
-        data = { tree: [{ type: 'blob', path: 'app.js', sha: 'b'.repeat(40), size: 21 }] };
-      } else if (url === base + '/git/blobs/' + 'b'.repeat(40)) {
-        data = { encoding: 'base64', content: Buffer.from('eval(req.body.code);').toString('base64') };
+      else if (url === base + '/tarball/' + sha) {
+        const { gzipSync } = await import('node:zlib');
+        const entry = (name, body) => {
+          const h = Buffer.alloc(512);
+          h.write(name, 0); h.write('0000644\0', 100); h.write('0000000\0', 108); h.write('0000000\0', 116);
+          h.write(body.length.toString(8).padStart(11, '0') + '\0', 124); h.write('00000000000\0', 136);
+          h.write('        ', 148); h.write('0', 156); h.write('ustar\0' + '00', 257);
+          h.write(h.reduce((a, b) => a + b, 0).toString(8).padStart(6, '0') + '\0 ', 148);
+          return Buffer.concat([h, body, Buffer.alloc((512 - (body.length % 512)) % 512)]);
+        };
+        const tar = Buffer.concat([entry('example-app-' + sha.slice(0, 7) + '/app.js', Buffer.from('eval(req.body.code);')), Buffer.alloc(1024)]);
+        return new Response(gzipSync(tar), { status: 200 });
       } else throw new Error('Unexpected network request: ' + url);
       return new Response(JSON.stringify(data), { status: 200 });
     };
