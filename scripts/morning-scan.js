@@ -20,7 +20,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { audit } from '../src/index.js';
-import { fetchRepoFiles, parseGitHubTarget } from '../src/github.js';
+import { fetchRepoFilesTarball, parseGitHubTarget } from '../src/github.js';
 import { BASELINE_IGNORE } from '../src/baseline-ignore.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -167,7 +167,7 @@ async function scanRepo(name) {
   if (!parsed) return { error: { repo: name, error: 'Invalid repo format', kind: 'error' } };
 
   try {
-    const fileSource = fetchRepoFiles(parsed.owner, parsed.repo);
+    const fileSource = fetchRepoFilesTarball(parsed.owner, parsed.repo);
     const { findings } = await audit(name, {
       format: 'json',
       skipSca: true,
