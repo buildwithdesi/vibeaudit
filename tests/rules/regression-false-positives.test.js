@@ -89,6 +89,80 @@ describe('FP fix: nextjs-server-action-exposure', () => {
     assert.ok(f.some((x) => x.ruleId === 'nextjs-server-action-exposure'));
   });
 
+  // Real-world shape from the 2026-08-05 portfolio scan: an admin actions file
+  // that defines its guard beside the actions it protects. Every exported action
+  // opened with `await assertAdmin()` and all nine were still reported as having
+  // no authentication check — the guard was same-file (this rule only resolved
+  // imported ones) and named for what it authorizes rather than "auth".
+  it('does NOT flag exported actions guarded by a file-local assertAdmin()', () => {
+    const file = mk('src/app/admin/settings/_actions.ts',
+      `'use server';\nasync function assertAdmin() {\n  const { data: { user } } = await supabase.auth.getUser();\n  if (!user || user.email !== ADMIN_EMAIL) throw new Error('Unauthorized');\n  return user.email;\n}\nexport async function saveAlertSettings(raw) {\n  await assertAdmin();\n  return update(raw);\n}\nexport async function sendTestAlert(key) {\n  await assertAdmin();\n  return send(key);\n}`);
+    assert.equal(nextjsServerActionExposure.check(file).length, 0);
+  });
+
+  it('does NOT flag actions guarded by other subject-named guards (checkRole, ensureOwner, requirePermission)', () => {
+    for (const guard of ['checkRole', 'ensureOwner', 'requirePermission', 'verifyAccess', 'isAdmin']) {
+      const file = mk('src/app/actions.ts',
+        `'use server';\nfunction ${guard}() { throw new Error('Unauthorized'); }\nexport async function doThing(id) {\n  await ${guard}();\n  return db.delete(id);\n}`);
+      assert.equal(nextjsServerActionExposure.check(file).length, 0, `${guard} should read as a guard`);
+    }
+  });
+
+  // The guard match is verb-gated on purpose. A call that HANDS OUT elevated
+  // access is the opposite of one that checks for it, so an action whose only
+  // "admin"-shaped call is a service-role client must still be flagged.
+  it('STILL flags an action whose only admin-shaped call grants access rather than checking it', () => {
+    for (const call of ['getAdminClient', 'createSupabaseAdminClient', 'adminDb']) {
+      const file = mk('src/app/actions.ts',
+        `'use server';\nfunction ${call}() { return client; }\nexport async function deleteThing(id) {\n  const c = ${call}();\n  return c.delete(id);\n}`);
+      assert.ok(
+        nextjsServerActionExposure.check(file).some((x) => x.ruleId === 'nextjs-server-action-exposure'),
+        `${call} must not count as a guard`,
+      );
+    }
+  });
+
+  it('STILL flags an action whose only same-file call is an ordinary helper', () => {
+    const file = mk('src/app/actions.ts',
+      `'use server';\nfunction formatRow(r) { return r; }\nexport async function deleteThing(id) {\n  formatRow(id);\n  return db.delete(id);\n}`);
+    assert.ok(nextjsServerActionExposure.check(file).some((x) => x.ruleId === 'nextjs-server-action-exposure'));
+  });
+
+  it('does NOT flag a "use client" component whose filename merely ends in Actions.tsx', () => {
+    const file = mk('src/app/admin/bookings/BookingActions.tsx',
+      `"use client";\nimport { useState } from 'react';\nimport { markBookingCompleted } from '@/app/admin/_actions';\nexport function BookingActions({ id }) {\n  const [err, setErr] = useState('');\n  return <button onClick={() => markBookingCompleted(id)}>Done</button>;\n}`);
+    assert.equal(nextjsServerActionExposure.check(file).length, 0);
+  });
+
+  it('STILL flags a file that declares BOTH directives, since "use server" makes its exports callable', () => {
+    const file = mk('src/app/actions.ts',
+      `'use server';\n// "use client" appears below but the server directive governs\nexport async function deleteThing(id) {\n  return db.delete(id);\n}`);
+    assert.ok(nextjsServerActionExposure.check(file).some((x) => x.ruleId === 'nextjs-server-action-exposure'));
+  });
+
+  it('does NOT treat a filename that merely ends in "actions" as an actions module', () => {
+    // React hooks and components caught by the old unanchored suffix match.
+    for (const p of [
+      'src/ui/color-picker-interactions.ts',
+      'src/hooks/useTransactions.ts',
+      'src/components/QuickActions.tsx',
+    ]) {
+      const file = mk(p,
+        `import { useState } from 'react';\nexport function useThing(id) {\n  return db.delete(id);\n}`);
+      assert.equal(nextjsServerActionExposure.check(file).length, 0, `${p} is not an actions module`);
+    }
+  });
+
+  it('STILL treats real actions modules as actions modules, directive or not', () => {
+    for (const p of ['src/app/actions.ts', 'src/app/admin/_actions.ts', 'src/lib/server-actions.ts', 'actions.ts']) {
+      const file = mk(p, `export async function deleteThing(id) {\n  return db.delete(id);\n}`);
+      assert.ok(
+        nextjsServerActionExposure.check(file).some((x) => x.ruleId === 'nextjs-server-action-exposure'),
+        `${p} must still be audited`,
+      );
+    }
+  });
+
   it('does NOT flag a file that merely mentions "use server" in a comment or string literal, not as a real directive', () => {
     // Mirrors src/context.js: a helper module that documents/detects the
     // directive by name, without actually being a "use server" file itself.
