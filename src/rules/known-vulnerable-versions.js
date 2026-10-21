@@ -155,11 +155,18 @@ export const knownVulnerableVersions = {
       if (typeof engine === 'string') {
         const j = judge(rangeFloor(engine), NODE.lines);
         if (j.status !== 'ok') {
-          out.push(finding(file, '"node"', 'warning',
+          // For an app that deploys (private: true, or no publishable entry point) the engines floor
+          // is what the host runs, so it is a warning. For a published library or CLI the floor is a
+          // compatibility promise to consumers, who run their own Node: info, so it never fails a build.
+          const published = pkg.private !== true && Boolean(pkg.bin || pkg.main || pkg.exports);
+          const where = published ? 'This package is published, so the floor only says what consumers may run; their own Node is what matters.' : 'This is what your host runs.';
+          out.push(finding(file, '"node"', published ? 'info' : 'warning',
             j.status === 'eol'
-              ? `"engines.node" allows "${engine}", a Node line with no security fix for the ${ADVISORY_DATE} advisories. ${NODE.why}`
-              : `"engines.node" allows "${engine}", below the fixed version ${j.min}. ${NODE.why}`,
-            `Set "engines": { "node": ">=24.22.1" } (or the fixed version of your line) and match it in your host's runtime setting. Source: ${NODE.source}.`));
+              ? `"engines.node" allows "${engine}", a Node line with no security fix for the ${ADVISORY_DATE} advisories. ${NODE.why} ${where}`
+              : `"engines.node" allows "${engine}", below the fixed version ${j.min}. ${NODE.why} ${where}`,
+            published
+              ? `When you next drop old Node support, set "engines": { "node": ">=24.22.1" } and update the CI matrix. Source: ${NODE.source}.`
+              : `Set "engines": { "node": ">=24.22.1" } (or the fixed version of your line) and match it in your host's runtime setting. Source: ${NODE.source}.`));
         }
       }
       return out;
