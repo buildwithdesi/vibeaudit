@@ -8,7 +8,7 @@ Vibe coding is fast. Shipping insecure code is faster. Vibe Audit catches the se
 npx @jackdog668/vibeaudit
 ```
 
-No config required. **106 rules** across 17 attack surfaces, including poisoned agent files and download-to-execution chains. Two production dependencies. Runs in seconds.
+No config required. **107 rules** across 17 attack surfaces, including poisoned agent files and download-to-execution chains. Two production dependencies. Runs in seconds.
 
 > Every finding ships with a CWE ID, a CVSS v3.1 score, an OWASP Top 10 mapping, a plain-English explanation, **and** a copy-paste fix prompt for your AI coding tool.
 
@@ -235,7 +235,7 @@ Every **security** finding carries its **CWE ID, CVSS v3.1 score, and OWASP Top 
 
 ## What It Checks
 
-**106 rules** across 17 categories, plus dependency scanning (SCA). Severity is as reported by Vibe Audit: 🔴 **CRIT** · 🟡 **WARN** · ⚪ **INFO**. CVSS is the v3.1 base score.
+**107 rules** across 17 categories, plus dependency scanning (SCA). Severity is as reported by Vibe Audit: 🔴 **CRIT** · 🟡 **WARN** · ⚪ **INFO**. CVSS is the v3.1 base score.
 
 ### 🛡️ Agent Files & Install Commands
 
@@ -384,6 +384,7 @@ Every **security** finding carries its **CWE ID, CVSS v3.1 score, and OWASP Top 
 | `template-injection` | 🔴 | 9.8 | CWE-1336 | Template engine compiling a template built from dynamic input — SSTI/RCE |
 | `missing-sri` | 🟡 | 4.3 | CWE-353 | External CDN `<script>`/`<link>` with no Subresource Integrity hash |
 | `unpinned-dependencies` | 🟡 | 5.3 | CWE-829 | Deps pinned to `*` / `latest` — npm pulls any version, no review |
+| `known-vulnerable-versions` | 🔴 | 9.8 | CWE-1104 | Node, Next.js, sharp, LiteLLM or certifi pinned below a dated vendor advisory (package.json, lockfile, Dockerfile, .nvmrc, requirements) |
 | `github-actions-injection` | 🔴 | 9.8 | CWE-94 | `${{ github.event.* }}` interpolated into a `run:` shell — RCE on your CI runner |
 | `supabase-public-bucket` | 🟡 | 5.3 | CWE-284 | Supabase Storage bucket created `public: true` — every file readable by URL |
 | `race-condition` | 🔴 | 8.1 | CWE-362 | Check-then-act without atomicity (TOCTOU) |
@@ -435,7 +436,7 @@ The real culprits behind the "$50k server bill" — named, not vibed. Quality/sc
 
 ### 📦 Dependencies (SCA)
 
-Beyond the 106 rules above, Vibe Audit runs **software composition analysis** through two independent layers. `npm audit` preserves npm-specific advisory coverage. OSV-Scanner covers supported npm, Python, Go, Rust, CycloneDX, and SPDX dependency inventories, including transitive lockfile entries. The pre-install `--precheck` still catches fresh-package behavior that advisory databases cannot know yet.
+Beyond the 107 rules above, Vibe Audit runs **software composition analysis** through two independent layers. `npm audit` preserves npm-specific advisory coverage. OSV-Scanner covers supported npm, Python, Go, Rust, CycloneDX, and SPDX dependency inventories, including transitive lockfile entries. The pre-install `--precheck` still catches fresh-package behavior that advisory databases cannot know yet.
 
 OSV runs by default. Vibe Audit stages only recognized inputs, ignores target-supplied OSV configuration, and fails closed when the trusted binary is missing. Use `--skip-osv` for an explicit OSV exception. Use `--skip-sca` only when all dependency scanning must be disabled.
 
