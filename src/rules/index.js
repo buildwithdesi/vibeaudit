@@ -127,6 +127,8 @@ import { insecureCipher } from './insecure-cipher.js';
 import { licenseContamination } from './license-contamination.js';
 import { agentControlInjection } from './agent-control-injection.js';
 import { downloadExecution } from './download-execution.js';
+// Dated vendor advisories (v1.5)
+import { knownVulnerableVersions } from './known-vulnerable-versions.js';
 
 /** @type {import('./types.js').Rule[]} */
 export const ALL_RULES = [
@@ -247,6 +249,7 @@ export const ALL_RULES = [
   missingSri,
   unpinnedDependencies,
   installScriptDependency,
+  knownVulnerableVersions,
   // CI/CD & storage (v1.2)
   githubActionsInjection,
   supabasePublicBucket,
