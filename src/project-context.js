@@ -13,15 +13,16 @@
  */
 
 import { parseSource, isParseable, walk, callsAuthGuard, collectImportedNames } from './ast.js';
+import { readCooldown } from './rules/minimum-release-age.js';
 
 const MIDDLEWARE_FILE = /(?:^|\/)(?:src\/)?middleware\.[mc]?[jt]sx?$/i;
 
 /** Middleware helpers that ARE the auth mechanism when called. */
 const MIDDLEWARE_AUTH = /^(?:clerkMiddleware|authMiddleware|withClerkMiddleware|withAuth|NextAuth|updateSession|createMiddlewareClient|createServerClient)$/;
 
-/** @returns {{ authMiddleware: null | { guarded: boolean, prefixes: string[] } }} */
+/** @returns {{ authMiddleware: null | { guarded: boolean, prefixes: string[] }, releaseAgeGateSeen: boolean }} */
 export function createProjectContext() {
-  return { authMiddleware: null };
+  return { authMiddleware: null, releaseAgeGateSeen: false };
 }
 
 /**
@@ -31,6 +32,14 @@ export function createProjectContext() {
  * @param {ReturnType<typeof createProjectContext>} ctx
  */
 export function collectProjectFact(file, ctx) {
+  // The minimum-release-age rule is per-file, so "no cooldown configured" can
+  // only be judged project-wide: record whether any recognized package-manager
+  // config file actually sets a gate. Adequacy is the rule's own business (a
+  // too-short gate is a warning on the config file); this fact only answers
+  // "a gate exists somewhere", which is what suppresses the info candidate.
+  const gate = readCooldown(file);
+  if (gate?.hasGate) ctx.releaseAgeGateSeen = true;
+
   if (!MIDDLEWARE_FILE.test(file.relativePath)) return;
   if (!isParseable(file.relativePath)) return;
 
@@ -163,10 +172,12 @@ function covers(prefix, url) {
  * @returns {Array}
  */
 export function applyProjectContext(findings, ctx) {
-  const mw = ctx?.authMiddleware;
-  if (!mw || !mw.guarded || !mw.prefixes.length) return findings;
+  const filtered = applyReleaseAgeContext(findings, ctx);
 
-  return findings.map((f) => {
+  const mw = ctx?.authMiddleware;
+  if (!mw || !mw.guarded || !mw.prefixes.length) return filtered;
+
+  return filtered.map((f) => {
     if (f.ruleId !== 'missing-auth' || f.severity !== 'critical') return f;
 
     const url = routeUrlFor(f.file);
@@ -180,5 +191,35 @@ export function applyProjectContext(findings, ctx) {
       severity: 'warning',
       message: `${f.message} Auth appears to be enforced by middleware (matcher "${prefix}") — verify that matcher really covers this route.`,
     };
+  });
+}
+
+/**
+ * Resolve the `minimum-release-age` info candidates against the project-wide
+ * gate fact. The rule emits one candidate per root manifest/lockfile because
+ * it cannot see sibling files; here, where the whole stream has been read:
+ *
+ * - If any recognized config file sets a release-age gate, every candidate is
+ *   dropped. An adequate gate needs no note; a too-short gate already produced
+ *   its own warning on the config file.
+ * - If no gate exists anywhere, the candidates collapse to the first one, so a
+ *   project hears about the missing cooldown once, not once per manifest.
+ *
+ * @param {Array} findings
+ * @param {ReturnType<typeof createProjectContext>} ctx
+ * @returns {Array}
+ */
+function applyReleaseAgeContext(findings, ctx) {
+  const isCandidate = (f) => f.ruleId === 'minimum-release-age' && f.severity === 'info';
+  if (!findings.some(isCandidate)) return findings;
+
+  if (ctx?.releaseAgeGateSeen) return findings.filter((f) => !isCandidate(f));
+
+  let kept = false;
+  return findings.filter((f) => {
+    if (!isCandidate(f)) return true;
+    if (kept) return false;
+    kept = true;
+    return true;
   });
 }

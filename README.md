@@ -385,6 +385,9 @@ Every **security** finding carries its **CWE ID, CVSS v3.1 score, and OWASP Top 
 | `missing-sri` | 🟡 | 4.3 | CWE-353 | External CDN `<script>`/`<link>` with no Subresource Integrity hash |
 | `unpinned-dependencies` | 🟡 | 5.3 | CWE-829 | Deps pinned to `*` / `latest` — npm pulls any version, no review |
 | `known-vulnerable-versions` | 🔴 | 9.8 | CWE-1104 | Node, Next.js, sharp, LiteLLM or certifi pinned below a dated vendor advisory (package.json, lockfile, Dockerfile, .nvmrc, requirements) |
+| `minimum-release-age` | 🟡 | 5.3 | CWE-1104 | No dependency release-age cooldown (minimumReleaseAge) configured, or a cooldown under 3 days — the window where poisoned releases get caught |
+| `dependency-bloat` | 🟡 | 4.0 | CWE-1104 | Lockfile dependency-tree size (250+ noted, 1000+ warned) and one-function micro-packages that duplicate a platform built-in |
+| `php-stack` | 🟡 | — | — | PHP in the stack (composer.json, .php files, PHP Docker images) — stack-policy rule: no PHP, patch first, plan the migration |
 | `github-actions-injection` | 🔴 | 9.8 | CWE-94 | `${{ github.event.* }}` interpolated into a `run:` shell — RCE on your CI runner |
 | `supabase-public-bucket` | 🟡 | 5.3 | CWE-284 | Supabase Storage bucket created `public: true` — every file readable by URL |
 | `race-condition` | 🔴 | 8.1 | CWE-362 | Check-then-act without atomicity (TOCTOU) |
