@@ -384,7 +384,7 @@ Every **security** finding carries its **CWE ID, CVSS v3.1 score, and OWASP Top 
 | `template-injection` | 🔴 | 9.8 | CWE-1336 | Template engine compiling a template built from dynamic input — SSTI/RCE |
 | `missing-sri` | 🟡 | 4.3 | CWE-353 | External CDN `<script>`/`<link>` with no Subresource Integrity hash |
 | `unpinned-dependencies` | 🟡 | 5.3 | CWE-829 | Deps pinned to `*` / `latest` — npm pulls any version, no review |
-| `known-vulnerable-versions` | 🔴 | 9.8 | CWE-1104 | Node, Next.js, sharp, LiteLLM or certifi pinned below a dated vendor advisory (package.json, lockfile, Dockerfile, .nvmrc, requirements) |
+| `known-vulnerable-versions` | 🔴 | 9.8 | CWE-1104 | Node, Next.js, sharp, LiteLLM or certifi pinned below a dated vendor advisory (package.json, lockfile, Dockerfile, docker-compose, .nvmrc, requirements, Pipfile, poetry.lock, uv.lock). LiteLLM 1.107.0 is flagged in PyPI pins and in its Docker image tags (exact match; rc builds are not) |
 | `github-actions-injection` | 🔴 | 9.8 | CWE-94 | `${{ github.event.* }}` interpolated into a `run:` shell — RCE on your CI runner |
 | `supabase-public-bucket` | 🟡 | 5.3 | CWE-284 | Supabase Storage bucket created `public: true` — every file readable by URL |
 | `race-condition` | 🔴 | 8.1 | CWE-362 | Check-then-act without atomicity (TOCTOU) |
