@@ -61,6 +61,13 @@ describe('known-vulnerable-versions: Node pins that differ from the scanning mac
   it('flags engines.node, .nvmrc and Dockerfile pins below the fixed line or on an end-of-life line', () => {
     assert.equal(run('package.json', pkg({ engines: { node: '>=20' } })).length, 1);
     assert.equal(run('package.json', pkg({ engines: { node: '>=24.19.0' } })).length, 1);
+    // An app that deploys gets a warning; a published library or CLI gets info, because its
+    // consumers run their own Node and a strict build should not fail on a compatibility floor.
+    assert.equal(run('package.json', pkg({ private: true, engines: { node: '>=20' } }))[0].severity, 'warning');
+    assert.equal(run('package.json', pkg({ engines: { node: '>=20' } }))[0].severity, 'warning');
+    assert.equal(run('package.json', pkg({ bin: { x: 'bin/x.js' }, engines: { node: '>=18.19.0' } }))[0].severity, 'info');
+    assert.equal(run('package.json', pkg({ main: './src/index.js', exports: { '.': './src/index.js' }, engines: { node: '>=20' } }))[0].severity, 'info');
+    assert.match(run('package.json', pkg({ bin: { x: 'bin/x.js' }, engines: { node: '>=20' } }))[0].fix, /CI matrix/);
     assert.equal(run('.nvmrc', '20.18.1\n').length, 1);
     assert.equal(run('.nvmrc', 'v24.19.0').length, 1);
     assert.equal(run('Dockerfile', 'FROM node:20-alpine\nRUN npm ci').length, 1);
