@@ -70,6 +70,17 @@ export function denyHook(reason, eventName = 'PreToolUse') {
   };
 }
 
+/** @param {string} reason @param {string} eventName */
+export function askHook(reason, eventName = 'PreToolUse') {
+  return {
+    hookSpecificOutput: {
+      hookEventName: eventName,
+      permissionDecision: 'ask',
+      permissionDecisionReason: reason,
+    },
+  };
+}
+
 /**
  * Decide whether an AI tool call may proceed.
  * @param {object} payload
@@ -95,6 +106,7 @@ export function evaluateHook(payload, options = {}) {
   }
 
   const command = firstString(input.command, input.cmd, input.script, payload.command);
+  let reviewReason = '';
   if (command) {
     if (APPROVAL_COMMAND_RE.test(command)) {
       const reason = 'VibeGuard trust and baseline commands must be run manually, never by an AI agent.';
@@ -124,8 +136,11 @@ export function evaluateHook(payload, options = {}) {
       const reason = `VibeGuard blocked this dangerous command. ${analysis.summary}`;
       return { allow: false, reason, output: denyHook(reason, eventName) };
     }
-    // Review-level actions continue through the host's regular permission flow.
-    // A PreToolUse hook must not turn a request for review into an unconditional block.
+    // Review-level actions are not blocked, but the host must ask the person first.
+    // Without this, a host in bypass mode would run installs and clones with no prompt at all.
+    if (analysis.decision === 'review') {
+      reviewReason = `VibeGuard wants a person to approve this command. ${analysis.summary}`;
+    }
   }
 
   const filePath = firstString(input.file_path, input.filePath, input.path, payload.file_path);
@@ -156,6 +171,8 @@ export function evaluateHook(payload, options = {}) {
     return { allow: false, reason, output: denyHook(reason, eventName) };
   }
 
+  // Every deny check above runs first, so a review request never hides a block.
+  if (reviewReason) return { allow: true, ask: true, reason: reviewReason, output: askHook(reviewReason, eventName) };
   return { allow: true };
 }
 

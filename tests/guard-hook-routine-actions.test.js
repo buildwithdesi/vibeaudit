@@ -64,7 +64,7 @@ test('routine local commands and read-only MCP calls remain available without a 
   assert.equal(mcpRead.allow, true);
 });
 
-test('review-level installs and clones use the host permission flow instead of being blocked', () => {
+test('review-level installs and clones ask a person instead of being blocked', () => {
   const install = evaluateHook({
     cwd: tmpdir(),
     hook_event_name: 'PreToolUse',
@@ -78,10 +78,50 @@ test('review-level installs and clones use the host permission flow instead of b
     tool_input: { command: 'git clone https://example.com/project.git' },
   }, { baselinePath: missingBaselinePath });
 
-  assert.equal(install.allow, true);
-  assert.equal(install.output, undefined);
-  assert.equal(clone.allow, true);
-  assert.equal(clone.output, undefined);
+  for (const verdict of [install, clone]) {
+    assert.equal(verdict.allow, true);
+    assert.equal(verdict.ask, true);
+    assert.equal(verdict.output.hookSpecificOutput.permissionDecision, 'ask');
+    assert.match(verdict.output.hookSpecificOutput.permissionDecisionReason, /approve this command/i);
+  }
+});
+
+test('ordinary commands still pass with no prompt', () => {
+  const result = evaluateHook({
+    cwd: tmpdir(),
+    hook_event_name: 'PreToolUse',
+    tool_name: 'Bash',
+    tool_input: { command: 'git status --short' },
+  }, { baselinePath: missingBaselinePath });
+
+  assert.equal(result.allow, true);
+  assert.equal(result.output, undefined);
+});
+
+test('a block still wins over a review request', () => {
+  const result = evaluateHook({
+    cwd: tmpdir(),
+    hook_event_name: 'ConfigChange',
+    tool_name: 'Bash',
+    tool_input: { command: 'npm install transcription-app' },
+  }, { baselinePath: missingBaselinePath });
+
+  assert.equal(result.allow, false);
+  assert.equal(result.output.decision, 'block');
+});
+
+test('the hook binary prints the ask decision for a review-level command', () => {
+  const hookPath = fileURLToPath(new URL('../bin/vibeguard-hook.js', import.meta.url));
+  const input = JSON.stringify({
+    cwd: tmpdir(),
+    hook_event_name: 'PreToolUse',
+    tool_name: 'Bash',
+    tool_input: { command: 'npm install transcription-app' },
+  });
+  const result = spawnSync(process.execPath, [hookPath], { input, encoding: 'utf8', windowsHide: true });
+
+  assert.equal(result.status, 0);
+  assert.equal(JSON.parse(result.stdout).hookSpecificOutput.permissionDecision, 'ask');
 });
 
 test('specific dangerous commands and credential paths still block', () => {
