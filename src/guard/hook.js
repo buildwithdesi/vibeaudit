@@ -144,21 +144,23 @@ export function evaluateHook(payload, options = {}) {
   }
 
   const filePath = firstString(input.file_path, input.filePath, input.path, payload.file_path);
-  if (filePath && isSensitiveFilePath(filePath)) {
-    const reason = `VibeGuard blocked an AI read or edit of a credential-bearing path: ${filePath}. Inspect or change this file manually; never expose its contents to an agent.`;
-    return { allow: false, reason, output: denyHook(reason, eventName) };
-  }
   const content = firstString(input.content, input.new_string, input.newString, input.patch, payload.content);
-  const hasWritePayload = ['content', 'contents', 'new_string', 'newString', 'patch', 'edits', 'new_source'].some((key) => input[key] !== undefined);
-  // Fail closed: a tool touching an agent control file must be a known reader, not merely "not a known writer".
-  // Name matching alone misses tools like MultiEdit and NotebookEdit.
-  const knownReadOnlyTool = READ_ONLY_TOOL_RE.test(toolName);
   // A single patch can touch many files, so every file header counts, not just the first.
   const patchPaths = [
     ...content.matchAll(/^\*\*\*\s+(?:Update|Add|Delete|Move) File:\s*(.+?)\s*$/gim),
     ...content.matchAll(/^\*\*\*\s+Move to:\s*(.+?)\s*$/gim),
     ...content.matchAll(/^(?:\+\+\+|---)\s+(?:[ab]\/)?(.+?)\s*$/gm),
   ].map((match) => match[1]).filter((path) => path && path !== '/dev/null');
+  // Credential files get the same every-file check as agent files: a patch naming .env is a write to .env.
+  const sensitiveTarget = [filePath, ...patchPaths].find((path) => path && isSensitiveFilePath(path));
+  if (sensitiveTarget) {
+    const reason = `VibeGuard blocked an AI read or edit of a credential-bearing path: ${sensitiveTarget}. Inspect or change this file manually; never expose its contents to an agent.`;
+    return { allow: false, reason, output: denyHook(reason, eventName) };
+  }
+  const hasWritePayload = ['content', 'contents', 'new_string', 'newString', 'patch', 'edits', 'new_source'].some((key) => input[key] !== undefined);
+  // Fail closed: a tool touching an agent control file must be a known reader, not merely "not a known writer".
+  // Name matching alone misses tools like MultiEdit and NotebookEdit.
+  const knownReadOnlyTool = READ_ONLY_TOOL_RE.test(toolName);
   const agentTarget = [filePath, ...patchPaths].find((path) => path && isAgentControlPath(path));
 
   if (agentTarget && (!knownReadOnlyTool || hasWritePayload)) {

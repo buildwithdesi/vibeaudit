@@ -198,6 +198,33 @@ test('edit tools without a recognized name are still blocked on agent control fi
   }
 });
 
+test('a patch that touches a credential file is blocked', () => {
+  for (const patch of [
+    '*** Begin Patch\n*** Update File: README.md\n+x\n*** Update File: .env\n+KEY=1\n*** End Patch\n',
+    '*** Begin Patch\n*** Update File: notes.txt\n*** Move to: .ssh/id_ed25519\n+x\n*** End Patch\n',
+    '--- a/README.md\n+++ b/README.md\n@@\n+hi\n--- a/.npmrc\n+++ b/.npmrc\n@@\n+//registry.npmjs.org/:_authToken=x\n',
+  ]) {
+    const result = evaluateHook({
+      cwd: tmpdir(),
+      hook_event_name: 'PreToolUse',
+      tool_name: 'apply_patch',
+      tool_input: { patch },
+    }, { baselinePath: missingBaselinePath });
+    assert.equal(result.allow, false, patch);
+    assert.match(result.reason, /credential-bearing path/);
+  }
+});
+
+test('a patch that touches .env.example is still allowed', () => {
+  const result = evaluateHook({
+    cwd: tmpdir(),
+    hook_event_name: 'PreToolUse',
+    tool_name: 'apply_patch',
+    tool_input: { patch: '*** Begin Patch\n*** Update File: .env.example\n+API_KEY=\n*** End Patch\n' },
+  }, { baselinePath: missingBaselinePath });
+  assert.equal(result.allow, true);
+});
+
 test('a multi-file patch with no agent control files is allowed', () => {
   const result = evaluateHook({
     cwd: tmpdir(),

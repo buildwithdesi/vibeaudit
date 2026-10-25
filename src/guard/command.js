@@ -56,13 +56,25 @@ export function normalizeCommand(value) {
 
 /**
  * Undo quoting tricks that split a keyword without changing what the shell runs:
- * c''url and c"u"rl (POSIX quotes), c\url (POSIX escape), c`url (PowerShell), c^url (cmd).
- * Only characters wedged between two word characters are removed.
+ * c''url and c"u"rl (POSIX quotes), c\url (POSIX escape), c`url (PowerShell), c^url (cmd),
+ * and empty expansions such as c$@url or c${unset}url.
+ * Only tricks wedged into a word are removed. The caller keeps whichever reading is stricter,
+ * so a variable that is not actually empty can only make the verdict stricter, never looser.
  * @param {string} command
  * @returns {string}
  */
 export function deobfuscateCommand(command) {
-  return command.replace(/(?<=\w)['"`^\\]+(?=\w)/g, '');
+  let current = command;
+  // Repeat until stable, because tricks can be stacked (c$@''url).
+  for (let pass = 0; pass < 5; pass += 1) {
+    const next = current
+      // Expansions that are usually empty also split a name: c$@url, c${x}url, c$()url, ''curl.
+      .replace(/(?<=\w|^|[\s;|&(])(?:\$[@*]|\$\{[^}\s]*\}|\$\(\s*\)|''|"")+(?=\w)/g, '')
+      .replace(/(?<=\w)['"`^\\]+(?=\w)/g, '');
+    if (next === current) break;
+    current = next;
+  }
+  return current;
 }
 
 const DECISION_RANK = { allow: 0, review: 1, deny: 2 };
@@ -83,7 +95,7 @@ export function analyzeCommand(input) {
   if (DECISION_RANK[deobfuscated.decision] <= DECISION_RANK[direct.decision]) return direct;
   return result(deobfuscated.decision, deobfuscated.findings.map((item) => finding(
     item.id,
-    `${item.message} Quoting was used to hide a command name.`,
+    `${item.message} Quoting or an empty shell expansion was used to hide a command name.`,
   )));
 }
 
