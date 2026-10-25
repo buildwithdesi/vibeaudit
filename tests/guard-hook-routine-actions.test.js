@@ -215,6 +215,56 @@ test('a patch that touches a credential file is blocked', () => {
   }
 });
 
+test('a credential patch in any payload field is blocked, not just the first one', () => {
+  const patch = '*** Begin Patch\n*** Update File: .env\n+KEY=1\n*** End Patch\n';
+  for (const toolInput of [
+    { content: 'hello', patch },
+    { file_path: 'notes.md', edits: [{ old_string: 'a', new_string: 'b' }, { old_string: 'c', new_string: patch }] },
+    { command: ['apply_patch', patch] },
+  ]) {
+    const result = evaluateHook({
+      cwd: tmpdir(),
+      hook_event_name: 'PreToolUse',
+      tool_name: 'apply_patch',
+      tool_input: toolInput,
+    }, { baselinePath: missingBaselinePath });
+    assert.equal(result.allow, false, JSON.stringify(toolInput));
+    assert.match(result.reason, /credential-bearing path: \.env/);
+  }
+});
+
+test('patch headers with timestamps, quotes, or no content lines are still checked', () => {
+  for (const [patch, reason] of [
+    ['--- a/.env\t2026-01-01 00:00:00\n+++ b/.env\t2026-01-01 00:00:00\n@@\n+KEY=1\n', /credential-bearing path: \.env\./],
+    ['--- "a/.env"\n+++ "b/.env"\n@@\n+KEY=1\n', /credential-bearing path: \.env\./],
+    ['diff --git a/.env b/.env\nnew file mode 100600\n', /credential-bearing path: \.env\./],
+    ['diff --git a/notes.txt b/.npmrc\nrename from notes.txt\nrename to .npmrc\n', /credential-bearing path: \.npmrc\./],
+    ['*** Begin Patch\n*** Update File: notes\t/../.env\n+KEY=1\n*** End Patch\n', /credential-bearing path: notes\t\/\.\.\/\.env\./],
+    ['*** Begin Patch\n*** Update File: x\t/../CLAUDE.md\n+x\n*** End Patch\n', /blocked an AI edit to x\t\/\.\.\/CLAUDE\.md\./],
+    ['--- "a/CLAUDE.md"\n+++ "b/CLAUDE.md"\n@@\n+new rule\n', /blocked an AI edit to CLAUDE\.md\./],
+    ['--- "a/docs/caf\\303\\251/AGENTS.md"\n+++ "b/docs/caf\\303\\251/AGENTS.md"\n@@\n+x\n', /blocked an AI edit to docs\/café\/AGENTS\.md\./],
+  ]) {
+    const result = evaluateHook({
+      cwd: tmpdir(),
+      hook_event_name: 'PreToolUse',
+      tool_name: 'apply_patch',
+      tool_input: { patch },
+    }, { baselinePath: missingBaselinePath });
+    assert.equal(result.allow, false, patch);
+    assert.match(result.reason, reason);
+  }
+});
+
+test('a document with a YAML front matter line is not read as a patch header', () => {
+  const result = evaluateHook({
+    cwd: tmpdir(),
+    hook_event_name: 'PreToolUse',
+    tool_name: 'Write',
+    tool_input: { file_path: 'post.md', content: '---\n.env\n---\nHow to keep secrets out of git.\n' },
+  }, { baselinePath: missingBaselinePath });
+  assert.equal(result.allow, true);
+});
+
 test('a patch that touches .env.example is still allowed', () => {
   const result = evaluateHook({
     cwd: tmpdir(),

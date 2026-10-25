@@ -17,6 +17,73 @@ function firstString(...values) {
   return values.find((value) => typeof value === 'string' && value.length > 0) || '';
 }
 
+/**
+ * Every string anywhere in the tool input, so a patch hidden in a second field, an edits
+ * array, or a Codex-style command array is still read.
+ * @param {unknown} value
+ * @param {string[]} [out]
+ */
+function collectStrings(value, out = [], depth = 0) {
+  if (typeof value === 'string') out.push(value);
+  else if (value && typeof value === 'object' && depth < 8) {
+    for (const item of Object.values(value)) collectStrings(item, out, depth + 1);
+  }
+  return out;
+}
+
+const GIT_ESCAPES = { a: '\x07', b: '\b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v' };
+
+/**
+ * Turn a patch header path into the file paths it could name. A tab starts a timestamp in
+ * a unified diff, but is part of the file name in a Codex patch, so both readings are kept
+ * and the caller blocks if either one is sensitive.
+ * @param {string} raw
+ * @returns {string[]}
+ */
+function cleanPatchPaths(raw) {
+  const whole = raw.trim();
+  const cut = whole.split('\t')[0].trim();
+  return whole === cut ? [cleanPatchPath(whole)] : [cleanPatchPath(whole), cleanPatchPath(cut)];
+}
+
+/**
+ * Undo git's "quoted\303\251" form and strip a/ or b/.
+ * @param {string} raw
+ */
+function cleanPatchPath(raw) {
+  let path = raw;
+  if (path.length >= 2 && path.startsWith('"') && path.endsWith('"')) {
+    const latin1 = path.slice(1, -1).replace(/\\([0-7]{3}|.)/g, (_, code) => (
+      code.length === 3 ? String.fromCharCode(parseInt(code, 8)) : (GIT_ESCAPES[code] ?? code)
+    ));
+    // Git writes non-ASCII names as octal UTF-8 bytes, so decode them back to text.
+    path = /[^\x00-\xff]/.test(latin1) ? latin1 : Buffer.from(latin1, 'latin1').toString('utf8');
+  }
+  return path.replace(/^[ab]\//, '');
+}
+
+const GIT_PATH = String.raw`("(?:[^"\\]|\\.)*"|\S+)`;
+const PATCH_HEADER_RES = [
+  /^\*\*\*[ \t]+(?:Update|Add|Delete|Move) File:[ \t]*(.+?)[ \t]*$/gim,
+  /^\*\*\*[ \t]+Move to:[ \t]*(.+?)[ \t]*$/gim,
+  // Spaces or tabs only after ---, so a YAML front matter line is not read as a header.
+  /^(?:\+\+\+|---)[ \t]+(.+?)[ \t]*$/gm,
+  /^(?:rename|copy) (?:from|to) (.+?)[ \t]*$/gm,
+  // A new empty file or a mode change has a diff --git line and no ---/+++ lines.
+  new RegExp(String.raw`^diff --git ${GIT_PATH} ${GIT_PATH}[ \t]*$`, 'gm'),
+];
+
+/** @param {string[]} texts */
+function findPatchPaths(texts) {
+  const paths = [];
+  for (const text of texts) {
+    for (const re of PATCH_HEADER_RES) {
+      for (const match of text.matchAll(re)) paths.push(...match.slice(1).filter(Boolean));
+    }
+  }
+  return paths.flatMap(cleanPatchPaths).filter((path) => path && path !== '/dev/null');
+}
+
 function getToolInput(payload) {
   return payload.tool_input || payload.toolInput || payload.input || {};
 }
@@ -144,13 +211,9 @@ export function evaluateHook(payload, options = {}) {
   }
 
   const filePath = firstString(input.file_path, input.filePath, input.path, payload.file_path);
-  const content = firstString(input.content, input.new_string, input.newString, input.patch, payload.content);
-  // A single patch can touch many files, so every file header counts, not just the first.
-  const patchPaths = [
-    ...content.matchAll(/^\*\*\*\s+(?:Update|Add|Delete|Move) File:\s*(.+?)\s*$/gim),
-    ...content.matchAll(/^\*\*\*\s+Move to:\s*(.+?)\s*$/gim),
-    ...content.matchAll(/^(?:\+\+\+|---)\s+(?:[ab]\/)?(.+?)\s*$/gm),
-  ].map((match) => match[1]).filter((path) => path && path !== '/dev/null');
+  // A single patch can touch many files, and a tool can carry it in any field,
+  // so every file header in every string counts, not just the first one found.
+  const patchPaths = findPatchPaths(collectStrings([input, payload.content]));
   // Credential files get the same every-file check as agent files: a patch naming .env is a write to .env.
   const sensitiveTarget = [filePath, ...patchPaths].find((path) => path && isSensitiveFilePath(path));
   if (sensitiveTarget) {

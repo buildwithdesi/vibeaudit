@@ -57,25 +57,42 @@ export function normalizeCommand(value) {
 /**
  * Undo quoting tricks that split a keyword without changing what the shell runs:
  * c''url and c"u"rl (POSIX quotes), c\url (POSIX escape), c`url (PowerShell), c^url (cmd),
- * and empty expansions such as c$@url or c${unset}url.
- * Only tricks wedged into a word are removed. The caller keeps whichever reading is stricter,
- * so a variable that is not actually empty can only make the verdict stricter, never looser.
+ * and shell expansions wedged into a word such as c$@url, c"$@"url, c${x}url or c$(echo)url.
+ * Every expansion inside a word is removed, whether or not it is really empty. The caller keeps
+ * whichever reading is stricter, so removing a non-empty one can only make the verdict stricter.
  * @param {string} command
  * @returns {string}
  */
 export function deobfuscateCommand(command) {
+  return collapseWordTricks(command, false);
+}
+
+/**
+ * @param {string} command
+ * @param {boolean} dropBacktickBlocks Also remove `...` substitutions. PowerShell uses a lone
+ *   backtick as an escape (i`ex), so this runs as a separate reading, not as part of the main one.
+ */
+function collapseWordTricks(command, dropBacktickBlocks) {
   let current = command;
-  // Repeat until stable, because tricks can be stacked (c$@''url).
-  for (let pass = 0; pass < 5; pass += 1) {
-    const next = current
-      // Expansions that are usually empty also split a name: c$@url, c${x}url, c$()url, ''curl.
-      .replace(/(?<=\w|^|[\s;|&(])(?:\$[@*]|\$\{[^}\s]*\}|\$\(\s*\)|''|"")+(?=\w)/g, '')
+  // Repeat until stable, because tricks can be stacked (c$@''url) and nested (c$(echo $(true))url).
+  // No pass limit: every pass that changes the string makes it shorter, so this always ends,
+  // and a limit would let deep enough nesting leave an expansion in place.
+  for (;;) {
+    let next = current.replace(WORD_EXPANSION_RE, '');
+    if (dropBacktickBlocks) next = next.replace(WORD_BACKTICK_BLOCK_RE, '');
+    next = next
+      .replace(/(?<=\w|^|[\s;|&(])(?:''|"")+(?=\w)/g, '')
       .replace(/(?<=\w)['"`^\\]+(?=\w)/g, '');
-    if (next === current) break;
+    if (next === current) return current;
     current = next;
   }
-  return current;
 }
+
+// An expansion touching a word, a quote or an escape on its right (c$(echo)\url),
+// and a word, a quote or a separator on its left.
+// Innermost $(...) first, so nested substitutions peel off one pass at a time.
+const WORD_EXPANSION_RE = /(?<=\w|^|[\s;|&("'])(?:\$[@*#?!$0-9]|\$\{[^{}]*\}|\$\([^()]*\))+(?=\w|["')\\`^])/g;
+const WORD_BACKTICK_BLOCK_RE = /(?<=\w|^|[\s;|&("'])`[^`\n]*`(?=\w|["'\\^])/g;
 
 const DECISION_RANK = { allow: 0, review: 1, deny: 2 };
 
@@ -87,15 +104,19 @@ export function analyzeCommand(input) {
   const command = normalizeCommand(input);
   if (!command) return result('allow');
 
-  // Check the command as written and with quoting tricks removed, and keep the stricter verdict.
+  // Check the command as written and with each set of tricks removed, and keep the strictest verdict.
   const direct = analyzeNormalized(command);
-  const collapsed = deobfuscateCommand(command);
-  if (collapsed === command) return direct;
-  const deobfuscated = analyzeNormalized(collapsed);
-  if (DECISION_RANK[deobfuscated.decision] <= DECISION_RANK[direct.decision]) return direct;
-  return result(deobfuscated.decision, deobfuscated.findings.map((item) => finding(
+  let strictest = direct;
+  const readings = new Set([collapseWordTricks(command, false), collapseWordTricks(command, true)]);
+  readings.delete(command);
+  for (const reading of readings) {
+    const verdict = analyzeNormalized(reading);
+    if (DECISION_RANK[verdict.decision] > DECISION_RANK[strictest.decision]) strictest = verdict;
+  }
+  if (strictest === direct) return direct;
+  return result(strictest.decision, strictest.findings.map((item) => finding(
     item.id,
-    `${item.message} Quoting or an empty shell expansion was used to hide a command name.`,
+    `${item.message} Quoting or a shell expansion was used to hide a command name.`,
   )));
 }
 
