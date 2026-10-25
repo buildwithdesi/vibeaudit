@@ -1,5 +1,5 @@
 import { isAgentControlPath } from './agent-files.js';
-import { inspectAgentBaseline, inspectReferencedAgentFiles, readBaseline } from './baseline.js';
+import { inspectReferencedAgentFiles, readBaseline } from './baseline.js';
 import { analyzeCommand } from './command.js';
 
 const MAX_HOOK_INPUT = 1024 * 1024;
@@ -58,6 +58,7 @@ function isSensitiveFilePath(filePath) {
 
 /** @param {string} reason @param {string} eventName */
 export function denyHook(reason, eventName = 'PreToolUse') {
+  if (eventName === 'ConfigChange') return { decision: 'block', reason };
   return {
     hookSpecificOutput: {
       hookEventName: eventName,
@@ -65,24 +66,6 @@ export function denyHook(reason, eventName = 'PreToolUse') {
       permissionDecisionReason: reason,
     },
   };
-}
-
-function baselineDenial(inspection) {
-  if (!inspection.baselineExists) {
-    return `VibeGuard blocked agent tools because no reviewed agent-file baseline exists. Run "vibeguard trust-current --i-reviewed-these-files" manually after reviewing every listed file.`;
-  }
-  if (inspection.suspicious.length > 0) {
-    const issue = inspection.suspicious[0];
-    return `VibeGuard found suspicious agent instructions in ${issue.file}:${issue.line}. ${issue.message}`;
-  }
-  const changed = [...inspection.added, ...inspection.changed];
-  if (changed.length > 0) {
-    return `VibeGuard blocked agent tools because this control file is new or changed: ${changed[0]}. Review it, then run "vibeguard trust-file <path> --i-reviewed-this-file" manually.`;
-  }
-  if (inspection.errors.length > 0) {
-    return `VibeGuard could not complete the agent-file check: ${inspection.errors[0]}`;
-  }
-  return '';
 }
 
 /**
@@ -95,16 +78,6 @@ export function evaluateHook(payload, options = {}) {
   const eventName = getEventName(payload);
   const input = getToolInput(payload);
   const cwd = firstString(payload.cwd, input.cwd, options.cwd, process.cwd());
-
-  if (!options.skipBaseline) {
-    if (!readBaseline(options.baselinePath)) {
-      const reason = 'VibeGuard blocked agent tools because no reviewed agent-file baseline exists. Run "vibeguard trust-current --i-reviewed-these-files" manually after reviewing every listed file.';
-      return { allow: false, reason, output: denyHook(reason, eventName) };
-    }
-    const inspection = inspectAgentBaseline({ cwd, baselinePath: options.baselinePath, authorityOnly: true });
-    const reason = baselineDenial(inspection);
-    if (reason) return { allow: false, reason, output: denyHook(reason, eventName) };
-  }
 
   const toolName = firstString(
     payload.tool_name,
@@ -125,22 +98,32 @@ export function evaluateHook(payload, options = {}) {
       const reason = 'VibeGuard trust and baseline commands must be run manually, never by an AI agent.';
       return { allow: false, reason, output: denyHook(reason, eventName) };
     }
+    // Check only agent files named by this command. A global sweep lets an
+    // unrelated new skill or plugin block every tool call and makes each call slow.
     if (!options.skipBaseline) {
-      const referenced = inspectReferencedAgentFiles(command, { cwd, baselinePath: options.baselinePath });
-      if (!referenced.ok) {
-        const target = referenced.changed[0] || referenced.missing[0];
-        const issue = referenced.suspicious?.[0];
-        const reason = issue
-          ? `VibeGuard blocked suspicious instructions in an agent script: ${issue.file}:${issue.line}. ${issue.message}`
-          : `VibeGuard blocked a changed or missing agent script: ${target}. Review and trust the file before running it.`;
-        return { allow: false, reason, output: denyHook(reason, eventName) };
+      try {
+        if (readBaseline(options.baselinePath)) {
+          const referenced = inspectReferencedAgentFiles(command, { cwd, baselinePath: options.baselinePath });
+          if (!referenced.ok) {
+            const target = referenced.changed[0] || referenced.missing[0];
+            const issue = referenced.suspicious?.[0];
+            const reason = issue
+              ? `VibeGuard blocked suspicious instructions in an agent script: ${issue.file}:${issue.line}. ${issue.message}`
+              : `VibeGuard blocked a changed or missing agent script: ${target}. Review and trust the file before running it.`;
+            return { allow: false, reason, output: denyHook(reason, eventName) };
+          }
+        }
+      } catch {
+        // A broken baseline skips provenance checks, not the command safety checks below.
       }
     }
     const analysis = analyzeCommand(command);
-    if (analysis.decision !== 'allow') {
-      const reason = `VibeGuard blocked this ${analysis.decision === 'deny' ? 'dangerous' : 'unverified'} command. ${analysis.summary}`;
+    if (analysis.decision === 'deny') {
+      const reason = `VibeGuard blocked this dangerous command. ${analysis.summary}`;
       return { allow: false, reason, output: denyHook(reason, eventName) };
     }
+    // Review-level actions continue through the host's regular permission flow.
+    // A PreToolUse hook must not turn a request for review into an unconditional block.
   }
 
   const filePath = firstString(input.file_path, input.filePath, input.path, payload.file_path);
@@ -149,9 +132,14 @@ export function evaluateHook(payload, options = {}) {
     return { allow: false, reason, output: denyHook(reason, eventName) };
   }
   const content = firstString(input.content, input.new_string, input.newString, input.patch, payload.content);
-  const patchTouchesAgentFile = /(?:^|[\\/])(?:SKILL|AGENTS(?:\.override)?|CLAUDE(?:\.local)?|GEMINI)\.md\b|(?:^|[\\/])(?:\.mcp|\.claude)\.json\b|(?:^|[\\/])\.(?:claude|codex)[\\/](?:settings|hooks|config|managed_config)/im.test(content);
+  const hasWritePayload = ['content', 'new_string', 'newString', 'patch'].some((key) => typeof input[key] === 'string');
+  const writeLikeTool = /(?:^|[_-])(?:write|edit|patch|create|replace|insert|append|update)(?:[_-]|$)/i.test(toolName);
+  const patchPath = content.match(/^\*\*\*\s+(?:Update|Add|Delete) File:\s*(.+?)\s*$/im)?.[1]
+    || content.match(/^\+\+\+\s+(?:b\/)?(.+?)\s*$/m)?.[1]
+    || '';
+  const targetsAgentFile = isAgentControlPath(filePath || patchPath);
 
-  if ((filePath && isAgentControlPath(filePath)) || patchTouchesAgentFile) {
+  if (targetsAgentFile && (writeLikeTool || hasWritePayload)) {
     const reason = `VibeGuard blocked an AI edit to ${filePath || 'an agent control file'}. Edit it manually, review every line, then trust its new hash.`;
     return { allow: false, reason, output: denyHook(reason, eventName) };
   }
