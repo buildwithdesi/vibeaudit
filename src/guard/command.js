@@ -15,11 +15,12 @@ const EXECUTABLE_DOWNLOAD_RE = /\.(?:exe|msi|msix|dll|scr|com|ps1|psm1|bat|cmd|v
 const CREDENTIAL_TARGET_RE = /(?:\.ssh|\.aws|\.azure|\.npmrc|\.pypirc|\.env\b|login data|local state|cookies|keychain|credential|api[_ -]?key|access[_ -]?token|refresh[_ -]?token|process\.env|os\.(?:environ|getenv)|printenv|\benv\b|\$env:|%appdata%|\\appdata\\)/i;
 const NETWORK_SEND_RE = /\b(?:curl|wget|invoke-webrequest|invoke-restmethod|irm|iwr|fetch|requests?\.(?:post|put)|webclient|uploadfile|scp|sftp|nc|ncat)\b/i;
 const GUARD_STATE_RE = /(?:\.vibeaudit[\\/](?:agent-baseline|command-approvals)\.json|[\\/]vibeaudit[\\/]guard[\\/])/i;
-const FILE_MUTATION_RE = /\b(?:remove-item|set-content|add-content|out-file|move-item|copy-item|rename-item|del|erase|rm|mv|cp|unlink|writefilesync|writefile|rename|rmdir)\b|(?:>>|>)/i;
+// PowerShell aliases (ri, rd, sc, ac, ren, rni, mi, cpi, cli) run the same cmdlets as their long names.
+const FILE_MUTATION_RE = /\b(?:remove-item|set-content|add-content|out-file|move-item|copy-item|rename-item|clear-item|del|erase|rm|mv|cp|unlink|writefilesync|writefile|rename|rmdir|ri|rd|sc|ac|ren|rni|mi|cpi|cli)\b|(?:>>|>)/i;
 const AGENT_CONTROL_TARGET_RE = /(?:[\\/]?)(?:SKILL|AGENTS(?:\.override)?|CLAUDE(?:\.local)?|GEMINI)\.md\b|(?:[\\/]?)(?:\.mcp|\.claude)\.json\b|(?:[\\/]?)\.(?:claude|codex)[\\/](?:settings|hooks|config|managed_config)(?:\.|[\\/]|$)/i;
-const AGENT_CONTROL_WRITE_RE = /(?:\b(?:set-content|add-content|out-file|remove-item|move-item|copy-item|rename-item|del|erase|rm|mv|cp|unlink|writefilesync|writefile|write_text|write_bytes|sed\s+-i|perl\s+-i|tee|git\s+(?:checkout|restore|apply|mv|rm))\b|\bopen\s*\([^\r\n]{0,220}(?:['\"][wax][b+]?['\"]|mode\s*=\s*['\"][wax])|(?:>>|>))/i;
+const AGENT_CONTROL_WRITE_RE = /(?:\b(?:set-content|add-content|out-file|remove-item|move-item|copy-item|rename-item|clear-item|del|erase|rm|mv|cp|unlink|ri|rd|sc|ac|ren|rni|mi|cpi|cli|move|copy|writefilesync|writefile|write_text|write_bytes|sed\s+-i|perl\s+-i|tee|git\s+(?:checkout|restore|apply|mv|rm))\b|\bopen\s*\([^\r\n]{0,220}(?:['\"][wax][b+]?['\"]|mode\s*=\s*['\"][wax])|(?:>>|>))/i;
 const HIGH_IMPACT_COMMAND_RE = /(?:\bgit\s+(?:commit|push|tag)\b|\b(?:npm|pnpm|yarn|bun)(?:\.cmd)?\s+publish\b|\b(?:vercel|netlify|railway|wrangler)(?:\.cmd)?\s+(?:deploy|up|publish)\b|\bgh(?:\.exe)?\s+(?:api|gist\s+(?:create|edit)|release\s+(?:create|upload))\b|\b(?:curl|wget|invoke-webrequest|invoke-restmethod|irm|iwr)\b[^\r\n]{0,180}(?:-X|--request)\s*(?:POST|PUT|PATCH|DELETE)\b)/i;
-const DESTRUCTIVE_COMMAND_RE = /(?:\b(?:rm|remove-item|rmdir|del|erase)\b[^\r\n]{0,120}(?:-rf|-fr|-r\b|--recursive|--force|\/s\b|\/q\b)|\b(?:format|diskpart|shutdown|stop-computer|restart-computer|taskkill)\b[^\r\n]{0,120}(?:\/f|-force|-y)\b)/i;
+const DESTRUCTIVE_COMMAND_RE = /(?:\b(?:rm|remove-item|rmdir|del|erase|ri|rd)\b[^\r\n]{0,120}(?:-rf|-fr|-r\b|--recursive|--force|-recurse\b|-force\b|\/s\b|\/q\b)|\b(?:format|diskpart|shutdown|stop-computer|restart-computer|taskkill)\b[^\r\n]{0,120}(?:\/f|-force|-y)\b)/i;
 const CREDENTIAL_COMMAND_RE = /(?:\b(?:hf|gh|aws|az|gcloud|vercel|npm|docker)\b[\s-]*(?:auth\s+(?:(?:application-default\s+)?(?:token|print-access-token))|token\s+(?:view|print|get|create|list)|get-(?:access-)?token|credentials?|env\s+pull)\b|\bnpm\b[^\r\n]{0,100}\bconfig\s+get\b[^\r\n]{0,100}(?:auth[_-]?token|password)\b|\bgit\s+credential\s+fill\b|\b(?:cmdkey\s+\/list|vaultcmd\b[^\r\n]{0,30}\/list|security\s+find-generic-password)\b)/i;
 const ENV_OUTPUT_RE = /\b(?:printenv|set|env)\b[^\r\n]{0,120}\b(?:key|token|secret|password|credential)\b/i;
 const ENV_VARIABLE_OUTPUT_RE = /\b(?:echo|printf|print|write-output|write-host)\b[^\r\n]{0,120}(?:\$(?:env:)?[a-z0-9_]*(?:key|token|secret|password|credential)|%[a-z0-9_]*(?:key|token|secret|password|credential)%)/i;
@@ -54,6 +55,19 @@ export function normalizeCommand(value) {
 }
 
 /**
+ * Undo quoting tricks that split a keyword without changing what the shell runs:
+ * c''url and c"u"rl (POSIX quotes), c\url (POSIX escape), c`url (PowerShell), c^url (cmd).
+ * Only characters wedged between two word characters are removed.
+ * @param {string} command
+ * @returns {string}
+ */
+export function deobfuscateCommand(command) {
+  return command.replace(/(?<=\w)['"`^\\]+(?=\w)/g, '');
+}
+
+const DECISION_RANK = { allow: 0, review: 1, deny: 2 };
+
+/**
  * @param {unknown} input
  * @returns {{decision:'allow'|'review'|'deny', findings:Array<{id:string,message:string}>, summary:string}}
  */
@@ -61,6 +75,22 @@ export function analyzeCommand(input) {
   const command = normalizeCommand(input);
   if (!command) return result('allow');
 
+  // Check the command as written and with quoting tricks removed, and keep the stricter verdict.
+  const direct = analyzeNormalized(command);
+  const collapsed = deobfuscateCommand(command);
+  if (collapsed === command) return direct;
+  const deobfuscated = analyzeNormalized(collapsed);
+  if (DECISION_RANK[deobfuscated.decision] <= DECISION_RANK[direct.decision]) return direct;
+  return result(deobfuscated.decision, deobfuscated.findings.map((item) => finding(
+    item.id,
+    `${item.message} Quoting was used to hide a command name.`,
+  )));
+}
+
+/**
+ * @param {string} command
+ */
+function analyzeNormalized(command) {
   const findings = [];
 
   if (GUARD_STATE_RE.test(command) && FILE_MUTATION_RE.test(command)) {

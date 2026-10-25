@@ -7,7 +7,9 @@ const APPROVAL_COMMAND_RE = /\bvibeguard(?:\.cmd|\.exe)?\b[\s\S]{0,120}\b(?:trus
 const MCP_TOOL_RE = /^mcp(?:__|_)/i;
 const MCP_MUTATION_RE = /(?:^|[_-])(?:create|update|delete|remove|write|send|post|upload|publish|install|execute|exec|run|shell|push|deploy|pay|charge|fund|auth|token|credential|secret|share|move|rename|set|grant|revoke)(?:[_-]|$)/i;
 const READ_ONLY_WEB_MCP_RE = /^mcp(?:__|_)web(?:__|_)(?:run|search|open|click|find|screenshot|finance|weather|sports|time)$/i;
-const SAFE_ENV_BASENAME_RE = /^\.env\.(?:example|sample|template)$/i;
+// Read-only file tools across Claude Code, Codex, and Cursor. Anything else touching an agent control file is treated as a write.
+const READ_ONLY_TOOL_RE = /^(?:read|glob|grep|ls|notebookread|view|view_file|read_file|list_dir|list_directory|file_search|grep_search|codebase_search)$/i;
+const SAFE_ENV_BASENAME_RE =/^\.env\.(?:example|sample|template)$/i;
 const SENSITIVE_BROWSER_BASENAME_RE = /^(?:login data|local state|cookies)$/i;
 const SENSITIVE_GENERIC_BASENAME_RE = /^(?:credentials?|secrets?|tokens?)\.(?:json|jsonl|txt|db|sqlite|yaml|yml|ini|toml)$/i;
 
@@ -132,15 +134,20 @@ export function evaluateHook(payload, options = {}) {
     return { allow: false, reason, output: denyHook(reason, eventName) };
   }
   const content = firstString(input.content, input.new_string, input.newString, input.patch, payload.content);
-  const hasWritePayload = ['content', 'new_string', 'newString', 'patch'].some((key) => typeof input[key] === 'string');
-  const writeLikeTool = /(?:^|[_-])(?:write|edit|patch|create|replace|insert|append|update)(?:[_-]|$)/i.test(toolName);
-  const patchPath = content.match(/^\*\*\*\s+(?:Update|Add|Delete) File:\s*(.+?)\s*$/im)?.[1]
-    || content.match(/^\+\+\+\s+(?:b\/)?(.+?)\s*$/m)?.[1]
-    || '';
-  const targetsAgentFile = isAgentControlPath(filePath || patchPath);
+  const hasWritePayload = ['content', 'contents', 'new_string', 'newString', 'patch', 'edits', 'new_source'].some((key) => input[key] !== undefined);
+  // Fail closed: a tool touching an agent control file must be a known reader, not merely "not a known writer".
+  // Name matching alone misses tools like MultiEdit and NotebookEdit.
+  const knownReadOnlyTool = READ_ONLY_TOOL_RE.test(toolName);
+  // A single patch can touch many files, so every file header counts, not just the first.
+  const patchPaths = [
+    ...content.matchAll(/^\*\*\*\s+(?:Update|Add|Delete|Move) File:\s*(.+?)\s*$/gim),
+    ...content.matchAll(/^\*\*\*\s+Move to:\s*(.+?)\s*$/gim),
+    ...content.matchAll(/^(?:\+\+\+|---)\s+(?:[ab]\/)?(.+?)\s*$/gm),
+  ].map((match) => match[1]).filter((path) => path && path !== '/dev/null');
+  const agentTarget = [filePath, ...patchPaths].find((path) => path && isAgentControlPath(path));
 
-  if (targetsAgentFile && (writeLikeTool || hasWritePayload)) {
-    const reason = `VibeGuard blocked an AI edit to ${filePath || 'an agent control file'}. Edit it manually, review every line, then trust its new hash.`;
+  if (agentTarget && (!knownReadOnlyTool || hasWritePayload)) {
+    const reason = `VibeGuard blocked an AI edit to ${agentTarget}. Edit it manually, review every line, then trust its new hash.`;
     return { allow: false, reason, output: denyHook(reason, eventName) };
   }
 
