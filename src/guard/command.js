@@ -18,7 +18,11 @@ const GUARD_STATE_RE = /(?:\.vibeaudit[\\/](?:agent-baseline|command-approvals)\
 // PowerShell aliases (ri, rd, sc, ac, ren, rni, mi, cpi, cli) run the same cmdlets as their long names.
 const FILE_MUTATION_RE = /\b(?:remove-item|set-content|add-content|out-file|move-item|copy-item|rename-item|clear-item|del|erase|rm|mv|cp|unlink|writefilesync|writefile|rename|rmdir|ri|rd|sc|ac|ren|rni|mi|cpi|cli)\b|(?:>>|>)/i;
 const AGENT_CONTROL_TARGET_RE = /(?:[\\/]?)(?:SKILL|AGENTS(?:\.override)?|CLAUDE(?:\.local)?|GEMINI)\.md\b|(?:[\\/]?)(?:\.mcp|\.claude)\.json\b|(?:[\\/]?)\.(?:claude|codex)[\\/](?:settings|hooks|config|managed_config)(?:\.|[\\/]|$)/i;
-const AGENT_CONTROL_WRITE_RE = /(?:\b(?:set-content|add-content|out-file|remove-item|move-item|copy-item|rename-item|clear-item|del|erase|rm|mv|cp|unlink|ri|rd|sc|ac|ren|rni|mi|cpi|cli|move|copy|writefilesync|writefile|write_text|write_bytes|sed\s+-i|perl\s+-i|tee|git\s+(?:checkout|restore|apply|mv|rm))\b|\bopen\s*\([^\r\n]{0,220}(?:['\"][wax][b+]?['\"]|mode\s*=\s*['\"][wax])|(?:>>|>))/i;
+const AGENT_CONTROL_WRITE_RE = /(?:\b(?:set-content|add-content|out-file|remove-item|move-item|copy-item|rename-item|clear-item|del|erase|rm|mv|cp|unlink|writefilesync|writefile|write_text|write_bytes|sed\s+-i|perl\s+-i|tee|git\s+(?:checkout|restore|apply|mv|rm))\b|\bopen\s*\([^\r\n]{0,220}(?:['\"][wax][b+]?['\"]|mode\s*=\s*['\"][wax])|(?:>>|>))/i;
+// Short aliases (sc, ri, cli, copy, move...) are also ordinary words: "the CLI", "copy the file".
+// Matched anywhere, they flagged every AGENTS.md that mentions its CLI and links a SKILL.md.
+// So they count only as the command word, on a line that also names an agent control file.
+const AGENT_CONTROL_ALIAS_WRITE_RE = /(?:^|[;&|({`'"]|\$\(|(?:^|\s)(?:-c|-command|\/c|\/k)\s)\s*(?:ri|rd|sc|ac|ren|rni|mi|cpi|cli|move|copy)\s/i;
 const HIGH_IMPACT_COMMAND_RE = /(?:\bgit\s+(?:commit|push|tag)\b|\b(?:npm|pnpm|yarn|bun)(?:\.cmd)?\s+publish\b|\b(?:vercel|netlify|railway|wrangler)(?:\.cmd)?\s+(?:deploy|up|publish)\b|\bgh(?:\.exe)?\s+(?:api|gist\s+(?:create|edit)|release\s+(?:create|upload))\b|\b(?:curl|wget|invoke-webrequest|invoke-restmethod|irm|iwr)\b[^\r\n]{0,180}(?:-X|--request)\s*(?:POST|PUT|PATCH|DELETE)\b)/i;
 const DESTRUCTIVE_COMMAND_RE = /(?:\b(?:rm|remove-item|rmdir|del|erase|ri|rd)\b[^\r\n]{0,120}(?:-rf|-fr|-r\b|--recursive|--force|-recurse\b|-force\b|\/s\b|\/q\b)|\b(?:format|diskpart|shutdown|stop-computer|restart-computer|taskkill)\b[^\r\n]{0,120}(?:\/f|-force|-y)\b)/i;
 const CREDENTIAL_COMMAND_RE = /(?:\b(?:hf|gh|aws|az|gcloud|vercel|npm|docker)\b[\s-]*(?:auth\s+(?:(?:application-default\s+)?(?:token|print-access-token))|token\s+(?:view|print|get|create|list)|get-(?:access-)?token|credentials?|env\s+pull)\b|\bnpm\b[^\r\n]{0,100}\bconfig\s+get\b[^\r\n]{0,100}(?:auth[_-]?token|password)\b|\bgit\s+credential\s+fill\b|\b(?:cmdkey\s+\/list|vaultcmd\b[^\r\n]{0,30}\/list|security\s+find-generic-password)\b)/i;
@@ -81,11 +85,34 @@ function collapseWordTricks(command, dropBacktickBlocks) {
     let next = current.replace(WORD_EXPANSION_RE, '');
     if (dropBacktickBlocks) next = next.replace(WORD_BACKTICK_BLOCK_RE, '');
     next = next
-      .replace(/(?<=\w|^|[\s;|&(])(?:''|"")+(?=\w)/g, '')
+      .replace(WORD_QUOTE_RUN_RE, (run) => (isEmptyQuotePairs(run) ? '' : run))
       .replace(/(?<=\w)['"`^\\]+(?=\w)/g, '');
     if (next === current) return current;
     current = next;
   }
+}
+
+/**
+ * True when a run of quotes is only empty pairs ('' or ""), which the shell drops.
+ * A check in code instead of /^(?:''|"")+$/, which works the same but trips the
+ * repo's own regex-dos rule and fails the strict self-scan.
+ * @param {string} run
+ */
+function isEmptyQuotePairs(run) {
+  if (run.length % 2 !== 0) return false;
+  for (let i = 0; i < run.length; i += 2) {
+    if (run[i] !== run[i + 1]) return false;
+  }
+  return true;
+}
+
+/**
+ * @param {string} command
+ */
+function writesAgentControlByAlias(command) {
+  return command
+    .split(/\r?\n/)
+    .some((line) => AGENT_CONTROL_TARGET_RE.test(line) && AGENT_CONTROL_ALIAS_WRITE_RE.test(line));
 }
 
 // An expansion touching a word, a quote or an escape on its right (c$(echo)\url),
@@ -93,6 +120,8 @@ function collapseWordTricks(command, dropBacktickBlocks) {
 // Innermost $(...) first, so nested substitutions peel off one pass at a time.
 const WORD_EXPANSION_RE = /(?<=\w|^|[\s;|&("'])(?:\$[@*#?!$0-9]|\$\{[^{}]*\}|\$\([^()]*\))+(?=\w|["')\\`^])/g;
 const WORD_BACKTICK_BLOCK_RE = /(?<=\w|^|[\s;|&("'])`[^`\n]*`(?=\w|["'\\^])/g;
+// A run of quotes between a separator and a word (c''url). Dropped only when it is all empty pairs.
+const WORD_QUOTE_RUN_RE = /(?<=\w|^|[\s;|&(])['"]+(?=\w)/g;
 
 const DECISION_RANK = { allow: 0, review: 1, deny: 2 };
 
@@ -201,7 +230,7 @@ function analyzeNormalized(command) {
     ));
   }
 
-  if (AGENT_CONTROL_TARGET_RE.test(command) && AGENT_CONTROL_WRITE_RE.test(command)) {
+  if (AGENT_CONTROL_TARGET_RE.test(command) && (AGENT_CONTROL_WRITE_RE.test(command) || writesAgentControlByAlias(command))) {
     findings.push(finding(
       'agent-control-tampering',
       'The command attempts to write, restore, or remove an agent control file. Change agent instructions only through a reviewed manual edit.',
