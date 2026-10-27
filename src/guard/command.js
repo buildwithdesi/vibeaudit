@@ -19,10 +19,16 @@ const GUARD_STATE_RE = /(?:\.vibeaudit[\\/](?:agent-baseline|command-approvals)\
 const FILE_MUTATION_RE = /\b(?:remove-item|set-content|add-content|out-file|move-item|copy-item|rename-item|clear-item|del|erase|rm|mv|cp|unlink|writefilesync|writefile|rename|rmdir|ri|rd|sc|ac|ren|rni|mi|cpi|cli)\b|(?:>>|>)/i;
 const AGENT_CONTROL_TARGET_RE = /(?:[\\/]?)(?:SKILL|AGENTS(?:\.override)?|CLAUDE(?:\.local)?|GEMINI)\.md\b|(?:[\\/]?)(?:\.mcp|\.claude)\.json\b|(?:[\\/]?)\.(?:claude|codex)[\\/](?:settings|hooks|config|managed_config)(?:\.|[\\/]|$)/i;
 const AGENT_CONTROL_WRITE_RE = /(?:\b(?:set-content|add-content|out-file|remove-item|move-item|copy-item|rename-item|clear-item|del|erase|rm|mv|cp|unlink|writefilesync|writefile|write_text|write_bytes|sed\s+-i|perl\s+-i|tee|git\s+(?:checkout|restore|apply|mv|rm))\b|\bopen\s*\([^\r\n]{0,220}(?:['\"][wax][b+]?['\"]|mode\s*=\s*['\"][wax])|(?:>>|>))/i;
-// Short aliases (sc, ri, cli, copy, move...) are also ordinary words: "the CLI", "copy the file".
-// Matched anywhere, they flagged every AGENTS.md that mentions its CLI and links a SKILL.md.
-// So they count only as the command word, on a line that also names an agent control file.
-const AGENT_CONTROL_ALIAS_WRITE_RE = /(?:^|[;&|({`'"]|\$\(|(?:^|\s)(?:-c|-command|\/c|\/k)\s)\s*(?:ri|rd|sc|ac|ren|rni|mi|cpi|cli|move|copy)\s/i;
+// Short aliases that write files: Set-Content, Add-Content, Remove-Item, Rename-Item, Move-Item,
+// Copy-Item, Clear-Item, and cmd's copy and move. In a command they count anywhere.
+const AGENT_CONTROL_ALIAS_RE = /\b(?:ri|rd|sc|ac|ren|rni|mi|cpi|cli|move|copy)\b/i;
+// In a document (an AGENTS.md or SKILL.md being scanned) the same aliases are also ordinary words:
+// "the CLI", "copy the file". Matched anywhere, they flagged every AGENTS.md that mentions its CLI
+// and links a SKILL.md. So there they count only as the command word, on a line that also names
+// an agent control file.
+const AGENT_CONTROL_ALIAS_COMMAND_RE = /(?:^|[;&|({`'"=@,!]|\$\(|\b(?:do|then|else|call|if|exec)\s|\bexist\s+\S+\s|\b(?:powershell|pwsh|cmd)(?:\.exe)?\s|(?:^|\s)(?:-c|-command|\/c|\/k)\s)\s*(?:ri|rd|sc|ac|ren|rni|mi|cpi|cli|move|copy)(?=[\s\/,;="'|&)]|$)/i;
+// A backtick, backslash or caret at the end of a line continues the command on the next line.
+const LINE_CONTINUATION_RE = /[`\\^][ \t]*\r?\n/g;
 const HIGH_IMPACT_COMMAND_RE = /(?:\bgit\s+(?:commit|push|tag)\b|\b(?:npm|pnpm|yarn|bun)(?:\.cmd)?\s+publish\b|\b(?:vercel|netlify|railway|wrangler)(?:\.cmd)?\s+(?:deploy|up|publish)\b|\bgh(?:\.exe)?\s+(?:api|gist\s+(?:create|edit)|release\s+(?:create|upload))\b|\b(?:curl|wget|invoke-webrequest|invoke-restmethod|irm|iwr)\b[^\r\n]{0,180}(?:-X|--request)\s*(?:POST|PUT|PATCH|DELETE)\b)/i;
 const DESTRUCTIVE_COMMAND_RE = /(?:\b(?:rm|remove-item|rmdir|del|erase|ri|rd)\b[^\r\n]{0,120}(?:-rf|-fr|-r\b|--recursive|--force|-recurse\b|-force\b|\/s\b|\/q\b)|\b(?:format|diskpart|shutdown|stop-computer|restart-computer|taskkill)\b[^\r\n]{0,120}(?:\/f|-force|-y)\b)/i;
 const CREDENTIAL_COMMAND_RE = /(?:\b(?:hf|gh|aws|az|gcloud|vercel|npm|docker)\b[\s-]*(?:auth\s+(?:(?:application-default\s+)?(?:token|print-access-token))|token\s+(?:view|print|get|create|list)|get-(?:access-)?token|credentials?|env\s+pull)\b|\bnpm\b[^\r\n]{0,100}\bconfig\s+get\b[^\r\n]{0,100}(?:auth[_-]?token|password)\b|\bgit\s+credential\s+fill\b|\b(?:cmdkey\s+\/list|vaultcmd\b[^\r\n]{0,30}\/list|security\s+find-generic-password)\b)/i;
@@ -108,11 +114,14 @@ function isEmptyQuotePairs(run) {
 
 /**
  * @param {string} command
+ * @param {boolean} isDocument
  */
-function writesAgentControlByAlias(command) {
+function writesAgentControlByAlias(command, isDocument) {
+  if (!isDocument) return AGENT_CONTROL_ALIAS_RE.test(command);
   return command
+    .replace(LINE_CONTINUATION_RE, ' ')
     .split(/\r?\n/)
-    .some((line) => AGENT_CONTROL_TARGET_RE.test(line) && AGENT_CONTROL_ALIAS_WRITE_RE.test(line));
+    .some((line) => AGENT_CONTROL_TARGET_RE.test(line) && AGENT_CONTROL_ALIAS_COMMAND_RE.test(line));
 }
 
 // An expansion touching a word, a quote or an escape on its right (c$(echo)\url),
@@ -127,19 +136,22 @@ const DECISION_RANK = { allow: 0, review: 1, deny: 2 };
 
 /**
  * @param {unknown} input
+ * @param {{source?: 'command'|'document'}} [options] Use source 'document' when the input is a whole
+ *   file being scanned (an AGENTS.md or SKILL.md) rather than one command about to run.
  * @returns {{decision:'allow'|'review'|'deny', findings:Array<{id:string,message:string}>, summary:string}}
  */
-export function analyzeCommand(input) {
+export function analyzeCommand(input, options = {}) {
   const command = normalizeCommand(input);
   if (!command) return result('allow');
+  const isDocument = options.source === 'document';
 
   // Check the command as written and with each set of tricks removed, and keep the strictest verdict.
-  const direct = analyzeNormalized(command);
+  const direct = analyzeNormalized(command, isDocument);
   let strictest = direct;
   const readings = new Set([collapseWordTricks(command, false), collapseWordTricks(command, true)]);
   readings.delete(command);
   for (const reading of readings) {
-    const verdict = analyzeNormalized(reading);
+    const verdict = analyzeNormalized(reading, isDocument);
     if (DECISION_RANK[verdict.decision] > DECISION_RANK[strictest.decision]) strictest = verdict;
   }
   if (strictest === direct) return direct;
@@ -151,8 +163,9 @@ export function analyzeCommand(input) {
 
 /**
  * @param {string} command
+ * @param {boolean} isDocument
  */
-function analyzeNormalized(command) {
+function analyzeNormalized(command, isDocument) {
   const findings = [];
 
   if (GUARD_STATE_RE.test(command) && FILE_MUTATION_RE.test(command)) {
@@ -230,7 +243,7 @@ function analyzeNormalized(command) {
     ));
   }
 
-  if (AGENT_CONTROL_TARGET_RE.test(command) && (AGENT_CONTROL_WRITE_RE.test(command) || writesAgentControlByAlias(command))) {
+  if (AGENT_CONTROL_TARGET_RE.test(command) && (AGENT_CONTROL_WRITE_RE.test(command) || writesAgentControlByAlias(command, isDocument))) {
     findings.push(finding(
       'agent-control-tampering',
       'The command attempts to write, restore, or remove an agent control file. Change agent instructions only through a reviewed manual edit.',
