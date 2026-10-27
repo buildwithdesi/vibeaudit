@@ -39,7 +39,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { classifyLicense } from '../rules/license-contamination.js';
-import { reviewFreshPackage } from './fresh-review.js';
+import { reviewRegistryPackage } from './fresh-review.js';
 import { reviewVulnerabilities } from './vulnerability-review.js';
 import { createIsolatedNpmEnv, findTrustedNpmCli, NPM_REGISTRY } from '../trusted-tools.js';
 
@@ -242,8 +242,13 @@ export function assessPackage(pkg, packument, nowMs) {
 /**
  * Run the gate for an install spec.
  *
+ * Set reviewAll to authenticate and inspect every resolved registry artifact,
+ * regardless of age. onVerifiedArchive can retain those exact bytes for an
+ * installation bound to this review; a failed callback makes coverage incomplete.
+ * Consumers must still honor the whole report's blocking findings.
+ *
  * @param {string} spec
- * @param {{fetchImpl?: typeof fetch, nowMs?: number, resolve?: typeof resolveTree}} [opts]
+ * @param {{fetchImpl?: typeof fetch, nowMs?: number, resolve?: typeof resolveTree, reviewAll?: boolean, onVerifiedArchive?: (artifact: {name: string, version: string, integrity: string, archive: Buffer}) => unknown}} [opts]
  */
 export async function precheck(spec, opts = {}) {
   const fetchImpl = opts.fetchImpl || fetch;
@@ -270,17 +275,19 @@ export async function precheck(spec, opts = {}) {
         const packument = await fetchPackument(pkg.name, fetchImpl); // vibe-audit-ignore perf-no-await-parallel
         results[i] = assessPackage(pkg, packument, nowMs);
         const result = results[i];
-        if (result.ageHours !== null && result.ageHours < FRESH_HOURS) {
-          const review = await reviewFreshPackage(pkg, packument?.versions?.[pkg.version], fetchImpl); // vibe-audit-ignore perf-no-await-parallel
+        const fresh = result.ageHours !== null && result.ageHours < FRESH_HOURS;
+        if (opts.reviewAll === true || fresh) {
+          const reviewLabel = opts.reviewAll === true ? 'artifact review' : 'fresh-release review';
+          const review = await reviewRegistryPackage(pkg, packument?.versions?.[pkg.version], fetchImpl, { publishedAt: packument?.time?.[pkg.version], onVerifiedArchive: opts.onVerifiedArchive }); // vibe-audit-ignore perf-no-await-parallel
           result.review = review;
           if (review.status === 'incomplete') {
             result.level = 'block';
-            result.reasons.push(`fresh-release review incomplete: ${review.reason}`);
+            result.reasons.push(`${reviewLabel} incomplete: ${review.reason}`);
           } else {
-            result.reasons.push(`fresh-release review: SHA-512 and registry signature verified, ${review.files} archive entries inspected, ${review.advisories.length} known OSV advisories; static checks do not prove safety`);
+            result.reasons.push(`${reviewLabel}: SHA-512 and registry signature verified, ${review.files} archive entries inspected, ${review.advisories.length} known OSV advisories; static checks do not prove safety`);
             result.reasons.push(...review.findings, ...review.advisories.map((id) => `OSV advisory: ${id}`));
-            if (review.status === 'flagged' || review.installScripts.length) result.level = 'block';
-            if (review.installScripts.length) result.reasons.push('fresh archive contains install scripts; installation behavior still requires manual review');
+            if (review.status === 'flagged' || (fresh && review.installScripts.length)) result.level = 'block';
+            if (fresh && review.installScripts.length) result.reasons.push('fresh archive contains install scripts; installation behavior still requires manual review');
           }
         }
       } catch {

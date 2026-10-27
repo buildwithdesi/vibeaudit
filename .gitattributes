@@ -1,1 +1,6 @@
 *.sh text eol=lf
+
+# These bytes are hashed and signed; Windows checkout conversion invalidates them.
+src/data/agent-skill.md -text
+src/data/agent-skill-baseline.json -text
+src/data/*.sigstore.json -text

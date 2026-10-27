@@ -12,12 +12,18 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: test (${{ matrix.display || matrix.node-version }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
 
     strategy:
       matrix:
+        os: [ubuntu-latest]
         node-version: [18, 20, 22]
+        include:
+          - os: windows-latest
+            node-version: 22
+            display: Windows Node 22
 
     steps:
       - uses: actions/checkout@v4

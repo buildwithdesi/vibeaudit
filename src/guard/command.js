@@ -305,7 +305,7 @@ function analyzeNormalized(command, isDocument) {
     )]);
   }
 
-  if (/\b(?:npm|pnpm|yarn|bun|pip(?:3)?|pipx|python(?:3)?\s+-m\s+pip|gem|cargo|go|winget|choco|scoop|brew|apt(?:-get)?|dnf|dotnet\s+tool)\b[\s\S]{0,120}\b(?:install|add|get|ci|update|upgrade)\b/i.test(command) ||
+  if (/\b(?:npm|pnpm|yarn|bun|pip(?:3)?|pipx|python(?:3)?\s+-m\s+pip|gem|cargo|go|winget|choco|scoop|brew|apt(?:-get)?|dnf|dotnet\s+tool)(?:\.exe|\.cmd|\.ps1)?\b["']?\s+[\s\S]{0,120}\b(?:install|add|get|ci|update|upgrade)\b/i.test(command) ||
       /\b(?:install-module|install-script|install-package|update-module|npx|pnpx|bunx|uvx)\b/i.test(command)) {
     return result('review', [finding(
       'package-install',

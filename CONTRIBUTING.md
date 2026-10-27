@@ -34,6 +34,7 @@ Then register it in `src/rules/index.js`.
 ## Development
 
 Use Node >=18.19.0. CI exercises Node 18, 20, and 22 on Linux.
+The shared source gate also runs on Windows with Node 22.
 Dependencies are not assumed to be installed. This project has no build step,
 web server, or database to start.
 
@@ -63,6 +64,7 @@ Never copy token values into fixtures, reports, or commits.
 |---|---|
 | Detection or scan configuration | Positive and negative fixtures, then `npm run audit:self` |
 | CLI or reports | Invoke the CLI on a temporary fixture; assert exit status and read the generated output |
+| Protected npm installation | `npm run test:install` (also in `verify`) exercises real offline npm with signed fixture archives; live registry resolution and OSV require a separate disposable-project run |
 | Agent controls or packaged skill | `npm run benchmark:agent -- --strict`; never execute fixture instructions |
 | Protection pilot | `npm run test:pilot` with a running local Linux Docker engine and a pre-pulled `VIBEGUARD_PILOT_IMAGE` digest; see the [pilot guide](docs/protection-pilot.md) |
 | Morning scan or its workflow | `node --test tests/morning-scan.test.js tests/morning-scan-runner.test.js` |

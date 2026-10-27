@@ -19,6 +19,7 @@
     "src/",
     "scripts/install-vibeguard.ps1",
     "docs/protection-pilot.md",
+    "docs/protected-npm-install.md",
     "examples/protection-pilot/",
     "LICENSE",
     "README.md"
@@ -26,8 +27,9 @@
   "scripts": {
     "test": "node --test tests/*.test.js tests/rules/*.test.js",
     "test:pilot": "node --test tests/pilot.docker.js",
+    "test:install": "node --test tests/protected-install.npm.js",
     "lint": "eslint src/ bin/ tests/ scripts/",
-    "verify": "npm run bundle:check && npm run lint && npm test",
+    "verify": "npm run bundle:check && npm run lint && npm test && npm run test:install",
     "scan:morning": "node scripts/run-morning-scan.js",
     "bundle:check": "node scripts/check-agent-bundle-baseline.js",
     "bundle:update": "node scripts/check-agent-bundle-baseline.js --write",
