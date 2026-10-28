@@ -32,6 +32,7 @@ import { parseGitHubTarget, fetchRepoFiles, resolveGitHubCommit } from '../src/g
 import { BASELINE_IGNORE } from '../src/baseline-ignore.js';
 import { precheck } from '../src/precheck/index.js';
 import { closeAndSetExitCode } from '../src/precheck/close-and-exit.js';
+import { exitAfterFlush } from '../src/exit.js';
 import { analyzeCommand } from '../src/guard/command.js';
 import {
   createAgentIntegrityBaseline,
@@ -139,7 +140,7 @@ ${bold('RULES')}
 
 ${dim('Built by Digital Alchemy Academy ? https://digitalalchemy.dev')}
 `);
-  process.exit(0);
+  await exitAfterFlush(0);
 }
 
 // ??? Version ??????????????????????????????????????????????????????????????????
@@ -150,14 +151,14 @@ if (values.version) {
   const require = createRequire(import.meta.url);
   const pkg = require('../package.json');
   console.log(pkg.version);
-  process.exit(0);
+  await exitAfterFlush(0);
 }
 
 if (positionals[0] === 'doctor') {
   const report = runDoctor();
   if (values.format === 'json') console.log(JSON.stringify(report, null, 2));
   else console.log(formatDoctor(report));
-  process.exit(report.operational ? 0 : 3);
+  await exitAfterFlush(report.operational ? 0 : 3);
 }
 
 // Agent Shield commands are isolated from the normal project scanner. They do
@@ -219,7 +220,7 @@ if (positionals[0] === 'agent') {
     console.error(`Agent Shield: ${error.message}`);
     process.exitCode = 4;
   }
-  process.exit(process.exitCode);
+  await exitAfterFlush(process.exitCode);
 }
 
 if (positionals[0] === 'command') {
@@ -240,10 +241,10 @@ if (positionals[0] === 'command') {
     const report = analyzeCommand(commandText);
     if (values.format === 'json') console.log(JSON.stringify(report, null, 2));
     else console.log(`${report.decision.toUpperCase()}: ${report.summary || 'No checked danger pattern found.'}`);
-    process.exit(report.decision === 'allow' ? 0 : report.decision === 'review' ? 3 : 4);
+    await exitAfterFlush(report.decision === 'allow' ? 0 : report.decision === 'review' ? 3 : 4);
   } catch (error) {
     console.error(`Agent Shield: ${error.message}`);
-    process.exit(4);
+    await exitAfterFlush(4);
   }
 }
 
@@ -253,7 +254,7 @@ if (positionals[0] === 'skill') {
     const action = positionals[1] || 'plan';
     if (action === 'print') {
       console.log(await readSkillMarkdown());
-      process.exit(0);
+      await exitAfterFlush(0);
     }
     const only = values.only?.split(',').map((value) => value.trim()).filter(Boolean) || [];
     verificationSession = createOfficialSkillVerificationSession();
@@ -297,7 +298,7 @@ if (positionals[0] === 'skill') {
     }
     if (action === 'plan' || action === 'status') {
       verificationSession.close();
-      process.exit(0);
+      await exitAfterFlush(0);
     }
     if (action !== 'install') throw new Error('Unknown skill action. Use plan, install, status, or print.');
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
@@ -319,11 +320,11 @@ if (positionals[0] === 'skill') {
       console.log(`${result.id}: ${result.status}${result.verifiedHash ? `, verified ${result.verifiedHash}` : ''}${result.backupPath ? `, backup ${result.backupPath}` : ''}`);
     }
     verificationSession.close();
-    process.exit(0);
+    await exitAfterFlush(0);
   } catch (error) {
     verificationSession?.close();
     console.error(`Agent Shield installer: ${error.message}`);
-    process.exit(4);
+    await exitAfterFlush(4);
   }
 }
 
@@ -350,7 +351,7 @@ if (values['list-rules']) {
     console.log('');
   }
 
-  process.exit(0);
+  await exitAfterFlush(0);
 }
 
 // ??? Pre-install Gate ?????????????????????????????????????????????????????????
@@ -436,14 +437,14 @@ try {
       const s = await stat(targetDir);
       if (!s.isDirectory()) {
         console.error(red(`\n  Error: ${targetDir} is not a directory\n`));
-        process.exit(2);
+        await exitAfterFlush(2);
       }
     } catch {
       console.error(red(`\n  Error: Directory not found ? ${targetDir}\n`));
       console.error(dim(`  If this is a GitHub repo, use the full URL or owner/repo shorthand:\n`));
       console.error(dim(`    npx vibe-audit https://github.com/owner/repo`));
       console.error(dim(`    npx vibe-audit owner/repo\n`));
-      process.exit(2);
+      await exitAfterFlush(2);
     }
   }
 
@@ -455,9 +456,9 @@ try {
     await generateFixes(findings, targetDir, fixMode);
   }
 
-  process.exit(exitCode);
+  await exitAfterFlush(exitCode);
 } catch (err) {
   console.error(red(`\n  Error: ${err.message}\n`));
-  process.exit(2);
+  await exitAfterFlush(2);
 }
 }
