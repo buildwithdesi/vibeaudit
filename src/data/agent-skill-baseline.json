@@ -3,7 +3,7 @@
   "kind": "vibeaudit-agent-skill-baseline",
   "publisher": "https://github.com/buildwithdesi/vibeaudit",
   "package": "@jackdog668/vibeaudit",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "files": [
     {
       "path": "src/data/agent-skill.md",

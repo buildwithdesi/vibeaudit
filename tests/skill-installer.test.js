@@ -14,7 +14,9 @@ import {
 } from '../src/skill.js';
 import { publisherIdentityForVersion, VIBEAUDIT_OIDC_ISSUER } from '../src/adapters/cosign.js';
 
-const PUBLISHER_IDENTITY = publisherIdentityForVersion('1.4.0');
+// The signing identity is bound to the release tag, so follow the package version.
+const PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+const PUBLISHER_IDENTITY = publisherIdentityForVersion(PACKAGE_VERSION);
 
 async function fakeHome(agentDirs = []) {
   const home = await mkdtemp(join(tmpdir(), 'vibeaudit-skill-'));
