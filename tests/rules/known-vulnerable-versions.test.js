@@ -104,6 +104,50 @@ describe('known-vulnerable-versions: Python pins', () => {
   });
 });
 
+describe('known-vulnerable-versions: LiteLLM 1.107.0 (StepSecurity advisory, 2026-10-21)', () => {
+  it('flags 1.107.0 in requirements files and Python lockfiles, with the cleanup steps in the fix', () => {
+    const f = run('requirements-prod.txt', 'fastapi==0.115.0\nlitellm==1.107.0 ; python_version >= "3.10"\n');
+    assert.equal(f.length, 1);
+    assert.equal(f[0].severity, 'critical');
+    assert.equal(f[0].line, 2);
+    assert.match(f[0].fix, /cook\.pth/);
+    assert.match(f[0].fix, /stepsecurity\.io/);
+    assert.equal(run('pyproject.toml', 'dependencies = [\n  "litellm==1.107.0",\n]').length, 1);
+    assert.equal(run('Pipfile', '[packages]\nlitellm = "==1.107.0"').length, 1);
+    const poetry = '[[package]]\nname = "certifi"\nversion = "1.107.0"\n\n[[package]]\nname = "litellm"\nversion = "1.107.0"\n';
+    assert.equal(run('poetry.lock', poetry).length, 1);
+    assert.equal(run('poetry.lock', poetry)[0].line, 7);
+    assert.equal(run('uv.lock', '[[package]]\nname = "litellm"\nversion = "1.107.0"\nsource = { registry = "https://pypi.org/simple" }\n').length, 1);
+    const pipLock = pkg({ default: { litellm: { version: '==1.107.0' } }, develop: {} });
+    assert.equal(run('Pipfile.lock', pipLock).length, 1);
+  });
+  it('flags the 1.107.0 container tag in a Dockerfile and a compose file, for every published image name', () => {
+    for (const image of ['ghcr.io/berriai/litellm', 'ghcr.io/berriai/litellm-database', 'ghcr.io/berriai/litellm-non_root', 'docker.io/litellm/litellm', 'litellm/litellm']) {
+      const f = run('Dockerfile', `FROM ${image}:v1.107.0 AS base\nRUN true`);
+      assert.equal(f.length, 1, image);
+      assert.equal(f[0].severity, 'critical');
+      assert.equal(run('docker-compose.yml', `services:\n  proxy:\n    image: "${image}:v1.107.0"\n`).length, 1, image);
+    }
+    assert.equal(run('compose.yaml', 'services:\n  a:\n    image: ghcr.io/berriai/litellm:v1.107.0@sha256:abc').length, 1);
+    assert.equal(run('Dockerfile', 'FROM --platform=linux/amd64 ghcr.io/berriai/litellm:v1.107.0').length, 1);
+  });
+  it('does NOT flag 1.106.2, release candidates, other tags, or look-alike images', () => {
+    for (const ok of ['litellm==1.106.2', 'litellm==1.107.0rc1', 'litellm==1.107.0rc2', 'litellm==1.107.0.post1', 'litellm==1.107.1', 'litellm==1.106.0']) {
+      assert.equal(run('requirements.txt', ok).length, 0, ok);
+    }
+    assert.equal(run('poetry.lock', '[[package]]\nname = "litellm"\nversion = "1.106.2"\n').length, 0);
+    assert.equal(run('poetry.lock', '[[package]]\nname = "litellm"\nversion = "1.107.0rc1"\n').length, 0);
+    assert.equal(run('uv.lock', '[[package]]\nname = "litellm-proxy"\nversion = "1.107.0"\n').length, 0);
+    assert.equal(run('Pipfile.lock', pkg({ default: { litellm: { version: '==1.106.2' } } })).length, 0);
+    for (const tag of ['v1.106.2', 'v1.107.0rc1', 'v1.107.0-rc.1', 'v1.107.0-stable', 'main-latest', '1.107.0']) {
+      assert.equal(run('Dockerfile', `FROM ghcr.io/berriai/litellm:${tag}`).length, 0, tag);
+      assert.equal(run('docker-compose.yml', `    image: ghcr.io/berriai/litellm:${tag}`).length, 0, tag);
+    }
+    assert.equal(run('Dockerfile', 'FROM ghcr.io/berriai/litellm\nFROM ghcr.io/other/litellm:v1.107.0').length, 0);
+    assert.equal(run('docker-compose.yml', '    image: ghcr.io/berriai/litellm-extra:v1.107.0').length, 0);
+  });
+});
+
 describe('known-vulnerable-versions: scope', () => {
   it('ignores files it does not own', () => {
     assert.equal(run('src/app.js', 'const next = "16.0.0";').length, 0);
