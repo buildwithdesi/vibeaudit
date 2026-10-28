@@ -45,7 +45,9 @@ test('--list-rules prints every rule when read through a pipe by several callers
   const runs = await Promise.all(Array.from({ length: 8 }, () => runPiped([cli, '--list-rules'])));
   for (const result of runs) {
     assert.equal(result.status, 0, result.stderr);
-    const missing = ALL_RULES.map((rule) => rule.id).filter((id) => !result.stdout.includes(` ${id}`));
+    // CI=true turns colors on, which puts escape codes in front of each id.
+    const plain = result.stdout.replace(/\x1b\[\d+m/g, '');
+    const missing = ALL_RULES.map((rule) => rule.id).filter((id) => !plain.includes(` ${id}`));
     assert.deepEqual(missing, []);
   }
 });
