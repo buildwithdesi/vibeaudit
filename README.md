@@ -384,7 +384,7 @@ Every **security** finding carries its **CWE ID, CVSS v3.1 score, and OWASP Top 
 | `template-injection` | 🔴 | 9.8 | CWE-1336 | Template engine compiling a template built from dynamic input — SSTI/RCE |
 | `missing-sri` | 🟡 | 4.3 | CWE-353 | External CDN `<script>`/`<link>` with no Subresource Integrity hash |
 | `unpinned-dependencies` | 🟡 | 5.3 | CWE-829 | Deps pinned to `*` / `latest` — npm pulls any version, no review |
-| `known-vulnerable-versions` | 🔴 | 9.8 | CWE-1104 | Node, Next.js, sharp, LiteLLM or certifi pinned below a dated vendor advisory (package.json, lockfile, Dockerfile, .nvmrc, requirements) |
+| `known-vulnerable-versions` | 🔴 | 9.8 | CWE-1104 | Node, Next.js, sharp, LiteLLM or certifi pinned below a dated vendor advisory (package.json, lockfile, Dockerfile, docker-compose, .nvmrc, requirements, Pipfile, poetry.lock, uv.lock). LiteLLM 1.107.0 is flagged in PyPI pins and in its Docker image tags (exact match; rc builds are not) |
 | `minimum-release-age` | 🟡 | 5.3 | CWE-1104 | No dependency release-age cooldown (minimumReleaseAge) configured, or a cooldown under 3 days — the window where poisoned releases get caught |
 | `dependency-bloat` | 🟡 | 4.0 | CWE-1104 | Lockfile dependency-tree size (250+ noted, 1000+ warned) and one-function micro-packages that duplicate a platform built-in |
 | `php-stack` | 🟡 | — | — | PHP in the stack (composer.json, .php files, PHP Docker images) — stack-policy rule: no PHP, patch first, plan the migration |

@@ -20,6 +20,9 @@ const PKG_LOCK = /(?:^|\/)package-lock\.json$/;
 const DOCKERFILE = /(?:^|\/)(?:Dockerfile|.*\.dockerfile)$/i;
 const NVMRC = /(?:^|\/)\.(?:nvmrc|node-version)$/;
 const PY_REQ = /(?:^|\/)(?:requirements[^/]*\.txt|pyproject\.toml|Pipfile)$/;
+const PY_TOML_LOCK = /(?:^|\/)(?:poetry|uv)\.lock$/;
+const PIPFILE_LOCK = /(?:^|\/)Pipfile\.lock$/;
+const COMPOSE = /(?:^|\/)(?:docker-)?compose[^/]*\.ya?ml$/i;
 
 const ADVISORY_DATE = '2026-10-21';
 
@@ -49,6 +52,15 @@ const PYTHON = {
     bad: ['1.107.0', '1.82.7', '1.82.8'],
     why: 'These LiteLLM builds were published with credential-stealing code. If one was ever installed, rotate every key on that machine.',
     source: 'PyPI quarantine notices, 2026-03-24 and 2026-10-21',
+    // Container images carry the same backdoored wheels. Exact tag only: 1.107.0rc1 and 1.106.x are clean.
+    images: [
+      'ghcr.io/berriai/litellm',
+      'ghcr.io/berriai/litellm-database',
+      'ghcr.io/berriai/litellm-non_root',
+      'docker.io/litellm/litellm',
+    ],
+    badTag: 'v1.107.0',
+    advisory: 'https://www.stepsecurity.io/blog/litellm-1-107-0-compromised-pypi-backdoored-wheels-credential-stealer',
   },
   certifi: {
     lines: { 2026: '2026.10.19' },
@@ -82,7 +94,9 @@ function judge(v, lines) {
   }
   return cmp(v, parseVersion(min)) < 0 ? { status: 'update', min } : { status: 'ok' };
 }
+/** `needle` is a substring to find, or a 1-based line number when the same text repeats in the file. */
 function lineOf(file, needle) {
+  if (typeof needle === 'number') return { line: needle, evidence: file.lines[needle - 1]?.trim().slice(0, 120) };
   const idx = file.lines.findIndex((l) => l.includes(needle));
   return { line: idx >= 0 ? idx + 1 : 1, evidence: idx >= 0 ? file.lines[idx].trim().slice(0, 120) : undefined };
 }
@@ -120,12 +134,60 @@ function checkNpmDeps(file, deps, resolvedFromLock) {
   return out;
 }
 
+const LITELLM_FIX = `Pin litellm==1.106.2 (the last safe release before 1.107.0), reinstall in a clean environment, delete cook.pth, cook.py and sitecustomize.py from site-packages, and rotate every credential that machine could reach. Source: ${PYTHON.litellm.source}; ${PYTHON.litellm.advisory}.`;
+
+function litellmBadPin(file, needle, v) {
+  return finding(file, needle, 'critical', `litellm is pinned to ${v}, a build published with credential-stealing code. ${PYTHON.litellm.why}`, LITELLM_FIX);
+}
+
+/** Registry host is optional for Docker Hub, so "litellm/litellm" and "docker.io/litellm/litellm" are the same image. */
+const hubName = (n) => n.toLowerCase().replace(/^(?:index\.)?docker\.io\//, '');
+const LITELLM_IMAGES = new Set(PYTHON.litellm.images.map(hubName));
+
+/** `ref` is an image reference such as "ghcr.io/berriai/litellm:v1.107.0@sha256:...". Exact tag match only. */
+function litellmBadImage(ref) {
+  const m = /^([^:@\s]+)(?::([^@\s]+))?/.exec(ref);
+  return Boolean(m) && m[2] === PYTHON.litellm.badTag && LITELLM_IMAGES.has(hubName(m[1]));
+}
+
+function checkLitellmImage(file, ref, needle) {
+  if (!litellmBadImage(ref)) return [];
+  return [finding(file, needle, 'critical', `Image "${ref}" is the LiteLLM ${PYTHON.litellm.badTag} build, published with credential-stealing code. ${PYTHON.litellm.why}`,
+    `Use the v1.106.2 tag, rebuild and redeploy, and rotate every credential that container could reach. Source: ${PYTHON.litellm.source}; ${PYTHON.litellm.advisory}.`)];
+}
+
+/** `name = "litellm"` then `version = "x"` inside one [[package]] table (poetry.lock, uv.lock). */
+function checkTomlLock(file) {
+  const out = [];
+  file.lines.forEach((line, i) => {
+    if (!/^name\s*=\s*["']litellm["']\s*$/i.test(line.trim())) return;
+    for (let j = i + 1; j < file.lines.length && !/^\s*(?:\[|$)/.test(file.lines[j]); j++) {
+      const v = /^version\s*=\s*["'](\d+\.\d+\.\d+)["']\s*$/.exec(file.lines[j].trim());
+      if (!v) continue;
+      if (PYTHON.litellm.bad.includes(v[1])) out.push(litellmBadPin(file, j + 1, v[1]));
+      break;
+    }
+  });
+  return out;
+}
+
+function checkPipfileLock(file) {
+  let lock;
+  try { lock = JSON.parse(file.content); } catch { return []; }
+  const out = [];
+  for (const section of ['default', 'develop']) {
+    const v = /^==\s*(\d+\.\d+\.\d+)$/.exec(String(lock?.[section]?.litellm?.version || ''));
+    if (v && PYTHON.litellm.bad.includes(v[1])) out.push(litellmBadPin(file, '"litellm"', v[1]));
+  }
+  return out;
+}
+
 /** @type {Rule} */
 export const knownVulnerableVersions = {
   id: 'known-vulnerable-versions',
   name: 'Known Vulnerable Versions',
   severity: 'critical',
-  description: 'Flags runtime and package versions that vendors have publicly declared unsafe (Oct 2026 Node.js and Next.js releases, poisoned LiteLLM builds, pre-eMudhra certifi), including Docker and .nvmrc pins that differ from the machine running the scan.',
+  description: 'Flags runtime and package versions that vendors have publicly declared unsafe (Oct 2026 Node.js and Next.js releases, poisoned LiteLLM builds in Python files, lockfiles, Dockerfiles and compose files, pre-eMudhra certifi), including Docker and .nvmrc pins that differ from the machine running the scan.',
 
   check(file) {
     const p = file.relativePath;
@@ -187,6 +249,8 @@ export const knownVulnerableVersions = {
     if (DOCKERFILE.test(p)) {
       const out = [];
       for (const line of file.lines) {
+        const from = /^\s*FROM\s+(?:--platform=\S+\s+)?(\S+)/i.exec(line);
+        if (from) out.push(...checkLitellmImage(file, from[1], line.trim()));
         const m = /^\s*FROM\s+(?:[\w./-]+\/)?node:(\d+(?:\.\d+){0,2})/i.exec(line);
         if (!m) continue;
         const parts = m[1].split('.');
@@ -209,18 +273,28 @@ export const knownVulnerableVersions = {
       return out;
     }
 
+    if (COMPOSE.test(p)) {
+      const out = [];
+      for (const line of file.lines) {
+        const m = /^\s*(?:-\s+)?image:\s*["']?([^\s"'#]+)/.exec(line);
+        if (m) out.push(...checkLitellmImage(file, m[1], line.trim()));
+      }
+      return out;
+    }
+
+    if (PY_TOML_LOCK.test(p)) return checkTomlLock(file);
+    if (PIPFILE_LOCK.test(p)) return checkPipfileLock(file);
+
     if (PY_REQ.test(p)) {
       const out = [];
       for (const line of file.lines) {
         const l = line.trim();
         if (!l || l.startsWith('#')) continue;
-        // Exact pins only. A ">=" range is handled below as a loose pin.
-        const lite = /^["']?litellm["']?\s*(?:==|~=|=(?!=))\s*["']?(\d+\.\d+\.\d+)/i.exec(l);
+        // Exact pins only. A ">=" range is handled below as a loose pin. The version must end
+        // at a boundary: 1.107.0rc1 and 1.107.0.post1 are different releases from 1.107.0.
+        const lite = /^["']?litellm["']?\s*(?:==|~=|=(?!=))\s*["']?(?:==\s*)?(\d+\.\d+\.\d+)(?![\w.+-])/i.exec(l);
         if (lite) {
-          const v = lite[1];
-          if (PYTHON.litellm.bad.includes(v)) {
-            out.push(finding(file, l, 'critical', `litellm is pinned to ${v}, a build published with credential-stealing code. ${PYTHON.litellm.why}`, `Pin litellm==1.106.2 (the last safe release before 1.107.0), reinstall in a clean environment, and rotate every key that machine could read. Source: ${PYTHON.litellm.source}.`));
-          }
+          if (PYTHON.litellm.bad.includes(lite[1])) out.push(litellmBadPin(file, l, lite[1]));
           continue;
         }
         if (/^["']?litellm["']?\s*(?:>=\s*[\d.]+\s*)?,?\s*<\s*2/i.test(l) || /^["']?litellm["']?\s*$/i.test(l) || /^["']?litellm["']?\s*>=/i.test(l)) {

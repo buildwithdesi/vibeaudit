@@ -48,6 +48,16 @@ describe('scanner', () => {
     assert.equal(apiFiles.length, 0, 'A trailing slash on a config ignore entry should still match the directory');
   });
 
+  it('discovers Python manifests and Dockerfile variants that have no scannable extension', async () => {
+    const root = mkdtempSync(resolve(tmpdir(), 'vibeaudit-scanner-manifest-test-'));
+    for (const name of ['requirements.txt', 'requirements-dev.txt', 'Pipfile', 'api.dockerfile', 'notes.txt']) {
+      writeFileSync(resolve(root, name), 'litellm==1.106.2\n');
+    }
+    const found = [];
+    for await (const file of discoverFiles(root)) found.push(file.relativePath);
+    assert.deepEqual(found.sort(), ['Pipfile', 'api.dockerfile', 'requirements-dev.txt', 'requirements.txt']);
+  });
+
   it('scans agent controls and installer scripts while excluding only Claude worktrees', async () => {
     const root = mkdtempSync(resolve(tmpdir(), 'vibeaudit-scanner-agent-test-'));
     mkdirSync(resolve(root, '.claude', 'skills', 'demo'), { recursive: true });
