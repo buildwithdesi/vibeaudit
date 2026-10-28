@@ -86,6 +86,9 @@ const ALWAYS_SCAN = new Set([
   '.yarnrc.yml',
 ]);
 
+/** Manifests that have no scannable extension: requirements*.txt, Pipfile and *.dockerfile. */
+const ALWAYS_SCAN_NAME = /^(?:requirements[^/]*\.txt|Pipfile|.*\.dockerfile)$/i;
+
 /** Max file size to read (2 MB). Anything bigger is not source code. */
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 
@@ -133,7 +136,7 @@ export async function* discoverFiles(root, extraIgnore = []) {
       // Check if it's a file we should scan.
       const ext = extname(entry.name).toLowerCase();
       const agentControl = isAgentControlPath(relativePath);
-      if (!SCAN_EXTENSIONS.has(ext) && !ALWAYS_SCAN.has(entry.name) && !agentControl) continue;
+      if (!SCAN_EXTENSIONS.has(ext) && !ALWAYS_SCAN.has(entry.name) && !ALWAYS_SCAN_NAME.test(entry.name) && !agentControl) continue;
 
       // Check file size.
       try {
