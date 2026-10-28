@@ -11,7 +11,7 @@ export const downloadExecution = {
 
   check(file) {
     if (!SCRIPT_EXTENSIONS.test(file.relativePath) && !file._agentControl) return [];
-    const analysis = analyzeCommand(file.content);
+    const analysis = analyzeCommand(file.content, { source: 'document' });
     if (analysis.decision === 'allow') return [];
     return analysis.findings
       .filter((issue) => {

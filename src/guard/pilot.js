@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout, clearTimeout } from 'node:timers';
@@ -14,6 +14,7 @@ const MAX_FILES = 256;
 const ID = /^[a-f0-9]{64}$/;
 const RUN_ID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 const IMAGE = /^node@sha256:[a-f0-9]{64}$/;
+const NODE_IMAGE_ENV = /^(?:PATH|NODE_VERSION|YARN_VERSION|NODE_OPTIONS|NODE_PATH)=/;
 const hash = (data) => createHash('sha256').update(data).digest('hex');
 const json = (value) => JSON.stringify(value);
 const inside = (parent, child) => {
@@ -180,38 +181,157 @@ export function revokePilot(id, { store } = {}) {
   return { id, status: 'revoked', note: 'Pending approval revoked. Use recover with a run ID to stop an active run.' };
 }
 
-function execute(executable, args, { cwd, timeout = 15000, maxBytes = 512 * 1024 } = {}) {
+function dockerEnvironment() {
+  return Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+    /^(?:PATH|SystemRoot|WINDIR|TEMP|TMP|HOME|USERPROFILE)$/i.test(key)));
+}
+
+function execute(executable, args, { cwd, env = dockerEnvironment(), timeout = 15000, maxBytes = 512 * 1024 } = {}) {
   return new Promise((resolveResult) => {
-    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
-      /^(?:PATH|SystemRoot|WINDIR|TEMP|TMP|HOME|USERPROFILE)$/i.test(key)));
-    let stdout = '', stderr = '', bytes = 0, failure;
+    let stdout = '', stderr = '', bytes = 0, failure, failureCode;
     const child = spawn(executable, args, { cwd, env, shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    const timer = setTimeout(() => { failure = 'Docker command timed out'; child.kill('SIGKILL'); }, timeout);
+    const timer = setTimeout(() => { failure = 'Docker command timed out'; failureCode = 'command_timeout'; child.kill('SIGKILL'); }, timeout);
     for (const stream of ['stdout', 'stderr']) child[stream].on('data', (chunk) => {
       bytes += chunk.length;
-      if (bytes > maxBytes) { failure = 'Output limit exceeded'; child.kill('SIGKILL'); return; }
+      if (bytes > maxBytes) { failure = 'Output limit exceeded'; failureCode = 'output_limit_exceeded'; child.kill('SIGKILL'); return; }
       if (stream === 'stdout') stdout += chunk.toString('utf8'); else stderr += chunk.toString('utf8');
     });
-    child.on('error', () => { failure = 'Docker executable unavailable'; });
-    child.on('close', (code) => { clearTimeout(timer); resolveResult({ code, stdout, stderr, failure }); });
+    child.on('error', () => { failure = 'Docker executable unavailable'; failureCode = 'docker_unavailable'; });
+    child.on('close', (code) => { clearTimeout(timer); resolveResult({ code, stdout, stderr, failure, failureCode }); });
   });
 }
 
-function dockerClient(directory, forbidden = []) {
-  const executable = findTrustedExecutable('docker', forbidden[0]);
-  if (!executable || forbidden.some((path) => inside(path, executable))) throw new Error('Trusted Docker executable unavailable.');
+class PilotReadinessError extends Error {
+  constructor(check, status, reasonCode, message, nextStep) {
+    super(message);
+    Object.assign(this, { check, status, reasonCode, nextStep });
+  }
+}
+
+const localDockerHost = () => process.platform === 'win32'
+  ? 'npipe:////./pipe/dockerDesktopLinuxEngine' : 'unix:///var/run/docker.sock';
+const startEngine = () => process.platform === 'win32'
+  ? 'Open Docker Desktop, select Linux containers, and wait until its engine is running. Then rerun pilot doctor.'
+  : 'Start the local Linux Docker daemon and confirm your account can access /var/run/docker.sock. Then rerun pilot doctor.';
+
+function dockerClient(directory, forbidden = [], { command = execute, resolveExecutable = findTrustedExecutable } = {}) {
+  // The working directory can be attacker-controlled even when it is not the skill root.
+  const executable = resolveExecutable('docker', process.cwd());
+  if (!executable || !isAbsolute(executable) || [process.cwd(), ...forbidden].some((path) => inside(path, executable))) {
+    throw new PilotReadinessError('docker', 'unavailable', 'docker_unavailable',
+      'Trusted Docker executable unavailable outside the working and source directories.',
+      'Install or repair Docker through its official setup, with its executable on an absolute PATH directory outside the skill and checkout. Then rerun pilot doctor.');
+  }
   const config = join(directory, 'client');
   mkdirSync(config, { recursive: true, mode: 0o700 });
   put(join(config, 'config.json'), {});
   // Fixed local endpoints avoid remote contexts and inherited DOCKER_HOST.
-  const host = process.platform === 'win32' ? 'npipe:////./pipe/dockerDesktopLinuxEngine' : 'unix:///var/run/docker.sock';
-  const call = (args, options) => execute(executable, ['--config', config, '--host', host, ...args], { cwd: directory, ...options });
+  const host = localDockerHost();
+  const call = (args, options) => command(executable, ['--config', config, '--host', host, ...args], {
+    cwd: directory, env: dockerEnvironment(), timeout: 15000, maxBytes: 512 * 1024, ...options,
+  });
   const checked = async (args, options) => {
     const result = await call(args, options);
     if (result.code !== 0 || result.failure) throw new Error(result.failure || `Docker ${args[0]} failed; check the local Linux engine and pinned image.`);
     return result.stdout.trim();
   };
   return { call, checked, host };
+}
+
+async function inspectPilotRuntime(docker, image, checks = []) {
+  const failure = (check, result) => {
+    if (result.failureCode === 'command_timeout') throw new PilotReadinessError(check, 'unavailable',
+      'command_timeout', `Docker ${check} inspection timed out.`, startEngine());
+    if (result.failureCode === 'output_limit_exceeded') throw new PilotReadinessError(check, 'blocked',
+      'output_limit_exceeded', `Docker ${check} inspection exceeded its output limit.`,
+      'Inspect the local Docker installation and its response before retrying. Do not approve a skill yet.');
+    if (result.failureCode === 'docker_unavailable') throw new PilotReadinessError('docker', 'unavailable',
+      'docker_unavailable', 'The trusted Docker executable could not be started.',
+      'Repair the local Docker executable and rerun pilot doctor.');
+  };
+  const engine = await docker.call(['info', '--format', '{{json .OSType}}']);
+  failure('engine', engine);
+  if (engine.code !== 0 || engine.failure) throw new PilotReadinessError('engine', 'unavailable',
+    'engine_unavailable', 'The fixed local Docker engine is unavailable.', startEngine());
+  let os;
+  try { os = JSON.parse(engine.stdout); } catch { /* Invalid responses must never establish readiness. */ }
+  if (typeof os !== 'string' || !['linux', 'windows'].includes(os)) throw new PilotReadinessError('engine', 'blocked',
+    'engine_response_invalid', 'Docker returned an invalid engine inspection response.',
+    'Check the local Docker installation and rerun pilot doctor after its engine inspection is working.');
+  if (os !== 'linux') throw new PilotReadinessError('engine', 'blocked', 'linux_engine_required',
+    'The pilot requires a local Linux Docker engine.', startEngine());
+  checks.push({ name: 'engine', status: 'ready', reasonCode: 'linux_engine_ready', message: 'The fixed local endpoint reports a Linux engine.' });
+
+  const imageResult = await docker.call(['image', 'inspect', image]);
+  failure('image', imageResult);
+  if (imageResult.code !== 0 || imageResult.failure) {
+    if (/no such (?:image|object)/i.test(imageResult.stderr || '')) throw new PilotReadinessError('image', 'unavailable',
+      'image_missing', 'The approved pinned image is not present in the local engine.',
+      `Provision the reviewed digest explicitly with docker --host ${docker.host} pull ${image}, then rerun pilot doctor.`);
+    throw new PilotReadinessError('image', 'unavailable', 'image_inspection_failed',
+      'Docker could not inspect the approved pinned image.',
+      'Check the local engine and the exact image digest. Rerun pilot doctor before reviewing or approving a skill.');
+  }
+  let images;
+  try { images = JSON.parse(imageResult.stdout); } catch { /* Fail closed below. */ }
+  const imageInfo = Array.isArray(images) && images.length === 1 ? images[0] : null;
+  const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+  const present = (value) => value !== null && value !== undefined;
+  if (!object(imageInfo) || typeof imageInfo.Os !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(imageInfo.Id || '') ||
+      !object(imageInfo.Config) || (present(imageInfo.Config.Volumes) && !object(imageInfo.Config.Volumes)) ||
+      (present(imageInfo.Config.Env) && (!Array.isArray(imageInfo.Config.Env) || imageInfo.Config.Env.some((value) => typeof value !== 'string')))) {
+    throw new PilotReadinessError('image', 'blocked', 'image_response_invalid',
+      'Docker returned an invalid image inspection response.',
+      'Inspect the exact image and local Docker installation. Do not approve a skill until pilot doctor succeeds.');
+  }
+  if (imageInfo.Os !== 'linux' || Object.keys(imageInfo.Config.Volumes || {}).length ||
+      (imageInfo.Config.Env || []).some((value) => !NODE_IMAGE_ENV.test(value))) {
+    throw new PilotReadinessError('image', 'blocked', 'image_unsuitable',
+      'The pinned image must use Linux, declare no extra volumes, and use only the pilot-supported Node environment.',
+      'Select and provision a reviewed official Node Linux image without declared volumes or extra environment variables, then rerun pilot doctor with its digest.');
+  }
+  checks.push({ name: 'image', status: 'ready', reasonCode: 'pinned_image_ready', message: 'The pinned image is present and meets the inspected runtime requirements.' });
+  return imageInfo;
+}
+
+/** Readiness only: no approval records, image pulls, containers, or host configuration changes.
+ * The second argument is an internal command seam for source tests, never a CLI option. */
+export async function doctorPilot({ image } = {}, dependencies = {}) {
+  const result = { schemaVersion: 1, status: 'blocked', reasonCode: 'invalid_image', image: image || null,
+    host: localDockerHost(), isolationVerified: false, clientCleanupVerified: true, checks: [],
+    note: 'Readiness only. Isolation is not active or verified; run verifies each container before execution.' };
+  let directory;
+  try {
+    if (!IMAGE.test(image || '')) throw new PilotReadinessError('image_reference', 'blocked', 'invalid_image',
+      'Use an official Node image pinned as node@sha256:<64 lowercase hexadecimal characters>.',
+      'Choose and review an official Node image digest, then pass its exact node@sha256 reference with --image.');
+    result.checks.push({ name: 'image_reference', status: 'ready', reasonCode: 'image_reference_valid', message: 'The image reference uses an exact Node digest.' });
+    directory = mkdtempSync(join(tmpdir(), 'vibeguard-pilot-doctor-'));
+    result.clientCleanupVerified = false;
+    const docker = dockerClient(directory, [], dependencies);
+    result.checks.push({ name: 'docker', status: 'ready', reasonCode: 'docker_found', message: 'A Docker executable was resolved outside the working directory.' });
+    const imageInfo = await inspectPilotRuntime(docker, image, result.checks);
+    Object.assign(result, { status: 'ready', reasonCode: 'runtime_ready', imageId: imageInfo.Id,
+      message: 'Local runtime prerequisites are ready.', nextStep: 'Run pilot review, inspect the exact files and policy, then approve only that review digest.' });
+  } catch (error) {
+    const problem = error instanceof PilotReadinessError ? error : new PilotReadinessError('client', 'blocked',
+      'client_check_failed', 'The isolated Docker client check could not complete.',
+      'Check access to the system temporary directory and the local Docker installation, then rerun pilot doctor.');
+    Object.assign(result, { status: problem.status, reasonCode: problem.reasonCode, message: problem.message, nextStep: problem.nextStep });
+    result.checks.push({ name: problem.check, status: problem.status, reasonCode: problem.reasonCode,
+      message: problem.message, nextStep: problem.nextStep });
+  } finally {
+    if (directory) {
+      try {
+        rmSync(directory, { recursive: true, force: true });
+        result.clientCleanupVerified = !existsSync(directory);
+      } catch { /* An unverified cleanup cannot return ready. */ }
+      if (!result.clientCleanupVerified) Object.assign(result, { status: 'blocked', reasonCode: 'client_cleanup_failed',
+        message: 'Temporary Docker client cleanup could not be verified.',
+        nextStep: 'Check access to the system temporary directory and remove the abandoned vibeguard-pilot-doctor directory before retrying.' });
+    }
+  }
+  return result;
 }
 
 function stage(review, directory) {
@@ -270,7 +390,7 @@ export function assertPilotIsolation(container, review, name, mounts, imageId) {
           actual.Source === `/run/desktop/mnt/host/${mount.source[0].toLowerCase()}${mount.source.slice(2).replace(/\\/g, '/')}`)))) ||
       actualMounts.length !== mounts.length || mounts.some((mount) => !actualMounts.some((actual) =>
         actual.Type === 'bind' && actual.Destination === mount.target && actual.RW === false)) ||
-      (c.Env || []).some((value) => !/^(?:PATH|NODE_VERSION|YARN_VERSION|NODE_OPTIONS|NODE_PATH)=/.test(value))) {
+      (c.Env || []).some((value) => !NODE_IMAGE_ENV.test(value))) {
     throw new Error('Docker did not apply the required isolation policy. Execution blocked.');
   }
 }
@@ -303,10 +423,7 @@ export async function runPilot(id, { store } = {}) {
     const mounts = stage(review, directory);
     receipt.status = 'unavailable';
     docker = dockerClient(directory, [review.skillRoot, review.inputRoot, root]);
-    if (await docker.checked(['info', '--format', '{{.OSType}}']) !== 'linux') throw new Error('A local Linux Docker engine is required.');
-    const [imageInfo] = JSON.parse(await docker.checked(['image', 'inspect', review.image]));
-    if (imageInfo.Os !== 'linux' || !/^sha256:[a-f0-9]{64}$/.test(imageInfo.Id) ||
-        Object.keys(imageInfo.Config?.Volumes || {}).length) throw new Error('The pinned image is not suitable for this pilot.');
+    const imageInfo = await inspectPilotRuntime(docker, review.image);
     receipt.imageId = imageInfo.Id;
     receipt.status = 'starting';
     put(receiptPath, receipt);
@@ -332,6 +449,9 @@ export async function runPilot(id, { store } = {}) {
     receipt.status = 'completed';
   } catch (error) {
     if (['active', 'starting'].includes(receipt.status)) receipt.status = 'failed';
+    if (error instanceof PilotReadinessError) Object.assign(receipt, {
+      status: error.status, reasonCode: error.reasonCode, nextStep: error.nextStep,
+    });
     receipt.error = error.code === 'ENOENT' ? 'Review or one-use approval missing. Review and approve before running.' : error.message;
   } finally {
     if (created && docker) {
