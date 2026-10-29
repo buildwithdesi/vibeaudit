@@ -129,6 +129,10 @@ import { agentControlInjection } from './agent-control-injection.js';
 import { downloadExecution } from './download-execution.js';
 // Dated vendor advisories (v1.5)
 import { knownVulnerableVersions } from './known-vulnerable-versions.js';
+// Software doctrine (2026-10)
+import { minimumReleaseAge } from './minimum-release-age.js';
+import { dependencyBloat } from './dependency-bloat.js';
+import { phpStack } from './php-stack.js';
 
 /** @type {import('./types.js').Rule[]} */
 export const ALL_RULES = [
@@ -250,6 +254,9 @@ export const ALL_RULES = [
   unpinnedDependencies,
   installScriptDependency,
   knownVulnerableVersions,
+  minimumReleaseAge,
+  dependencyBloat,
+  phpStack,
   // CI/CD & storage (v1.2)
   githubActionsInjection,
   supabasePublicBucket,
