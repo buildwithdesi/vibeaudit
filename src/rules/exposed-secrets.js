@@ -84,11 +84,18 @@ const ASSIGNMENT_WINDOW = 80;
 /**
  * True when the text just before `index` ends with a secret-like name followed
  * by an assignment: `apiKey = "`, `"secret": '`, `AUTH_TOKEN=`, `token: `.
+ * Also accepts a TypeScript type (`apiKey: string = "`), Go's `:=`, a fallback
+ * (`KEY || "` / `KEY ?? "`), an arrow default, and Python string prefixes.
  * A name like `videoId` or a `token=` buried earlier in the line does not count.
  */
+// Reads: the name, an optional TS type (`: string`), then `=` `:` `:=` `=>`
+// `||` or `??`, then an optional `(` `[`, Python string prefix, and quote.
+const SECRET_ASSIGNMENT_BEFORE =
+  /(?:secret|key|token|password|credential|auth)\w*["'`]?(?:\s*:\s*[\w.<>[\]|]+)?\s*(?::=|=>|\|\||\?\?|[:=])\s*[[(]?\s*[frbu]?["'`]?\s*$/i;
+
 function hasSecretAssignmentBefore(line, index) {
   const before = line.slice(Math.max(0, index - ASSIGNMENT_WINDOW), index);
-  return /(?:secret|key|token|password|credential|auth)\w*["'`]?\s*[:=]\s*["'`]?\s*$/i.test(before);
+  return SECRET_ASSIGNMENT_BEFORE.test(before);
 }
 
 /** Redact a secret for safe display: show first 4 and last 4 chars. */
