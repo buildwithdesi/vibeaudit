@@ -75,6 +75,29 @@ function isCommentOrDoc(line) {
   );
 }
 
+/**
+ * How far back (in chars) to look for the name a loose match is assigned to.
+ * Long enough for NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY = " and friends.
+ */
+const ASSIGNMENT_WINDOW = 80;
+
+/**
+ * True when the text just before `index` ends with a secret-like name followed
+ * by an assignment: `apiKey = "`, `"secret": '`, `AUTH_TOKEN=`, `token: `.
+ * Also accepts a TypeScript type (`apiKey: string = "`), Go's `:=`, a fallback
+ * (`KEY || "` / `KEY ?? "`), an arrow default, and Python string prefixes.
+ * A name like `videoId` or a `token=` buried earlier in the line does not count.
+ */
+// Reads: the name, an optional TS type (`: string`), then `=` `:` `:=` `=>`
+// `||` or `??`, then an optional `(` `[`, Python string prefix, and quote.
+const SECRET_ASSIGNMENT_BEFORE =
+  /(?:secret|key|token|password|credential|auth)\w*["'`]?(?:\s*:\s*[\w.<>[\]|]+)?\s*(?::=|=>|\|\||\?\?|[:=])\s*[[(]?\s*[frbu]?["'`]?\s*$/i;
+
+function hasSecretAssignmentBefore(line, index) {
+  const before = line.slice(Math.max(0, index - ASSIGNMENT_WINDOW), index);
+  return SECRET_ASSIGNMENT_BEFORE.test(before);
+}
+
 /** Redact a secret for safe display: show first 4 and last 4 chars. */
 function redact(secret) {
   if (secret.length <= 12) return '***REDACTED***';
@@ -105,13 +128,11 @@ export const exposedSecrets = {
         pattern.lastIndex = 0;
         let match;
         while ((match = pattern.exec(line)) !== null) {
-          // For loose patterns (like AWS secret), require assignment context.
-          if (isLoose) {
-            const before = line.slice(0, match.index);
-            if (!/(?:secret|key|token|password|credential|auth)\s*[:=]/i.test(before)) {
-              continue;
-            }
-          }
+          // For loose patterns (like AWS secret or a UUID), require that the
+          // value is being assigned to a secret-like name. Only the text right
+          // before the match counts: a 128 KB single-line JSON doc once turned
+          // every video id into a "secret" because "token=" appeared earlier.
+          if (isLoose && !hasSecretAssignmentBefore(line, match.index)) continue;
 
           findings.push({
             ruleId: 'exposed-secrets',
