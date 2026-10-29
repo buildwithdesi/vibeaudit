@@ -17,7 +17,7 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
@@ -26,19 +26,15 @@ jobs:
         with:
           node-version: "20"
 
-      - run: npm ci
+      - run: npm ci --ignore-scripts
 
       - name: Run morning scan
-        id: scan
         env:
           GITHUB_TOKEN: ${{ secrets.SCAN_TOKEN }}
           # Passed via env, not inlined into the script, so the dispatch input
           # cannot be interpreted as shell.
           TOP: ${{ github.event.inputs.top || '0' }}
-        run: |
-          set +e
-          node scripts/morning-scan.js --top "$TOP" --format markdown
-          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+        run: npm run scan:morning -- --top "$TOP"
 
       # Reports enumerate security findings across many repos, so they are NOT
       # committed to this public repo. They are retained only as a private
@@ -49,13 +45,5 @@ jobs:
         with:
           name: morning-scan-${{ github.run_id }}
           path: reports/
+          if-no-files-found: error
           retention-days: 90
-
-      # Exit 1 means "findings" — reported, not failed on. Exit 2 means the scan
-      # reached zero repos (revoked token, wrong scope, GitHub outage), which
-      # must never pass as a green, clean-looking run.
-      - name: Fail if the scan had no coverage
-        if: steps.scan.outputs.exit_code == '2'
-        run: |
-          echo "::error::Morning scan reached 0 repos — no coverage. Check the SCAN_TOKEN scope."
-          exit 1

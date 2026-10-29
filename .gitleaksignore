@@ -1,0 +1,15 @@
+# Exact historical fingerprints for intentional secret-detection fixtures.
+# New commits, files, rules, or line locations remain blocking.
+2b9c815771b0e9687a1c38ae29277a002d437d4b:tests/fixtures/.env:stripe-access-token:2
+2b9c815771b0e9687a1c38ae29277a002d437d4b:tests/fixtures/api/realistic-ecommerce.js:stripe-access-token:9
+2b9c815771b0e9687a1c38ae29277a002d437d4b:tests/fixtures/vulnerable.js:gcp-api-key:4
+2b9c815771b0e9687a1c38ae29277a002d437d4b:tests/rules/devtools.test.js:generic-api-key:25
+2b9c815771b0e9687a1c38ae29277a002d437d4b:tests/rules/devtools.test.js:generic-api-key:31
+2b9c815771b0e9687a1c38ae29277a002d437d4b:tests/rules/edge-cases.test.js:gcp-api-key:56
+2b9c815771b0e9687a1c38ae29277a002d437d4b:tests/rules/edge-cases.test.js:gcp-api-key:208
+2b9c815771b0e9687a1c38ae29277a002d437d4b:tests/rules/edge-cases.test.js:stripe-access-token:215
+2b9c815771b0e9687a1c38ae29277a002d437d4b:tests/rules/rules.test.js:gcp-api-key:45
+2b9c815771b0e9687a1c38ae29277a002d437d4b:tests/rules/rules.test.js:gcp-api-key:46
+2b9c815771b0e9687a1c38ae29277a002d437d4b:tests/rules/rules.test.js:gcp-api-key:56
+2b9c815771b0e9687a1c38ae29277a002d437d4b:tests/rules/rules.test.js:gcp-api-key:57
+a5e3b420becdc0ee39100c89709dc8b571ccc4fb:tests/rules/v2-rules.test.js:generic-api-key:347

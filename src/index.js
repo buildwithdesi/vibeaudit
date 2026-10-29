@@ -1,5 +1,5 @@
 import { discoverFiles } from './scanner.js';
-import { resolveRules } from './rules/index.js';
+import { resolveRules, unknownRuleIds } from './rules/index.js';
 import { report } from './reporter.js';
 import { loadConfig, getDefaultConfig } from './config.js';
 import { CWE_MAP } from './data/cwe-map.js';
@@ -22,10 +22,13 @@ import { yellow, dim } from './colors.js';
  */
 function isIgnoredPath(relativePath, ignore) {
   if (!ignore || ignore.length === 0) return false;
-  const segments = relativePath.split('/');
+  const normalized = relativePath.replace(/\\/g, '/');
+  const segments = normalized.split('/');
   return ignore.some((pattern) => {
-    const name = pattern.replace(/\/$/, '');
-    return segments.includes(name);
+    const name = pattern.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '');
+    return name.includes('/')
+      ? normalized === name || normalized.startsWith(`${name}/`)
+      : segments.includes(name);
   });
 }
 
@@ -40,6 +43,7 @@ function isIgnoredPath(relativePath, ignore) {
 async function runRules(fileSource, rules, deep, config = {}) {
   const findings = [];
   let filesScanned = 0;
+  const failedRules = new Set();
 
   const projectContext = createProjectContext();
 
@@ -56,15 +60,30 @@ async function runRules(fileSource, rules, deep, config = {}) {
     } catch {
       // Never let context collection break a scan.
     }
-    for (const rule of rules) {
+    const applicableRules = file._agentControl
+      ? rules.filter((rule) => rule.controlPlane)
+      : rules;
+    for (const rule of applicableRules) {
       if (pathDisabledFor(config, rule.id, file.relativePath)) continue;
       try {
         const ruleFindings = rule.check(file) || [];
         for (const finding of ruleFindings) {
-          if (!isSuppressed(file, finding)) findings.push(finding);
+          if (!config.allowInlineSuppressions || !isSuppressed(file, finding)) findings.push(finding);
         }
       } catch {
-        // A rule should never crash the entire audit.
+        const key = `${rule.id}:${file.relativePath}`;
+        if (!failedRules.has(key)) {
+          failedRules.add(key);
+          findings.push({
+            ruleId: 'scan-incomplete',
+            ruleName: 'Scan Incomplete',
+            severity: 'warning',
+            message: `${rule.id} could not analyze this file. The result is incomplete.`,
+            file: file.relativePath,
+            line: 0,
+            fix: 'Preserve the file, report the parser failure, and rerun after the scanner can analyze it.',
+          });
+        }
       }
     }
   }
@@ -82,6 +101,8 @@ async function runRules(fileSource, rules, deep, config = {}) {
  * @param {string[]} [cliOptions.exclude]
  * @param {boolean} [cliOptions.strict]
  * @param {boolean} [cliOptions.skipSca]
+ * @param {boolean} [cliOptions.osv]
+ * @param {object} [cliOptions.osvOptions] - Test or embedding seam for the trusted OSV adapter
  * @param {boolean} [cliOptions.deep]
  * @param {AsyncIterable} [cliOptions.fileSource] - Custom file source (e.g. GitHub API). If provided, skips local file discovery.
  * @param {string[]} [cliOptions.extraIgnore] - Baseline ignore patterns merged on top of the resolved config's ignore list. Applied to every file source, so a self/portfolio scan can always exclude reports/ and test fixtures even when a remote .vibe-audit.json fetch fails open to an empty ignore list.
@@ -98,19 +119,25 @@ export async function audit(targetDir, cliOptions = {}) {
   // `cliOptions.config` lets callers (tests, or callers that already resolved config)
   // skip both the local file read and the remote API round-trip.
   let config;
+  const trustTargetConfig = cliOptions.trustTargetConfig === true;
   if (cliOptions.config) {
-    config = cliOptions.config;
-  } else if (cliOptions.fileSource) {
+    config = { ...cliOptions.config, allowInlineSuppressions: true };
+  } else if (cliOptions.fileSource && trustTargetConfig) {
     // targetDir may be "owner/repo" (morning-scan.js) or "github://owner/repo" (CLI) — try both.
     const target = parseGitHubTarget(targetDir.replace(/^github:\/\//, '')) || parseGitHubTarget(targetDir);
-    const remoteConfig = target ? await fetchRemoteConfig(target.owner, target.repo) : null;
+    const remoteConfig = target
+      ? await fetchRemoteConfig(target.owner, target.repo, { branch: cliOptions.remoteRef || 'HEAD' })
+      : null;
     config = remoteConfig || getDefaultConfig();
     if (remoteConfig) {
       // stderr, not stdout — must not corrupt --format json output for CI pipelines
       console.error(yellow(dim('  Remote .vibe-audit.json applied — the scanned repo controls its own ignore/list settings.')));
     }
-  } else {
+  } else if (!cliOptions.fileSource && trustTargetConfig) {
     config = await loadConfig(targetDir);
+    config.allowInlineSuppressions = true;
+  } else {
+    config = getDefaultConfig();
   }
 
   // Baseline ignores that always apply on top of the resolved config. Remote scans
@@ -128,7 +155,13 @@ export async function audit(targetDir, cliOptions = {}) {
   const excludeIds = cliOptions.exclude?.length ? cliOptions.exclude : config.exclude;
   const strict = cliOptions.strict ?? config.strict;
   const skipSca = cliOptions.skipSca ?? false;
+  const osv = cliOptions.osv ?? config.osv ?? true;
   const deep = cliOptions.deep ?? false;
+
+  const unknown = unknownRuleIds([...(ruleIds || []), ...(excludeIds || [])]);
+  if (unknown.length > 0) {
+    throw new Error(`Unknown rule ID${unknown.length === 1 ? '' : 's'}: ${unknown.join(', ')}`);
+  }
 
   // Resolve which rules to run.
   const rules = resolveRules(ruleIds, excludeIds);
@@ -140,10 +173,21 @@ export async function audit(targetDir, cliOptions = {}) {
   // SCA: Dependency vulnerability scanning (only for local scans).
   if (!skipSca && !cliOptions.fileSource) {
     try {
-      const scaFindings = await runSCA(targetDir);
+      const scaFindings = await runSCA(targetDir, {
+        osv,
+        osvOptions: cliOptions.osvOptions,
+      });
       findings.push(...scaFindings);
     } catch {
-      // SCA failure should not crash the audit.
+      findings.push({
+        ruleId: 'scan-incomplete',
+        ruleName: 'Scan Incomplete',
+        severity: 'warning',
+        message: 'Dependency analysis failed. The result does not cover installed package vulnerabilities.',
+        file: 'package.json',
+        line: 0,
+        fix: 'Repair the package-manager audit environment and rerun VibeAudit.',
+      });
     }
   }
 
@@ -153,9 +197,9 @@ export async function audit(targetDir, cliOptions = {}) {
   for (const f of findings) {
     const meta = CWE_MAP[f.ruleId];
     if (meta) {
-      f.cweId = meta.cweId;
-      f.cvssScore = meta.cvssScore;
-      f.owaspCategory = meta.owaspCategory;
+      f.cweId ??= meta.cweId;
+      f.cvssScore ??= meta.cvssScore;
+      f.owaspCategory ??= meta.owaspCategory;
     }
   }
 

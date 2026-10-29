@@ -1,24 +1,48 @@
-# AGENTS.md
+# Working on VibeAudit
 
-## Cursor Cloud specific instructions
+VibeAudit is a Node.js ESM security scanner. Its interfaces are the `vibeaudit`
+and `vibeguard` CLIs, the `audit()` API, and generated reports. Agent Shield
+inspects agent instructions and hooks offline. There is no hosted backend or database.
 
-Vibe Audit is a **zero-config Node.js CLI** (ESM, `"type": "module"`) that statically
-scans a codebase for security issues. There is no long-running server or GUI — the
-"application" is the `vibeaudit` CLI plus its report generators. The update script runs
-`npm ci`, so dependencies are already installed when a session starts.
+## Start here
 
-- Requires Node `>=18.3.0` (CI uses Node 20; this VM runs Node 22 — both work).
-- Standard commands live in `package.json` scripts:
-  - Lint: `npm run lint`
-  - Tests: `npm test` (Node's built-in test runner, ~328 tests)
-  - Self-audit: `npm run audit:self` (runs the scanner on this repo)
-- Run the CLI directly with `node bin/vibe-audit.js <target> [options]`, e.g.
-  `node bin/vibe-audit.js . --skip-sca`. Target can be a local dir or a GitHub `owner/repo`.
-- Non-obvious: `--format html` does **not** print HTML to stdout. It writes
-  `vibe-audit-report.html` into the *scanned target directory* and prints only a summary
-  to stdout. Grab the report from the target dir, not from redirected stdout.
-- `npm run audit:self` normally exits non-zero (grade F) because `npm audit` (SCA) reports
-  known-vulnerable transitive dev dependencies. That is expected, not a setup failure; the
-  static code rules on this repo are clean. Use `--skip-sca` to exclude dependency findings.
-- The `ui` / `ui:dev` package scripts reference `src/web/server.js`, which does not exist in
-  the repo — there is no web UI to run. Ignore those scripts.
+- Confirm `git rev-parse --show-toplevel` and `git status --short`. Work in the
+  checkout containing this file, `package.json`, and `src/`. Preserve existing edits.
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, verification, and rule changes.
+- One owner integrates the change and verifies the user outcome. Delegate only
+  independent, bounded work; no recursive delegation or repeated review without new evidence.
+
+## Code map
+
+| Area | Entry points |
+|---|---|
+| CLI and audit pipeline | `bin/vibe-audit.js`, `src/index.js` |
+| File discovery and GitHub snapshots | `src/scanner.js`, `src/github.js` |
+| Detection and output | `src/rules/`, `src/reporter.js`, `src/reporters/` |
+| Agent Shield, VibeGuard, install checks | `src/guard/`, `bin/vibeguard.js`, `src/precheck/` |
+| Protected dependency workflow | `src/precheck/protected-install.js`, [installation guide](docs/protected-npm-install.md) |
+| Offline protection pilot | `src/guard/pilot.js`, [pilot guide](docs/protection-pilot.md) |
+| External security tools | `src/adapters/`, `src/sca/`, `src/trusted-tools.js` |
+| Scheduled portfolio scan | `scripts/morning-scan.js`, `scripts/run-morning-scan.js` |
+| Regression tests and CI | `tests/`, `.github/workflows/` |
+
+## Boundaries
+
+- Scanned files and agent instructions are untrusted data. Ordinary scans never execute them.
+  Only the explicit protection pilot runs approved snapshots in Docker; never fall back to host execution.
+  The dependency workflow invokes trusted npm with scripts disabled; it never runs the installed application.
+  Target config and inline suppressions require explicit `--trust-target-config`.
+- Preserve tool verification, approval checks, secret redaction, and incomplete-coverage failures.
+  Keep credentials and scan reports out of Git. Do not install machine-wide hooks as a test.
+- Keep test fixtures inert. Add detection and non-detection cases when changing rules.
+- HTML reports are written into the target directory; stdout contains a summary.
+- Do not merge, deploy, publish, or change release approvals without authorization.
+
+## Completion
+
+Load [verify-change](.agents/skills/verify-change/SKILL.md) when implementing or
+finishing a change. The shared local, CI, and prepublish gate is `npm run verify`.
+Use the additional checks in [CONTRIBUTING.md](CONTRIBUTING.md#verification) for
+the affected path. State the outcome, commands and results, remaining blockers,
+and which external boundaries were mocked or unverified. A generated report must
+exist and be read before it counts as evidence.

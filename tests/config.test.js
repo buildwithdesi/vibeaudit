@@ -41,11 +41,18 @@ describe('config: normalizeConfig untrusted-input hardening', () => {
     assert.deepEqual(config.rules, []);
     assert.equal(config.format, 'terminal');
     assert.equal(config.strict, false);
+    assert.equal(config.osv, true);
     assert.deepEqual(config.disableForPaths, {});
   });
 
   it('rejects a disableForPaths that is itself an array', () => {
     const config = normalizeConfig({ disableForPaths: ['public/'] });
     assert.deepEqual(config.disableForPaths, {});
+  });
+
+  it('preserves an explicit OSV dependency adapter setting', () => {
+    assert.equal(normalizeConfig({ osv: true }).osv, true);
+    assert.equal(normalizeConfig({ osv: false }).osv, false);
+    assert.equal(normalizeConfig({ osv: 'yes' }).osv, true);
   });
 });

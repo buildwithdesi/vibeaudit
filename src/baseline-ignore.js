@@ -17,5 +17,5 @@ export const BASELINE_IGNORE = [
   // Claude Code keeps full working copies of the repo under .claude/worktrees/.
   // Scanning them reports every finding a second time, against a path that is
   // never deployed. Observed doubling content-drop's local finding count.
-  '.claude',
+  '.claude/worktrees',
 ];

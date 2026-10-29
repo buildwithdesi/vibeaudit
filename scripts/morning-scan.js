@@ -13,13 +13,14 @@
  *   --owner <name>      GitHub owner for --discover (default: buildwithdesi)
  *   --concurrency <N>   Parallel scans (default: 3)
  *   --format <fmt>      Report format (default: markdown)
+ *   --output-dir <dir>  Report directory (default: reports/)
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { audit } from '../src/index.js';
-import { fetchRepoFiles, parseGitHubTarget } from '../src/github.js';
+import { fetchRepoFilesTarball, parseGitHubTarget } from '../src/github.js';
 import { BASELINE_IGNORE } from '../src/baseline-ignore.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -166,7 +167,7 @@ async function scanRepo(name) {
   if (!parsed) return { error: { repo: name, error: 'Invalid repo format', kind: 'error' } };
 
   try {
-    const fileSource = fetchRepoFiles(parsed.owner, parsed.repo);
+    const fileSource = fetchRepoFilesTarball(parsed.owner, parsed.repo);
     const { findings } = await audit(name, {
       format: 'json',
       skipSca: true,
@@ -273,7 +274,7 @@ async function main() {
   results.sort((a, b) => gradeOrder[a.grade] - gradeOrder[b.grade]);
 
   const report = generateReport(results, errors, repos.length, durationSec);
-  const outDir = join(ROOT, 'reports');
+  const outDir = flag('output-dir', join(ROOT, 'reports'));
   await mkdir(outDir, { recursive: true });
 
   const dateStr = new Date().toISOString().split('T')[0];
@@ -359,7 +360,7 @@ function generateReport(results, errors, totalRepos, durationSec) {
   // Health dashboard
   md += `## Portfolio Health\n\n`;
   md += `| Grade | Count | |\n|-------|-------|-|\n`;
-  md += `| A | ${s.gradeA} | Clean |\n`;
+  md += `| A | ${s.gradeA} | No checked findings |\n`;
   md += `| B | ${s.gradeB} | Minor warnings |\n`;
   md += `| C | ${s.gradeC} | Multiple warnings |\n`;
   md += `| D | ${s.gradeD} | Many warnings |\n`;
@@ -409,12 +410,12 @@ function generateReport(results, errors, totalRepos, durationSec) {
     }
   }
 
-  // Clean repos
+  // Repos with no findings from the checks that completed
   const cleanRepos = results.filter((r) => r.grade === 'A');
   if (cleanRepos.length > 0) {
-    md += `## Clean Repos (Grade A)\n\n`;
+    md += `## Repos With No Checked Findings (Grade A)\n\n`;
     for (const r of cleanRepos) md += `- ${r.repo}\n`;
-    md += `\n`;
+    md += `\n> Grade A is not proof that a repository is safe. Manual review still applies.\n\n`;
   }
 
   // Skipped repos

@@ -1,0 +1,3 @@
+Approve the exact skill and input contents.
+Run the skill with networking disabled.
+Review the host-written receipt before accepting the result.

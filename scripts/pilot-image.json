@@ -1,0 +1,6 @@
+{
+  "image": "node@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32",
+  "source": "https://hub.docker.com/_/node",
+  "resolvedFrom": "22-alpine",
+  "resolvedAt": "2026-09-05"
+}

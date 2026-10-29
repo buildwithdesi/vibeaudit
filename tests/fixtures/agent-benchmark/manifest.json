@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "title": "Safe Agent Shield benchmark corpus",
+  "description": "Inert fixtures derived from public threat descriptions and synthetic control-plane cases. No fixture is executed.",
+  "cases": [
+    {
+      "id": "benign-writing-guide",
+      "path": "benign-writing-guide",
+      "classification": "benign",
+      "expectedDecision": "pass",
+      "sourceRefs": ["https://github.com/buildwithdesi/vibeaudit"]
+    },
+    {
+      "id": "benign-reviewed-hook",
+      "path": "benign-reviewed-hook",
+      "classification": "benign",
+      "expectedDecision": "pass",
+      "sourceRefs": ["https://code.claude.com/docs/en/hooks"]
+    },
+    {
+      "id": "malicious-download-execution",
+      "path": "malicious-download-execution",
+      "classification": "malicious",
+      "expectedDecision": "block",
+      "sourceRefs": [
+        "https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub/",
+        "https://genai.owasp.org/download/52117/"
+      ]
+    },
+    {
+      "id": "malicious-credential-exfiltration",
+      "path": "malicious-credential-exfiltration",
+      "classification": "malicious",
+      "expectedDecision": "block",
+      "sourceRefs": [
+        "https://github.com/cisco-ai-defense/skill-scanner",
+        "https://genai.owasp.org/llmrisk/llm062025-excessive-agency/"
+      ]
+    },
+    {
+      "id": "malicious-split-capability",
+      "path": "malicious-split-capability",
+      "classification": "malicious",
+      "expectedDecision": "block",
+      "sourceRefs": ["https://github.com/yatuk/mcpradar"]
+    },
+    {
+      "id": "malicious-guard-bypass",
+      "path": "malicious-guard-bypass",
+      "classification": "malicious",
+      "expectedDecision": "block",
+      "sourceRefs": ["https://genai.owasp.org/download/52117/"]
+    },
+    {
+      "id": "known-gap-obfuscated-instruction",
+      "path": "known-gap-obfuscated-instruction",
+      "classification": "malicious",
+      "evaluation": "known-gap",
+      "expectedDecision": "block",
+      "sourceRefs": ["https://arxiv.org/abs/2409.09356"]
+    },
+    {
+      "id": "incomplete-missing-hook",
+      "path": "incomplete-missing-hook",
+      "classification": "incomplete",
+      "expectedDecision": "block",
+      "sourceRefs": ["https://github.com/buildwithdesi/vibeaudit"]
+    }
+  ]
+}

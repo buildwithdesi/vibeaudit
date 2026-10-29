@@ -1,0 +1,4 @@
+title = "Vibe Audit trusted Gitleaks configuration"
+
+[extend]
+useDefault = true
