@@ -362,9 +362,22 @@ export function findExportedFunctions(ast) {
   return out;
 }
 
-/** Call names that are recognizably authentication / authorization guards. */
+/**
+ * Call names that are recognizably authentication / authorization guards.
+ *
+ * The `(?:assert|require|ensure|check|verify)\w*(?:Admin|Role|Permission|Owner|Access)`
+ * group covers guards named for what they authorize rather than for the word
+ * "auth" — `assertAdmin()`, `checkRole()`, `ensureOwner()`. These read as
+ * ordinary helpers to a name match built only around "auth"/"session", so a
+ * handler whose entire protection was `await assertAdmin()` was reported as
+ * having no authentication check at all.
+ *
+ * Deliberately verb-gated: matching a bare "admin" substring would also accept
+ * `getAdminClient()` / `createSupabaseAdminClient()`, which grant elevated
+ * access rather than check for it — exactly backwards.
+ */
 export const AUTH_GUARD_NAME =
-  /(?:get(?:Server)?Session|require\w*[Aa]uth\w*|requireUser\w*|requireSession\w*|requireAdmin\w*|isAuthenticated|authenticate\w*|withAuth\w*|currentUser|getUser\b|getToken\b|verify(?:Id)?Token|verify\w*[Aa]uth\w*|check\w*[Aa]uth\w*|ensure\w*[Aa]uth\w*|ensureUser\w*|ensureSession\w*|assert\w*[Aa]uth\w*|assertUser\w*|protect\w*|authGuard\w*|authorize\w*|clerkClient|getAuth\b|auth\b)/;
+  /(?:get(?:Server)?Session|require\w*[Aa]uth\w*|requireUser\w*|requireSession\w*|(?:assert|require|ensure|check|verify)\w*(?:Admin|Role|Permission|Owner|Access)\w*|is(?:Admin|Owner)\b|isAuthenticated|authenticate\w*|withAuth\w*|currentUser|getUser\b|getToken\b|verify(?:Id)?Token|verify\w*[Aa]uth\w*|check\w*[Aa]uth\w*|ensure\w*[Aa]uth\w*|ensureUser\w*|ensureSession\w*|assert\w*[Aa]uth\w*|assertUser\w*|protect\w*|authGuard\w*|authorize\w*|clerkClient|getAuth\b|auth\b)/;
 
 /** Substring signal for an IMPORTED identifier that is probably an auth guard. */
 const IMPORTED_GUARD_HINT = /(?:auth|session|guard|protect|require|ensure|verify|access|permission|identity|clerk|token|currentuser|getuser)/i;
