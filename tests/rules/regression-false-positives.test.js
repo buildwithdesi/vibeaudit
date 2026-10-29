@@ -658,3 +658,32 @@ export function JsonLd({ data }) {
     );
   });
 });
+
+describe('FP fix: loose secret patterns need a secret-like name right before the value (exposed-secrets)', () => {
+  const uuid = '3b3c1234-a266-4791-8800-3755652d10ed';
+  const fortyChars = 'ADLYWIL4jAKA0vuckYxQ2mPz9rT1bV3nK5sD7fG8';
+
+  it('does NOT flag a UUID id inside a long single-line JSON that mentions "key" elsewhere', () => {
+    // Morning Scan 2026-10-29: 129 "secrets" in one doc file were video ids.
+    const line = `[{"url": "https://example.com/?token=abc", "videoId": "${uuid}", "link": "https://example.com/library/${uuid}?t=179"}]`;
+    const file = mk('docs/challenges/day-list.html', line);
+    assert.equal(exposedSecrets.check(file).length, 0);
+  });
+
+  it('does NOT flag a Google tracking param in a one-line bookmarks export', () => {
+    // Morning Scan 2026-10-29: 36 "secrets" in bookmarks.json were sxsrf= search params.
+    const line = `[{"url":"https://example.com/?token=1","title":"a"},{"url":"https://www.google.com/search?q=x&sxsrf=${fortyChars}&y=1"}]`;
+    const file = mk('data/bookmarks.json', line);
+    assert.equal(exposedSecrets.check(file).length, 0);
+  });
+
+  it('STILL flags a UUID assigned to a secret-like name', () => {
+    assert.ok(exposedSecrets.check(mk('src/config.js', `const herokuApiKey = "${uuid}";`)).length > 0);
+    assert.ok(exposedSecrets.check(mk('config.json', `{"videoId": "x", "apiKey": "${uuid}"}`)).length > 0);
+  });
+
+  it('STILL flags a 40-char value assigned to a secret-like name', () => {
+    assert.ok(exposedSecrets.check(mk('src/aws.js', `const AWS_SECRET_ACCESS_KEY = '${fortyChars}';`)).length > 0);
+    assert.ok(exposedSecrets.check(mk('config.json', `{"region": "us-east-1", "awsSecretKey": "${fortyChars}"}`)).length > 0);
+  });
+});
