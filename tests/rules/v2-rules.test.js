@@ -369,7 +369,9 @@ describe('cwe-metadata', () => {
       // WCAG success criterion, the rest are quality/scale/ops checks with no CWE taxonomy.
       // license-contamination is a legal/compliance risk, not a vulnerability — CWE and
       // CVSS both model exploitability, and there is no honest score for "this is GPL".
-      if (rule.id.startsWith('a11y-') || rule.id.startsWith('perf-') || rule.id === 'serverless-fs-write' || rule.id === 'no-error-monitoring' || rule.id === 'license-contamination') continue;
+      // php-stack is the same shape: a stack-policy rule (standing doctrine: no PHP),
+      // and the presence of a language runtime has no honest CWE or CVSS either.
+      if (rule.id.startsWith('a11y-') || rule.id.startsWith('perf-') || rule.id === 'serverless-fs-write' || rule.id === 'no-error-monitoring' || rule.id === 'license-contamination' || rule.id === 'php-stack') continue;
       assert.ok(CWE_MAP[rule.id], `Rule ${rule.id} missing CWE mapping`);
     }
   });
