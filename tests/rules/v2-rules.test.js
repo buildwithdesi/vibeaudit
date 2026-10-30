@@ -666,3 +666,132 @@ describe('insecure-connections false positives', () => {
     assert.equal(httpFindings(file).length, 1);
   });
 });
+
+describe('xml-xxe false positives', () => {
+  const rule = () => ruleById('xml-xxe');
+
+  it('does not flag Gson JsonParser.parseString or a bare SAX import', () => {
+    const file = makeFile('bridge/android/ReaJadxBridge.java', [
+      'import com.google.gson.JsonParser;',
+      'import org.xml.sax.InputSource;',
+      'JsonObject args = JsonParser.parseString(arguments.toString()).getAsJsonObject();',
+    ].join('\n'));
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('does not flag a JS XML parser import on its own', () => {
+    const file = makeFile('src/feed.js', "import { XMLParser } from 'fast-xml-parser';\nconst sax = require('sax');");
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('flags an unhardened DocumentBuilderFactory', () => {
+    const file = makeFile('src/main/java/Xml.java', 'import javax.xml.parsers.DocumentBuilderFactory;\nDocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();');
+    const findings = rule().check(file);
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].severity, 'critical');
+  });
+
+  it('does not flag a DocumentBuilderFactory with doctype declarations disabled', () => {
+    const file = makeFile('src/main/java/Xml.java', [
+      'DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();',
+      'dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);',
+    ].join('\n'));
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('flags an unhardened XMLInputFactory and still flags libxmljs noent: true', () => {
+    assert.equal(rule().check(makeFile('src/Stax.java', 'XMLInputFactory f = XMLInputFactory.newInstance();')).length, 1);
+    assert.equal(rule().check(makeFile('src/xml.js', 'libxmljs.parseXml(body, { noent: true });')).length, 1);
+  });
+
+  it('flags a factory whose doctype setting is named but turned off', () => {
+    const file = makeFile('src/main/java/Xml.java', [
+      'DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();',
+      'dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", false);',
+    ].join('\n'));
+    assert.equal(rule().check(file).length, 1);
+  });
+
+  it('flags a factory when the hardening only appears in comments', () => {
+    const file = makeFile('src/main/java/Xml.java', [
+      '// TODO: dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);',
+      'DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance(); // dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);',
+      '/* dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true); */',
+    ].join('\n'));
+    assert.equal(rule().check(file).length, 1);
+  });
+
+  it('flags the unhardened factory when another factory in the file is hardened', () => {
+    const file = makeFile('src/main/java/Xml.java', [
+      'DocumentBuilderFactory safe = DocumentBuilderFactory.newInstance();',
+      'safe.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);',
+      'SAXParserFactory risky = SAXParserFactory.newInstance();',
+    ].join('\n'));
+    const findings = rule().check(file);
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].line, 3);
+  });
+
+  it('does not flag factories hardened through constants or StAX properties', () => {
+    const viaConstant = makeFile('src/main/java/Xml.java', [
+      'static final String NO_DOCTYPE = "http://apache.org/xml/features/disallow-doctype-decl";',
+      'DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();',
+      'dbf.setFeature(NO_DOCTYPE, Boolean.TRUE);',
+    ].join('\n'));
+    const viaEntities = makeFile('src/main/java/Sax.java', [
+      'SAXParserFactory spf = SAXParserFactory.newInstance();',
+      'spf.setFeature("http://xml.org/sax/features/external-general-entities", false);',
+      'spf.setFeature("http://xml.org/sax/features/external-parameter-entities", false);',
+    ].join('\n'));
+    const viaStax = makeFile('src/main/java/Stax.java', [
+      'XMLInputFactory f = XMLInputFactory.newInstance();',
+      'f.setProperty(XMLInputFactory.SUPPORT_DTD, false);',
+    ].join('\n'));
+    for (const file of [viaConstant, viaEntities, viaStax]) assert.equal(rule().check(file).length, 0, file.relativePath);
+  });
+});
+
+// Fake keys are joined at runtime so no full key-shaped literal sits in the
+// file. That keeps gitleaks strict without an allowlist entry.
+const FAKE_ANTHROPIC_KEY = 'sk-ant-' + 'api03-Zx9Qw8Er7Ty6Ui5Op4As3Df2';
+const FAKE_GOOGLE_KEY = 'AIza' + 'SyD8kq3Lm9Zt2Vw7Xp4Rb6Nc1Hs5Jf0Gy2';
+const FAKE_STRIPE_TEST_KEY = 'sk_' + 'test_' + '51HxQz8Lm2Vw7Xp4Rb6Nc1Hs5Jf0Gy2Ab';
+
+describe('client-bundle-secrets false positives', () => {
+  const rule = () => ruleById('client-bundle-secrets');
+
+  it('does not flag Node scripts under scripts/', () => {
+    const file = makeFile('scripts/verify-anthropic-client.mjs', 'const env = { ANTHROPIC_API_KEY: "' + FAKE_ANTHROPIC_KEY + '" };');
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('does not flag files that import Node built-ins', () => {
+    const file = makeFile('tools/smoke.mjs', 'import { spawnSync } from "node:child_process";\nconst apiKey = "' + FAKE_ANTHROPIC_KEY + '";');
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('does not flag obvious placeholder values, even in client code', () => {
+    const file = makeFile('src/components/Demo.tsx', [
+      'const a = { ANTHROPIC_API_KEY: "local-fixture-key" };',
+      'const b = { COMMAND_CODE_API_KEY: "local-fixture-only" };',
+      'api_key = "local-fixture-key"',
+      'const c = { apiKey: "your-api-key-goes-here" };',
+    ].join('\n'));
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('still flags a real-looking key in a client component', () => {
+    const file = makeFile('src/components/Chat.tsx', 'const client = createClient({ apiKey: "' + FAKE_GOOGLE_KEY + '" });');
+    assert.equal(rule().check(file).length, 1);
+  });
+
+  it('still flags a Stripe test secret key, which is a real credential', () => {
+    const file = makeFile('src/components/Pay.tsx', 'const secret_key = "' + FAKE_STRIPE_TEST_KEY + '";');
+    assert.equal(rule().check(file).length, 1);
+  });
+
+  it('still flags keys in public/scripts, which the browser downloads', () => {
+    const file = makeFile('public/scripts/widget.js', 'const apiKey = "' + FAKE_GOOGLE_KEY + '";');
+    assert.equal(rule().check(file).length, 1);
+  });
+});
