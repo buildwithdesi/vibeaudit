@@ -547,3 +547,122 @@ describe('hardened-rules-2026', () => {
     assert.ok(findings[0].message.includes('Unauthenticated test/demo/debug endpoint'), 'Should have custom demo route warning');
   });
 });
+
+// ── False-positive regressions (third-party MCP server scan) ─────────────────
+
+describe('hardcoded-ip false positives', () => {
+  const rule = () => ruleById('hardcoded-ip');
+
+  it('does not flag X.509 OIDs in an OID-to-name map', () => {
+    const file = makeFile('src/crypto/x509-names.ts', `
+export const OID_NAMES = {
+  "2.5.4.3": "commonName",
+  "2.5.4.10": "organizationName",
+  "2.5.29.14": "subjectKeyIdentifier",
+  "1.2.840.113549.1.1.11": "sha256WithRSAEncryption",
+};
+`);
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('does not flag a bare 2.5.4.x / 2.5.29.x OID comparison', () => {
+    const file = makeFile('src/cert.js', 'if (attr.type === "2.5.4.3") return attr.value;\nconst ext = "2.5.29.17";');
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('does not flag dotted strings with an out-of-range octet', () => {
+    const file = makeFile('src/version.js', 'const v = "1.2.840.10";');
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('still flags a real public IPv4 address', () => {
+    const file = makeFile('src/config.js', 'const host = "203.0.113.50";');
+    const findings = rule().check(file);
+    assert.equal(findings.length, 1);
+    assert.ok(findings[0].message.includes('203.0.113.50'));
+  });
+
+  it('still flags an IP mapped to a name when the file has no OID context', () => {
+    const file = makeFile('src/hosts.js', 'const HOSTS = { "203.0.113.7": "primary" };');
+    assert.equal(rule().check(file).length, 1);
+  });
+});
+
+describe('missing-rate-limiting false positives', () => {
+  const rule = () => ruleById('missing-rate-limiting');
+
+  it('skips type-only modules under a high-risk server path', () => {
+    const file = makeFile('src/server/register/types.ts', 'export interface ToolResult { text: string }\nexport type Handler = () => Promise<ToolResult>;');
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('skips helpers with no route or handler signal', () => {
+    const file = makeFile('src/server/register/helpers.ts', 'export function textResult(text) { return { content: [{ type: "text", text }] }; }');
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('skips test files even when they contain handler code', () => {
+    const file = makeFile('src/server/register/route.test.ts', 'export async function POST() { return Response.json({}); }');
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('skips MCP tool registration on a stdio server', () => {
+    const file = makeFile('src/server/register/register-analysis-tools.ts', `
+export function registerAnalysisTools(server) {
+  server.registerTool("decompile", { description: "Decompile" }, async () => ({ content: [] }));
+}
+`);
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('still flags an Express route on a high-risk path', () => {
+    const file = makeFile('server/routes/signup.js', 'router.post("/signup", async (req, res) => { res.json({ ok: true }); });');
+    assert.equal(rule().check(file).length, 1);
+  });
+
+  it('still flags an MCP file that also exposes an HTTP route', () => {
+    const file = makeFile('src/server/register/http.ts', `
+server.registerTool("decompile", {}, async () => ({ content: [] }));
+app.post("/mcp", async (req, res) => { res.json({}); });
+`);
+    assert.equal(rule().check(file).length, 1);
+  });
+
+  it('still flags a paid API call inside a route handler', () => {
+    const file = makeFile('api/summarize.js', `
+export default async function handler(req, res) {
+  const out = await openai.chat.completions.create({ model: "x", messages: [] });
+  res.json(out);
+}
+`);
+    assert.equal(rule().check(file).length, 1);
+  });
+});
+
+describe('insecure-connections false positives', () => {
+  const rule = () => ruleById('insecure-connections');
+  const httpFindings = (file) => rule().check(file).filter((f) => f.message.includes('HTTP URL'));
+
+  it('does not flag the SVG xmlns inside a CSS data: URI', () => {
+    const line = `.icon { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'><path d='M0 0'/></svg>"); }`;
+    assert.equal(httpFindings(makeFile('src/ui/styles.ts', line)).length, 0);
+  });
+
+  it('does not flag W3C namespace constants', () => {
+    const file = makeFile('src/ui/svg.js', 'const SVG_NS = "http://www.w3.org/2000/svg";\nconst XLINK = "http://www.w3.org/1999/xlink";');
+    assert.equal(httpFindings(file).length, 0);
+  });
+
+  it('does not flag other URLs inside a data: URI or an xmlns attribute', () => {
+    const file = makeFile('src/ui/icon.js', [
+      `const icon = "data:image/svg+xml,<svg><a href='http://vendor-icons.com/x'/></svg>";`,
+      `const doc = '<feed xmlns="http://purl.org/atom/ns#">';`,
+    ].join('\n'));
+    assert.equal(httpFindings(file).length, 0);
+  });
+
+  it('still flags a plain HTTP API URL', () => {
+    const file = makeFile('src/config.js', 'const API = "http://api.partner-service.com/v1";');
+    assert.equal(httpFindings(file).length, 1);
+  });
+});

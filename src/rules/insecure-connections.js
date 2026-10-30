@@ -6,11 +6,12 @@
 /** @typedef {import('./types.js').Rule} Rule */
 
 const INSECURE_PATTERNS = [
-  // HTTP URLs (not localhost, not example.com)
+  // HTTP URLs (not localhost, not example.com, not W3C namespace identifiers)
   {
-    regex: /['"`]http:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0|example\.com)[^'"`\s]+['"`]/gi,
+    regex: /['"`]http:\/\/(?!localhost|127\.0\.0\.1|0\.0\.0\.0|example\.com|www\.w3\.org\/)[^'"`\s]+['"`]/gi,
     label: 'Non-localhost HTTP URL — data sent unencrypted',
     severity: 'warning',
+    ignore: isNonNetworkUrl,
   },
   // TLS verification disabled
   {
@@ -42,6 +43,16 @@ const INSECURE_PATTERNS = [
   },
 ];
 
+/**
+ * True when an http:// match is an identifier, not a request: an xmlns
+ * namespace attribute, or text inside an inline data: URI (inline SVG/CSS).
+ */
+function isNonNetworkUrl(line, index) {
+  const before = line.slice(0, index);
+  if (/xmlns(?::[\w-]+)?\s*=\s*$/i.test(before)) return true;
+  return /data:[\w.+-]+\/[\w.+-]+[;,]/i.test(before);
+}
+
 /** Skip test and config example files. */
 const SKIP_PATTERN = /(?:\.test\.|\.spec\.|__tests__|\.example|\.sample)/i;
 
@@ -62,9 +73,15 @@ export const insecureConnections = {
       const trimmed = line.trim();
       if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('#')) continue;
 
-      for (const { regex, label, severity } of INSECURE_PATTERNS) {
+      for (const { regex, label, severity, ignore } of INSECURE_PATTERNS) {
         regex.lastIndex = 0;
-        if (regex.test(line)) {
+        let hit = false;
+        let m;
+        while ((m = regex.exec(line)) !== null) {
+          if (!ignore || !ignore(line, m.index)) { hit = true; break; }
+          if (!regex.global) break;
+        }
+        if (hit) {
           findings.push({
             ruleId: 'insecure-connections',
             ruleName: 'Insecure Connections',
