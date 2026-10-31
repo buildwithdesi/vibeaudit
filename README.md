@@ -349,7 +349,27 @@ Every **security** finding carries its **CWE ID, CVSS v3.1 score, and OWASP Top 
 | `payment-amount-client` | 🔴 | 8.6 | CWE-602 | Payment amount taken from client instead of server |
 | `stripe-webhook-no-verify` | 🔴 | 8.1 | CWE-345 | Stripe webhooks without signature verification |
 | `ai-response-trusted` | 🟡 | 6.5 | CWE-20 | LLM output used in `eval`/`innerHTML`/SQL unsanitized |
-| `ai-cost-exposure` | 🟡 | 5.3 | CWE-770 | AI API calls with no token/spend limit |
+| `ai-cost-exposure` | 🟡 | 5.3 | CWE-770 | Paid AI or data API call with no output cap, or reachable by a free or unverified user with no per-user cap, shared limiter, and spend cap |
+
+### Free-credit pack
+
+Run just these rules with `vibeaudit --pack free-credit` (add `--warn` to print findings and exit 0). Severity in the table is the scanner's critical / warning / info scale; the spec's high and medium ratings are warnings, and low is info.
+
+| Rule | Sev | What it catches |
+| --- | --- | --- |
+| `fca-01` | info | Inventory of server files that call a paid AI or data API (file, provider, route) |
+| `fca-02` | critical | Provider key or provider call the browser can reach. Names the variable and file, never the value |
+| `fca-03` | critical | Spend route with no auth or entitlement, including routes on a middleware public list |
+| `fca-04` | warning | Spend path gated only by "signed in", not paid, trial, or allowlist |
+| `fca-05` | warning | Spend route with no per-user cap |
+| `fca-06` | warning | Limiter stored in a Map or globalThis, with no Redis, Upstash, or database |
+| `fca-07` | warning | No reservation or dollar ceiling before the provider call |
+| `fca-08` | warning | Admin, trial, or allowlist email used without a verified-status check |
+| `fca-09` | warning | Email match that only lowercases: no plus-tag, Gmail-dot, or disposable-domain handling |
+| `fca-10` | info | API-key mint with no per-user count |
+| `fca-11` | warning | Clerk, Supabase, or Firebase signup with no CAPTCHA or bot-protection note |
+
+`scripts/free-credit-config.mjs` is a read-only checklist for Clerk and Supabase settings plus the manual provider spend-cap questions. It sends GET requests only and will not print a secret value. The GitHub workflow `.github/workflows/free-credit-check.yml` runs the pack in warn mode and does not fail the build.
 
 ### 🔏 Data & Privacy
 

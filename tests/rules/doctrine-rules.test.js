@@ -59,7 +59,11 @@ describe('minimum-release-age: gates written in config files', () => {
 
   it('flags a short .npmrc minimum-release-age and a too-recent npm before date', () => {
     assert.equal(run('.npmrc', 'minimum-release-age=60\n')[0].severity, 'warning');
-    const recent = new Date(Date.now() - 2.5 * 86400000).toISOString().slice(0, 10);
+    // Midday UTC, two whole days back. A 2.5-day offset can floor to 3 calendar
+    // days once Date.parse drops the clock, which is no longer "shorter than 3".
+    const recentDate = new Date(Date.now() - 2 * 86400000);
+    recentDate.setUTCHours(12, 0, 0, 0);
+    const recent = recentDate.toISOString().slice(0, 10);
     const f = run('.npmrc', `before=${recent}\n`)[0];
     assert.equal(f.severity, 'warning');
     assert.match(f.message, /"before" gate is only 2 days/);

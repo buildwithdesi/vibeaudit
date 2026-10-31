@@ -15,6 +15,10 @@ VIBE-AUDIT-FIXES.md
 reports/
 !reports/.gitkeep
 
+# Free-credit CI writes these next to the checkout. They quote target code.
+free-credit-report.md
+free-credit-config.md
+
 # ===== Added by vibe-audit fix =====
 .pnp/
 .pnp.js

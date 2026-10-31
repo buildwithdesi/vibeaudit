@@ -5,6 +5,7 @@ import {
   classifyScanError,
   discoverRepos,
   excludeScanOutputRepos,
+  includedPackLine,
   shouldAcceptDiscovery,
 } from '../scripts/morning-scan.js';
 
@@ -264,5 +265,14 @@ describe('excludeScanOutputRepos', () => {
   test('leaves an ordinary list untouched', () => {
     const repos = ['a/one', 'b/two'];
     assert.deepEqual(excludeScanOutputRepos(repos), repos);
+  });
+});
+
+describe('free-credit pack in the daily scan', () => {
+  test('names the free-credit pack in the morning report header', () => {
+    const line = includedPackLine();
+    assert.match(line, /free-credit/);
+    assert.match(line, /FCA-01/);
+    assert.match(line, /FCA-11/);
   });
 });

@@ -20,6 +20,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { audit } from '../src/index.js';
+import { RULE_PACKS } from '../src/rules/packs.js';
 import { fetchRepoFilesTarball, parseGitHubTarget } from '../src/github.js';
 import { BASELINE_IGNORE } from '../src/baseline-ignore.js';
 
@@ -333,6 +334,12 @@ function buildSummary(results, errors) {
   };
 }
 
+/** Packs that ride along in the default rule set, so the daily scan covers them. */
+export function includedPackLine() {
+  const names = Object.keys(RULE_PACKS).join(', ');
+  return `Packs included in the default rule set: ${names} (free-credit is FCA-01 through FCA-11).`;
+}
+
 function generateReport(results, errors, totalRepos, durationSec) {
   const s = buildSummary(results, errors);
   const date = new Date().toLocaleDateString('en-US', {
@@ -344,6 +351,7 @@ function generateReport(results, errors, totalRepos, durationSec) {
 
   let md = `# Vibe Audit Morning Scan\n`;
   md += `**${date}** | ${s.total} repos scanned | ${s.skipped} skipped | ${durationSec}s\n\n`;
+  md += `${includedPackLine()}\n\n`;
 
   // An empty dashboard reads as "all clear" at a glance. Say plainly when the
   // grades below are empty because nothing was audited.

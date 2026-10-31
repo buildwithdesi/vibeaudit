@@ -1,0 +1,75 @@
+name: Free credit check
+
+# Warn only. Findings are uploaded and commented. They do not fail the build.
+# Product repos can use the same steps with `npx @jackdog668/vibeaudit` once
+# this pack is published. This workflow runs the local checkout.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  free-credit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: Free-credit pack (warn only)
+        run: node bin/vibe-audit.js . --pack free-credit --format md --skip-sca --skip-osv --warn > free-credit-report.md
+
+      - name: Read-only live-config checklist
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          CLERK_FRONTEND_API: ${{ vars.CLERK_FRONTEND_API }}
+          CLERK_APP_NAMES: ${{ vars.CLERK_APP_NAMES }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REFS: ${{ vars.SUPABASE_PROJECT_REFS }}
+        run: node scripts/free-credit-config.mjs --out free-credit-config.md
+
+      - name: Upload free-credit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: free-credit-${{ github.run_id }}
+          path: |
+            free-credit-report.md
+            free-credit-config.md
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Comment summary on the pull request
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.existsSync('free-credit-report.md')
+              ? fs.readFileSync('free-credit-report.md', 'utf8').slice(0, 6000)
+              : '(no report)';
+            const body = [
+              '### Free-credit check (warn only)',
+              '',
+              'This check does not fail the build. FCA-02 and FCA-03 still show as critical in the report; failing the build on them waits until a clean pass.',
+              '',
+              report,
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });

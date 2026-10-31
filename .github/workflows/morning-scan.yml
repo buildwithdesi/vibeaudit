@@ -29,6 +29,9 @@ jobs:
       - run: npm ci --ignore-scripts
 
       - name: Run morning scan
+        # free-credit (FCA-01 through FCA-11) is part of the default rule set,
+        # so every repo in scripts/repos.json is checked daily. Findings do not
+        # fail this job: run-morning-scan accepts exit 0 and exit 1.
         env:
           GITHUB_TOKEN: ${{ secrets.SCAN_TOKEN }}
           # Passed via env, not inlined into the script, so the dispatch input
