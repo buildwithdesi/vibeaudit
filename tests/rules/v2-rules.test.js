@@ -549,3 +549,251 @@ describe('hardened-rules-2026', () => {
     assert.ok(findings[0].message.includes('Unauthenticated test/demo/debug endpoint'), 'Should have custom demo route warning');
   });
 });
+
+// ── False-positive regressions (third-party MCP server scan) ─────────────────
+
+describe('hardcoded-ip false positives', () => {
+  const rule = () => ruleById('hardcoded-ip');
+
+  it('does not flag X.509 OIDs in an OID-to-name map', () => {
+    const file = makeFile('src/crypto/x509-names.ts', `
+export const OID_NAMES = {
+  "2.5.4.3": "commonName",
+  "2.5.4.10": "organizationName",
+  "2.5.29.14": "subjectKeyIdentifier",
+  "1.2.840.113549.1.1.11": "sha256WithRSAEncryption",
+};
+`);
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('does not flag a bare 2.5.4.x / 2.5.29.x OID comparison', () => {
+    const file = makeFile('src/cert.js', 'if (attr.type === "2.5.4.3") return attr.value;\nconst ext = "2.5.29.17";');
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('does not flag dotted strings with an out-of-range octet', () => {
+    const file = makeFile('src/version.js', 'const v = "1.2.840.10";');
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('still flags a real public IPv4 address', () => {
+    const file = makeFile('src/config.js', 'const host = "203.0.113.50";');
+    const findings = rule().check(file);
+    assert.equal(findings.length, 1);
+    assert.ok(findings[0].message.includes('203.0.113.50'));
+  });
+
+  it('still flags an IP mapped to a name when the file has no OID context', () => {
+    const file = makeFile('src/hosts.js', 'const HOSTS = { "203.0.113.7": "primary" };');
+    assert.equal(rule().check(file).length, 1);
+  });
+});
+
+describe('missing-rate-limiting false positives', () => {
+  const rule = () => ruleById('missing-rate-limiting');
+
+  it('skips type-only modules under a high-risk server path', () => {
+    const file = makeFile('src/server/register/types.ts', 'export interface ToolResult { text: string }\nexport type Handler = () => Promise<ToolResult>;');
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('skips helpers with no route or handler signal', () => {
+    const file = makeFile('src/server/register/helpers.ts', 'export function textResult(text) { return { content: [{ type: "text", text }] }; }');
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('skips test files even when they contain handler code', () => {
+    const file = makeFile('src/server/register/route.test.ts', 'export async function POST() { return Response.json({}); }');
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('skips MCP tool registration on a stdio server', () => {
+    const file = makeFile('src/server/register/register-analysis-tools.ts', `
+export function registerAnalysisTools(server) {
+  server.registerTool("decompile", { description: "Decompile" }, async () => ({ content: [] }));
+}
+`);
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('still flags an Express route on a high-risk path', () => {
+    const file = makeFile('server/routes/signup.js', 'router.post("/signup", async (req, res) => { res.json({ ok: true }); });');
+    assert.equal(rule().check(file).length, 1);
+  });
+
+  it('still flags an MCP file that also exposes an HTTP route', () => {
+    const file = makeFile('src/server/register/http.ts', `
+server.registerTool("decompile", {}, async () => ({ content: [] }));
+app.post("/mcp", async (req, res) => { res.json({}); });
+`);
+    assert.equal(rule().check(file).length, 1);
+  });
+
+  it('still flags a paid API call inside a route handler', () => {
+    const file = makeFile('api/summarize.js', `
+export default async function handler(req, res) {
+  const out = await openai.chat.completions.create({ model: "x", messages: [] });
+  res.json(out);
+}
+`);
+    assert.equal(rule().check(file).length, 1);
+  });
+});
+
+describe('insecure-connections false positives', () => {
+  const rule = () => ruleById('insecure-connections');
+  const httpFindings = (file) => rule().check(file).filter((f) => f.message.includes('HTTP URL'));
+
+  it('does not flag the SVG xmlns inside a CSS data: URI', () => {
+    const line = `.icon { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'><path d='M0 0'/></svg>"); }`;
+    assert.equal(httpFindings(makeFile('src/ui/styles.ts', line)).length, 0);
+  });
+
+  it('does not flag W3C namespace constants', () => {
+    const file = makeFile('src/ui/svg.js', 'const SVG_NS = "http://www.w3.org/2000/svg";\nconst XLINK = "http://www.w3.org/1999/xlink";');
+    assert.equal(httpFindings(file).length, 0);
+  });
+
+  it('does not flag other URLs inside a data: URI or an xmlns attribute', () => {
+    const file = makeFile('src/ui/icon.js', [
+      `const icon = "data:image/svg+xml,<svg><a href='http://vendor-icons.com/x'/></svg>";`,
+      `const doc = '<feed xmlns="http://purl.org/atom/ns#">';`,
+    ].join('\n'));
+    assert.equal(httpFindings(file).length, 0);
+  });
+
+  it('still flags a plain HTTP API URL', () => {
+    const file = makeFile('src/config.js', 'const API = "http://api.partner-service.com/v1";');
+    assert.equal(httpFindings(file).length, 1);
+  });
+});
+
+describe('xml-xxe false positives', () => {
+  const rule = () => ruleById('xml-xxe');
+
+  it('does not flag Gson JsonParser.parseString or a bare SAX import', () => {
+    const file = makeFile('bridge/android/ReaJadxBridge.java', [
+      'import com.google.gson.JsonParser;',
+      'import org.xml.sax.InputSource;',
+      'JsonObject args = JsonParser.parseString(arguments.toString()).getAsJsonObject();',
+    ].join('\n'));
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('does not flag a JS XML parser import on its own', () => {
+    const file = makeFile('src/feed.js', "import { XMLParser } from 'fast-xml-parser';\nconst sax = require('sax');");
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('flags an unhardened DocumentBuilderFactory', () => {
+    const file = makeFile('src/main/java/Xml.java', 'import javax.xml.parsers.DocumentBuilderFactory;\nDocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();');
+    const findings = rule().check(file);
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].severity, 'critical');
+  });
+
+  it('does not flag a DocumentBuilderFactory with doctype declarations disabled', () => {
+    const file = makeFile('src/main/java/Xml.java', [
+      'DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();',
+      'dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);',
+    ].join('\n'));
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('flags an unhardened XMLInputFactory and still flags libxmljs noent: true', () => {
+    assert.equal(rule().check(makeFile('src/Stax.java', 'XMLInputFactory f = XMLInputFactory.newInstance();')).length, 1);
+    assert.equal(rule().check(makeFile('src/xml.js', 'libxmljs.parseXml(body, { noent: true });')).length, 1);
+  });
+
+  it('flags a factory whose doctype setting is named but turned off', () => {
+    const file = makeFile('src/main/java/Xml.java', [
+      'DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();',
+      'dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", false);',
+    ].join('\n'));
+    assert.equal(rule().check(file).length, 1);
+  });
+
+  it('flags a factory when the hardening only appears in comments', () => {
+    const file = makeFile('src/main/java/Xml.java', [
+      '// TODO: dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);',
+      'DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance(); // dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);',
+      '/* dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true); */',
+    ].join('\n'));
+    assert.equal(rule().check(file).length, 1);
+  });
+
+  it('flags the unhardened factory when another factory in the file is hardened', () => {
+    const file = makeFile('src/main/java/Xml.java', [
+      'DocumentBuilderFactory safe = DocumentBuilderFactory.newInstance();',
+      'safe.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);',
+      'SAXParserFactory risky = SAXParserFactory.newInstance();',
+    ].join('\n'));
+    const findings = rule().check(file);
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].line, 3);
+  });
+
+  it('does not flag factories hardened through constants or StAX properties', () => {
+    const viaConstant = makeFile('src/main/java/Xml.java', [
+      'static final String NO_DOCTYPE = "http://apache.org/xml/features/disallow-doctype-decl";',
+      'DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();',
+      'dbf.setFeature(NO_DOCTYPE, Boolean.TRUE);',
+    ].join('\n'));
+    const viaEntities = makeFile('src/main/java/Sax.java', [
+      'SAXParserFactory spf = SAXParserFactory.newInstance();',
+      'spf.setFeature("http://xml.org/sax/features/external-general-entities", false);',
+      'spf.setFeature("http://xml.org/sax/features/external-parameter-entities", false);',
+    ].join('\n'));
+    const viaStax = makeFile('src/main/java/Stax.java', [
+      'XMLInputFactory f = XMLInputFactory.newInstance();',
+      'f.setProperty(XMLInputFactory.SUPPORT_DTD, false);',
+    ].join('\n'));
+    for (const file of [viaConstant, viaEntities, viaStax]) assert.equal(rule().check(file).length, 0, file.relativePath);
+  });
+});
+
+// Fake keys are joined at runtime so no full key-shaped literal sits in the
+// file. That keeps gitleaks strict without an allowlist entry.
+const FAKE_ANTHROPIC_KEY = 'sk-ant-' + 'api03-Zx9Qw8Er7Ty6Ui5Op4As3Df2';
+const FAKE_GOOGLE_KEY = 'AIza' + 'SyD8kq3Lm9Zt2Vw7Xp4Rb6Nc1Hs5Jf0Gy2';
+const FAKE_STRIPE_TEST_KEY = 'sk_' + 'test_' + '51HxQz8Lm2Vw7Xp4Rb6Nc1Hs5Jf0Gy2Ab';
+
+describe('client-bundle-secrets false positives', () => {
+  const rule = () => ruleById('client-bundle-secrets');
+
+  it('does not flag Node scripts under scripts/', () => {
+    const file = makeFile('scripts/verify-anthropic-client.mjs', 'const env = { ANTHROPIC_API_KEY: "' + FAKE_ANTHROPIC_KEY + '" };');
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('does not flag files that import Node built-ins', () => {
+    const file = makeFile('tools/smoke.mjs', 'import { spawnSync } from "node:child_process";\nconst apiKey = "' + FAKE_ANTHROPIC_KEY + '";');
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('does not flag obvious placeholder values, even in client code', () => {
+    const file = makeFile('src/components/Demo.tsx', [
+      'const a = { ANTHROPIC_API_KEY: "local-fixture-key" };',
+      'const b = { COMMAND_CODE_API_KEY: "local-fixture-only" };',
+      'api_key = "local-fixture-key"',
+      'const c = { apiKey: "your-api-key-goes-here" };',
+    ].join('\n'));
+    assert.equal(rule().check(file).length, 0);
+  });
+
+  it('still flags a real-looking key in a client component', () => {
+    const file = makeFile('src/components/Chat.tsx', 'const client = createClient({ apiKey: "' + FAKE_GOOGLE_KEY + '" });');
+    assert.equal(rule().check(file).length, 1);
+  });
+
+  it('still flags a Stripe test secret key, which is a real credential', () => {
+    const file = makeFile('src/components/Pay.tsx', 'const secret_key = "' + FAKE_STRIPE_TEST_KEY + '";');
+    assert.equal(rule().check(file).length, 1);
+  });
+
+  it('still flags keys in public/scripts, which the browser downloads', () => {
+    const file = makeFile('public/scripts/widget.js', 'const apiKey = "' + FAKE_GOOGLE_KEY + '";');
+    assert.equal(rule().check(file).length, 1);
+  });
+});

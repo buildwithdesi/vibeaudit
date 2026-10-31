@@ -13,8 +13,28 @@ import { isDesignedPublicKey } from '../context.js';
 /** Client-side file patterns — these get bundled and sent to the browser. */
 const CLIENT_FILE_PATTERNS = /(?:^src\/(?:components|pages|app|views|layouts|hooks|context|lib\/client)|\.client\.|\/client\/|^app\/|^pages\/(?!api\/))/i;
 
-/** Non-client file patterns (server-only). */
-const SERVER_FILE_PATTERNS = /(?:api\/|server\/|\.server\.|middleware|functions\/|lib\/server|_worker\.|backend\/)/i;
+/**
+ * Non-client file patterns (server-only). Root scripts/ and bin/ run in Node,
+ * not the browser (public/scripts/ is still served, so only the root counts).
+ */
+const SERVER_FILE_PATTERNS = /(?:api\/|server\/|\.server\.|middleware|functions\/|lib\/server|_worker\.|backend\/|^(?:scripts|bin)\/|\.cjs$)/i;
+
+/** Node built-in imports mark a file that never ships to the browser. */
+const NODE_ONLY_IMPORT = /(?:from\s+|require\s*\(\s*)['"]node:/;
+
+/** Words that mark a value as a stand-in, not a credential. */
+const PLACEHOLDER_WORDS = new Set(['fixture', 'placeholder', 'dummy', 'example', 'sample', 'test', 'fake', 'mock', 'local', 'your', 'changeme', 'redacted', 'xxx']);
+
+/**
+ * True for values like "local-fixture-key" or "your_api_key_here". A value with
+ * a long random-looking segment (e.g. sk_test_51Hx...) is still treated as real.
+ */
+function isPlaceholderValue(value) {
+  const parts = value.toLowerCase().split(/[-_]+/).filter(Boolean);
+  const looksRandom = parts.some((p) => p.length >= 16 && /\d/.test(p) && /[a-z]/.test(p));
+  if (looksRandom) return false;
+  return parts.some((p) => PLACEHOLDER_WORDS.has(p));
+}
 
 /**
  * Env var references that pull secrets into client bundles.
@@ -30,9 +50,9 @@ const CLIENT_ENV_REFS = [
 /** Patterns where secret values are assigned directly in client code. */
 const INLINE_SECRET_PATTERNS = [
   // Hardcoded API keys passed to SDK constructors in client files
-  { regex: /(?:apiKey|api_key|authKey|auth_key|secretKey|secret_key|privateKey|private_key)\s*[:=]\s*['"`][A-Za-z0-9_-]{16,}['"`]/gi, label: 'API key hardcoded in client-side code — visible in DevTools Sources' },
+  { regex: /(?:apiKey|api_key|authKey|auth_key|secretKey|secret_key|privateKey|private_key)\s*[:=]\s*['"`]([A-Za-z0-9_-]{16,})['"`]/gi, label: 'API key hardcoded in client-side code — visible in DevTools Sources' },
   // Authorization headers built client-side with hardcoded tokens
-  { regex: /['"`](?:Bearer|Basic)\s+[A-Za-z0-9_+/=-]{20,}['"`]/g, label: 'Hardcoded auth header in client code — visible in DevTools Network tab' },
+  { regex: /['"`](?:Bearer|Basic)\s+([A-Za-z0-9_+/=-]{20,})['"`]/g, label: 'Hardcoded auth header in client code — visible in DevTools Network tab' },
 ];
 
 /** @type {Rule} */
@@ -48,7 +68,7 @@ export const clientBundleSecrets = {
     const isServer = SERVER_FILE_PATTERNS.test(file.relativePath);
 
     // If it's clearly server-side, skip.
-    if (isServer) return [];
+    if (isServer || NODE_ONLY_IMPORT.test(file.content)) return [];
     // If we can't tell, still check — most vibe-coded files are client-side by default.
     // But only for direct inline secrets, not env var references.
     const checkEnvRefs = isClient;
@@ -63,7 +83,12 @@ export const clientBundleSecrets = {
       // Check for inline secrets (always).
       for (const { regex, label } of INLINE_SECRET_PATTERNS) {
         regex.lastIndex = 0;
-        if (regex.test(line)) {
+        let real = false;
+        let m;
+        while ((m = regex.exec(line)) !== null) {
+          if (!isPlaceholderValue(m[1])) { real = true; break; }
+        }
+        if (real) {
           findings.push({
             ruleId: 'client-bundle-secrets',
             ruleName: 'Client Bundle Secrets',
