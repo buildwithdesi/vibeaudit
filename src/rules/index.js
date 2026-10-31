@@ -62,6 +62,7 @@ import { deploymentConfigInsecure } from './deployment-config-insecure.js';
 import { aiPromptInjection } from './ai-prompt-injection.js';
 import { aiResponseTrusted } from './ai-response-trusted.js';
 import { aiCostExposure } from './ai-cost-exposure.js';
+import { FREE_CREDIT_RULES } from './free-credit.js';
 import { stripeWebhookNoVerify } from './stripe-webhook-no-verify.js';
 import { paymentAmountClient } from './payment-amount-client.js';
 // Data & privacy rules (v2)
@@ -199,6 +200,7 @@ export const ALL_RULES = [
   aiPromptInjection,
   aiResponseTrusted,
   aiCostExposure,
+  ...FREE_CREDIT_RULES,
   stripeWebhookNoVerify,
   paymentAmountClient,
   // Data & privacy (v2)

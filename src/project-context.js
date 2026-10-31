@@ -14,6 +14,7 @@
 
 import { parseSource, isParseable, walk, callsAuthGuard, collectImportedNames } from './ast.js';
 import { readCooldown } from './rules/minimum-release-age.js';
+import { noteFreeCreditFacts, finalizeFreeCreditFindings } from './rules/free-credit.js';
 
 const MIDDLEWARE_FILE = /(?:^|\/)(?:src\/)?middleware\.[mc]?[jt]sx?$/i;
 
@@ -39,6 +40,14 @@ export function collectProjectFact(file, ctx) {
   // "a gate exists somewhere", which is what suppresses the info candidate.
   const gate = readCooldown(file);
   if (gate?.hasGate) ctx.releaseAgeGateSeen = true;
+
+  // Provider modules and routes for the free-credit pack. One hop is resolved
+  // after the stream ends; recording here does not add findings by itself.
+  try {
+    noteFreeCreditFacts(file, ctx);
+  } catch {
+    // Context collection must not break a scan.
+  }
 
   if (!MIDDLEWARE_FILE.test(file.relativePath)) return;
   if (!isParseable(file.relativePath)) return;
@@ -175,9 +184,9 @@ export function applyProjectContext(findings, ctx) {
   const filtered = applyReleaseAgeContext(findings, ctx);
 
   const mw = ctx?.authMiddleware;
-  if (!mw || !mw.guarded || !mw.prefixes.length) return filtered;
-
-  return filtered.map((f) => {
+  const adjusted = !mw || !mw.guarded || !mw.prefixes.length
+    ? filtered
+    : filtered.map((f) => {
     if (f.ruleId !== 'missing-auth' || f.severity !== 'critical') return f;
 
     const url = routeUrlFor(f.file);
@@ -192,6 +201,7 @@ export function applyProjectContext(findings, ctx) {
       message: `${f.message} Auth appears to be enforced by middleware (matcher "${prefix}") — verify that matcher really covers this route.`,
     };
   });
+  return finalizeFreeCreditFindings(adjusted, ctx);
 }
 
 /**

@@ -24,6 +24,7 @@ import { createInterface } from 'node:readline/promises';
 import { audit } from '../src/index.js';
 import { generateFixes } from '../src/fix.js';
 import { ALL_RULES } from '../src/rules/index.js';
+import { RULE_PACKS, ruleIdsForPack } from '../src/rules/packs.js';
 import { CWE_MAP } from '../src/data/cwe-map.js';
 import { bold, cyan, dim, red, yellow, gray } from '../src/colors.js';
 
@@ -52,7 +53,9 @@ const { values, positionals } = parseArgs({
   options: {
     format: { type: 'string', short: 'f' },
     rules: { type: 'string', short: 'r' },
+    pack: { type: 'string' },
     exclude: { type: 'string', short: 'e' },
+    warn: { type: 'boolean' },
     strict: { type: 'boolean', short: 's' },
     fix: { type: 'boolean' },
     'fix-file': { type: 'boolean' },
@@ -85,10 +88,12 @@ ${bold('USAGE')}
   ${cyan('npx vibe-audit')} ${dim('[directory | github-url | owner/repo]')} ${dim('[options]')}
 
 ${bold('OPTIONS')}
-  ${cyan('-f, --format')} <terminal|json|markdown|html>  Output format ${dim('(default: terminal)')}
+  ${cyan('-f, --format')} <terminal|json|markdown|md|html>  Output format ${dim('(default: terminal)')}
   ${cyan('-r, --rules')}  <id,id,...>               Only run these rules
+  ${cyan('--pack')} <name>                          Run one rule pack (free-credit)
   ${cyan('-e, --exclude')} <id,id,...>               Skip these rules
   ${cyan('-s, --strict')}                            Exit 1 on warnings too
+  ${cyan('--warn')}                                  Print findings and exit 0 (does not fail the build)
   ${cyan('--fix')}                                   Show copy-paste fix prompts + save VIBE-AUDIT-FIXES.md
   ${cyan('--fix-file')}                              Only save fix file (no terminal prompts)
   ${cyan('--skip-sca')}                              Skip dependency vulnerability scanning
@@ -131,6 +136,9 @@ ${bold('EXAMPLES')}
 
   ${dim('# Only check for secrets and auth')}
   npx vibe-audit --rules exposed-secrets,missing-auth
+
+  ${dim('# Free-credit pack, warn mode (does not fail the build)')}
+  npx vibe-audit . --pack free-credit --format md --warn
 
 ${bold('CONFIG')}
   Add ${cyan('.vibe-audit.json')} to your project root to set defaults.
@@ -351,6 +359,15 @@ if (values['list-rules']) {
     console.log('');
   }
 
+  console.log(bold('  Packs'));
+  console.log(dim('  ─────────────────────────────────────────────'));
+  for (const [name, ids] of Object.entries(RULE_PACKS)) {
+    console.log(`  ${bold(name)}  ${dim(ids.join(', '))}`);
+  }
+  console.log('');
+  console.log(dim('  Run with --pack <name> to run one pack.'));
+  console.log('');
+
   await exitAfterFlush(0);
 }
 
@@ -398,11 +415,33 @@ if (values.precheck) {
 
 const rawTarget = positionals[0] || '.';
 
+let packIds;
+if (values.pack) {
+  try {
+    packIds = ruleIdsForPack(values.pack);
+  } catch (err) {
+    console.error(red(`\n  Error: ${err.message}\n`));
+    await exitAfterFlush(2);
+  }
+}
+
+let selectedRules = values.rules?.split(',').filter(Boolean);
+if (packIds) {
+  selectedRules = selectedRules?.length
+    ? selectedRules.filter((id) => packIds.includes(id))
+    : packIds;
+  if (!selectedRules || selectedRules.length === 0) {
+    console.error(red('\n  Error: --rules does not overlap the selected pack\n'));
+    await exitAfterFlush(2);
+  }
+}
+
 const cliOptions = {
-  format: values.format,
-  rules: values.rules?.split(',').filter(Boolean),
+  format: values.format === 'md' ? 'markdown' : values.format,
+  rules: selectedRules,
   exclude: values.exclude?.split(',').filter(Boolean),
   strict: values.strict,
+  warn: values.warn,
   skipSca: values['skip-sca'],
   osv: values['skip-osv'] ? false : values.osv,
   deep: values.deep,

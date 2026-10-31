@@ -2,6 +2,7 @@ import { bold, red, yellow, cyan, green, gray, dim } from './colors.js';
 import { getFixPrompt } from './data/prompts.js';
 import { generateHTML } from './reporters/html.js';
 import { PREFLIGHT_AUDIT_URL, PREFLIGHT_AUDIT_MESSAGE } from './constants.js';
+import { redactSecretValues } from './redact-secrets.js';
 import { join } from 'node:path';
 import { writeNewOutput } from './safe-output.js';
 
@@ -43,16 +44,29 @@ function sanitizeMarkdown(str) {
  * @param {'terminal' | 'json' | 'markdown' | 'html'} format
  * @param {{ filesScanned: number, rulesRun: number, durationMs: number, targetDir?: string }} meta
  */
+const REPORT_TEXT_FIELDS = ['message', 'evidence', 'fix', 'prompt', 'platformNotes', 'ruleName'];
+
+function redactFinding(finding) {
+  const copy = { ...finding };
+  delete copy._hop;
+  for (const field of REPORT_TEXT_FIELDS) {
+    if (typeof copy[field] === 'string') copy[field] = redactSecretValues(copy[field]);
+  }
+  return copy;
+}
+
 export function report(findings, format, meta) {
+  const safeFindings = findings.map(redactFinding);
   switch (format) {
     case 'json':
-      return reportJSON(findings, meta);
+      return reportJSON(safeFindings, meta);
+    case 'md':
     case 'markdown':
-      return reportMarkdown(findings, meta);
+      return reportMarkdown(safeFindings, meta);
     case 'html':
-      return reportHTMLFile(findings, meta);
+      return reportHTMLFile(safeFindings, meta);
     default:
-      return reportTerminal(findings, meta);
+      return reportTerminal(safeFindings, meta);
   }
 }
 

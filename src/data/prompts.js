@@ -309,8 +309,53 @@ export const FIX_PROMPTS = {
   },
 
   'ai-cost-exposure': {
-    prompt: `SECURITY FIX: My AI API calls have no max_tokens limit. A single request could generate an expensive response. Add max_tokens to every AI API call: { max_tokens: 1000 } (adjust based on your needs). Also add rate limiting to the API route and set spend alerts on your AI provider dashboard.`,
-    platformNotes: `All platforms using AI APIs. Also set hard spending caps on OpenAI/Anthropic dashboards.`,
+    prompt: `SECURITY FIX: A paid AI or data API call can run up a bill. Cover OpenAI, Anthropic, Gemini (generateContent / @google/genai), Deepgram, OpenRouter, DeepSeek, xAI, Replicate, Firecrawl, and ScrapeCreators. For each call: set an output cap (max_tokens or maxOutputTokens) where the API supports it. If a free or unverified user can reach the call, require a verified paid or allowlisted identity, add a per-user cap, a shared limiter (Redis or Upstash, not an in-memory Map), and a dollar ceiling that stops the call before it is sent. Set a spend cap and alert in the provider console too.`,
+    platformNotes: `Server routes and the helpers they call. Client components must not call these providers.`,
+  },
+
+  'fca-01': {
+    prompt: `SECURITY FIX: This server file calls or imports a paid AI or data API. Treat it as a spend site: entitlement check, per-user cap, shared limiter, and a dollar ceiling before the call. The finding is an inventory row (file, provider, route), not by itself a vulnerability.`,
+    platformNotes: `Gemini, Deepgram, OpenRouter, DeepSeek, xAI, Replicate, Firecrawl, and ScrapeCreators count, not only OpenAI and Anthropic.`,
+  },
+  'fca-02': {
+    prompt: `SECURITY FIX: A provider key is reachable by the browser, or a provider call sits in a client file. The report names the variable and file only — do not copy the key into chat. Remove NEXT_PUBLIC_ / VITE_ / EXPO_PUBLIC_ provider keys, move the call to a server handler, and rotate the exposed key.`,
+    platformNotes: `Publishable keys (Clerk, Stripe publishable, PostHog) are not this finding. Provider keys are.`,
+  },
+  'fca-03': {
+    prompt: `SECURITY FIX: A route reaches a paid API with no auth, entitlement, Bearer check, or allowlist — or middleware lists that route as public. Require a session and a paid, allowlisted, or engine entitlement before the call. Do not put spend routes on the public matcher.`,
+    platformNotes: `One local import hop counts. A helper that calls the provider is the same spend path as the route.`,
+  },
+  'fca-04': {
+    prompt: `SECURITY FIX: This spend path is gated only by "signed in" (session or any-user). Free and unverified accounts can spend. Require a paid plan, an allowlist, or an engine entitlement, and require a verified email.`,
+    platformNotes: `An engine or admin gate in the same handler is the stronger check and clears this finding.`,
+  },
+  'fca-05': {
+    prompt: `SECURITY FIX: This spend route has no per-user cap. Add checkKeyedRateLimit(bucket, userId), ratelimit.limit(userId), or a quota RPC in the handler before the provider call. An IP-only limit is not a per-user cap.`,
+    platformNotes: `Serverless and multi-instance apps need the cap stored outside process memory. See the memory-only limiter finding.`,
+  },
+  'fca-06': {
+    prompt: `SECURITY FIX: The rate limiter is a Map or globalThis with no Redis, Upstash, or database fallback. A deploy or a second instance resets it. Store counters in Upstash, Redis, or the database. Keep the Map only when developing locally.`,
+    platformNotes: `Mentioning Upstash in a comment is not enough — construct the shared client and use it for the buckets that guard spend.`,
+  },
+  'fca-07': {
+    prompt: `SECURITY FIX: Nothing reserves budget or checks a dollar ceiling before the provider call. Add a reservation (reserveCredits or similar) or a logUsage check that refuses the call when the per-account or global cap is hit. Logging the cost after the call does not stop the bill.`,
+    platformNotes: `Put the check in the same function as the provider call so it cannot be skipped.`,
+  },
+  'fca-08': {
+    prompt: `SECURITY FIX: Code reads an email and compares it to an admin list, allowlist, or entitlement without checking that the address is verified. Return null unless verification status is verified, and use that helper for admin bootstrap, trial matching, and overrides.`,
+    platformNotes: `Optional chaining still counts: verification?.status === "verified" or !== "verified" is a real check.`,
+  },
+  'fca-09': {
+    prompt: `SECURITY FIX: Email matching only uses toLowerCase. Before allowlist, trial, or signup compares: lowercase; for gmail.com and googlemail.com strip dots and +tags; reject disposable domains.`,
+    platformNotes: `Do this in one normalize helper and use it everywhere an email is trusted.`,
+  },
+  'fca-10': {
+    prompt: `SECURITY FIX: The API-key create handler does not count existing keys for the user. Count active keys and refuse to mint another once the plan cap is reached.`,
+    platformNotes: `A shared per-user rate limit is not a key-count cap. Check the row count before insert.`,
+  },
+  'fca-11': {
+    prompt: `SECURITY FIX: A Clerk SignUp, Supabase signUp, or Firebase createUser call has no CAPTCHA. Enable Cloudflare Turnstile, hCaptcha, or reCAPTCHA, and turn on the provider's bot protection. Signup without that lets a bot farm create accounts.`,
+    platformNotes: `Clerk's dashboard CAPTCHA is invisible to a static scan. Keep the dashboard setting on, and leave a short note next to the component so reviewers can see it.`,
   },
 
   'stripe-webhook-no-verify': {

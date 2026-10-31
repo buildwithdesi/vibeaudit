@@ -9,6 +9,11 @@ import { createProjectContext, collectProjectFact, applyProjectContext } from '.
 import { parseGitHubTarget, fetchRemoteConfig } from './github.js';
 import { yellow, dim } from './colors.js';
 
+function normalizeFormat(format) {
+  if (format === 'md') return 'markdown';
+  return format;
+}
+
 /**
  * Check whether a relative path has any path segment matching one of the ignore
  * patterns. Applied uniformly to local AND remote file sources — local discovery
@@ -104,6 +109,7 @@ async function runRules(fileSource, rules, deep, config = {}) {
  * @param {boolean} [cliOptions.osv]
  * @param {object} [cliOptions.osvOptions] - Test or embedding seam for the trusted OSV adapter
  * @param {boolean} [cliOptions.deep]
+ * @param {boolean} [cliOptions.warn] - Report findings and exit 0. A thrown scan error still fails.
  * @param {AsyncIterable} [cliOptions.fileSource] - Custom file source (e.g. GitHub API). If provided, skips local file discovery.
  * @param {string[]} [cliOptions.extraIgnore] - Baseline ignore patterns merged on top of the resolved config's ignore list. Applied to every file source, so a self/portfolio scan can always exclude reports/ and test fixtures even when a remote .vibe-audit.json fetch fails open to an empty ignore list.
  * @param {import('./config.js').VibeAuditConfig} [cliOptions.config] - Pre-resolved config. Skips loadConfig()/fetchRemoteConfig() entirely (used by tests and callers that already resolved config).
@@ -150,7 +156,7 @@ export async function audit(targetDir, cliOptions = {}) {
     config = { ...config, ignore: [...(config.ignore || []), ...cliOptions.extraIgnore] };
   }
 
-  const format = cliOptions.format || config.format;
+  const format = normalizeFormat(cliOptions.format || config.format);
   const ruleIds = cliOptions.rules?.length ? cliOptions.rules : config.rules;
   const excludeIds = cliOptions.exclude?.length ? cliOptions.exclude : config.exclude;
   const strict = cliOptions.strict ?? config.strict;
@@ -218,7 +224,7 @@ export async function audit(targetDir, cliOptions = {}) {
   // Exit code: 1 if criticals found, 1 if warnings + strict mode, 0 otherwise.
   const hasCritical = findings.some((f) => f.severity === 'critical');
   const hasWarning = findings.some((f) => f.severity === 'warning');
-  const exitCode = hasCritical ? 1 : strict && hasWarning ? 1 : 0;
+  const exitCode = cliOptions.warn ? 0 : (hasCritical ? 1 : strict && hasWarning ? 1 : 0);
 
   return { findings, exitCode };
 }
