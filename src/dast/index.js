@@ -28,6 +28,6 @@ export async function runDAST(_targetUrl, _options = {}) {
   throw new Error(
     'DAST scanning is coming in vibe-audit v3.\n' +
     'This will include OWASP ZAP integration, Nuclei templates, and authenticated scanning.\n' +
-    'For now, use the SAST scanner: npx vibe-audit scan <directory>'
+    'For now, use the SAST scanner: npx @jackdog668/vibeaudit scan <directory>'
   );
 }

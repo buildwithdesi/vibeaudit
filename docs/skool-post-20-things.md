@@ -21,7 +21,7 @@ So I built something to fix that.
 One command. Zero setup. Takes about 2 seconds.
 
 ```
-npx vibe-audit .
+npx @jackdog668/vibeaudit .
 ```
 
 That's it. It reads every file in your project, runs 98 checks, and tells you exactly what's broken and how to fix it.
@@ -103,7 +103,7 @@ And Vibe Audit has **78 more rules** beyond this list — AI prompt injection, p
 Run with the `--fix` flag:
 
 ```
-npx vibe-audit . --fix
+npx @jackdog668/vibeaudit . --fix
 ```
 
 For every vulnerability it finds, you get a plain-English fix prompt you can copy-paste directly into Cursor, Claude, Bolt, or whatever AI tool you're using. It literally tells your AI assistant exactly how to fix the security hole.
@@ -115,9 +115,9 @@ For every vulnerability it finds, you get a plain-English fix prompt you can cop
 **Try it right now:**
 
 1. Open your terminal in any project folder
-2. Run `npx vibe-audit .`
+2. Run `npx @jackdog668/vibeaudit .`
 3. Read the report
-4. Run `npx vibe-audit . --fix` to get the fix prompts
+4. Run `npx @jackdog668/vibeaudit . --fix` to get the fix prompts
 5. **Drop your grade in the comments!** (A through F — let's see where everyone lands)
 
 Your AI toolkit just leveled up. Time to build AND build *safely.*
