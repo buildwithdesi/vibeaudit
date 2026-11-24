@@ -5,7 +5,7 @@
  * Zero-dependency security scanner for AI-generated codebases.
  *
  * Usage:
- *   npx vibe-audit [directory] [options]
+ *   npx @jackdog668/vibeaudit [directory] [options]
  *
  * Options:
  *   --format <terminal|json|markdown>  Output format (default: terminal)
@@ -85,7 +85,7 @@ if (values.help) {
 ${bold('??  vibe-audit')} ? Security scanner for AI-generated code
 
 ${bold('USAGE')}
-  ${cyan('npx vibe-audit')} ${dim('[directory | github-url | owner/repo]')} ${dim('[options]')}
+  ${cyan('npx @jackdog668/vibeaudit')} ${dim('[directory | github-url | owner/repo]')} ${dim('[options]')}
 
 ${bold('OPTIONS')}
   ${cyan('-f, --format')} <terminal|json|markdown|md|html>  Output format ${dim('(default: terminal)')}
@@ -119,32 +119,32 @@ ${bold('AGENT SHIELD')}
 
 ${bold('EXAMPLES')}
   ${dim('# Audit current directory')}
-  npx vibe-audit
+  npx @jackdog668/vibeaudit
 
   ${dim('# Audit a specific project')}
-  npx vibe-audit ./my-app
+  npx @jackdog668/vibeaudit ./my-app
 
   ${dim('# Audit a GitHub repo directly')}
-  npx vibe-audit https://github.com/user/repo
-  npx vibe-audit user/repo
+  npx @jackdog668/vibeaudit https://github.com/user/repo
+  npx @jackdog668/vibeaudit user/repo
 
   ${dim('# Get fix prompts for your AI tool')}
-  npx vibe-audit --fix
+  npx @jackdog668/vibeaudit --fix
 
   ${dim('# JSON output for CI pipelines')}
-  npx vibe-audit --format json --strict
+  npx @jackdog668/vibeaudit --format json --strict
 
   ${dim('# Only check for secrets and auth')}
-  npx vibe-audit --rules exposed-secrets,missing-auth
+  npx @jackdog668/vibeaudit --rules exposed-secrets,missing-auth
 
   ${dim('# Free-credit pack, warn mode (does not fail the build)')}
-  npx vibe-audit . --pack free-credit --format md --warn
+  npx @jackdog668/vibeaudit . --pack free-credit --format md --warn
 
 ${bold('CONFIG')}
   Add ${cyan('.vibe-audit.json')} to your project root to set defaults.
 
 ${bold('RULES')}
-  Run ${cyan('npx vibe-audit --list-rules')} to see all available rules.
+  Run ${cyan('npx @jackdog668/vibeaudit --list-rules')} to see all available rules.
 
 ${dim('Built by Digital Alchemy Academy ? https://digitalalchemy.dev')}
 `);
@@ -481,8 +481,8 @@ try {
     } catch {
       console.error(red(`\n  Error: Directory not found ? ${targetDir}\n`));
       console.error(dim(`  If this is a GitHub repo, use the full URL or owner/repo shorthand:\n`));
-      console.error(dim(`    npx vibe-audit https://github.com/owner/repo`));
-      console.error(dim(`    npx vibe-audit owner/repo\n`));
+      console.error(dim(`    npx @jackdog668/vibeaudit https://github.com/owner/repo`));
+      console.error(dim(`    npx @jackdog668/vibeaudit owner/repo\n`));
       await exitAfterFlush(2);
     }
   }

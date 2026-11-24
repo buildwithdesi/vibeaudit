@@ -7,13 +7,13 @@
 
 ```bash
 # Scan everything
-npx vibe-audit .
+npx @jackdog668/vibeaudit .
 
 # Scan with fix prompts (copy-paste to your AI tool)
-npx vibe-audit . --fix
+npx @jackdog668/vibeaudit . --fix
 
 # Scan only the rules from this checklist
-npx vibe-audit . --rules exposed-secrets,exposed-env-vars,client-bundle-secrets,no-account-lockout,missing-rate-limiting,no-input-validation,insecure-connections,sensitive-browser-storage,insecure-jwt,client-only-auth,missing-auth,missing-gitignore,git-history-secrets,insecure-error-handling,unsafe-file-upload,plaintext-passwords,auth-token-no-expiry,idor-vulnerability,session-fixation,unsafe-redirect,docker-root-user,exposed-database-port
+npx @jackdog668/vibeaudit . --rules exposed-secrets,exposed-env-vars,client-bundle-secrets,no-account-lockout,missing-rate-limiting,no-input-validation,insecure-connections,sensitive-browser-storage,insecure-jwt,client-only-auth,missing-auth,missing-gitignore,git-history-secrets,insecure-error-handling,unsafe-file-upload,plaintext-passwords,auth-token-no-expiry,idor-vulnerability,session-fixation,unsafe-redirect,docker-root-user,exposed-database-port
 ```
 
 ---
@@ -255,7 +255,7 @@ Detects `res.redirect(req.query.*)` and similar patterns where redirect URLs com
 
 - **20/20 items covered** by Vibe Audit
 - **98 total rules** across 17 categories (these + 78 more, now including accessibility/WCAG, scale/performance, and observability packs)
-- **Zero configuration** — just run `npx vibe-audit .`
+- **Zero configuration** — just run `npx @jackdog668/vibeaudit .`
 - **Copy-paste fixes** — use `--fix` flag to get AI-ready fix prompts
 - **Beyond the code** — every scan points you to the DA Pre-Flight Audit Prompt for the judgment layer a static scanner can't see (business logic, data model, threat model)
 
@@ -272,7 +272,7 @@ The viral checklist is security-only. Two things that wreck vibe-coded apps aren
 This mapping is designed for teaching security to vibe coders. Each item can be turned into a hands-on exercise:
 
 1. Create a vulnerable code snippet (the "before")
-2. Run `npx vibe-audit . --rules [rule-id]` to detect it
+2. Run `npx @jackdog668/vibeaudit . --rules [rule-id]` to detect it
 3. Apply the fix
 4. Run the scan again to verify it passes
 
